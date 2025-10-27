@@ -523,6 +523,82 @@ def gemma_2_sae_huggingface_loader(
     return cfg_dict, state_dict, log_sparsity
 
 
+def get_goodfire_config_from_hf(
+    repo_id: str,
+    folder_name: str,  # noqa: ARG001
+    device: str,
+    force_download: bool = False,  # noqa: ARG001
+    cfg_overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cfg_dict = None
+    if repo_id == "Goodfire/Llama-3.3-70B-Instruct-SAE-l50":
+        if folder_name != "Llama-3.3-70B-Instruct-SAE-l50.pt":
+            raise ValueError(f"Unsupported Goodfire SAE: {repo_id}/{folder_name}")
+        cfg_dict = {
+            "architecture": "standard",
+            "d_in": 8192,
+            "d_sae": 65536,
+            "model_name": "meta-llama/Llama-3.3-70B-Instruct",
+            "hook_name": "blocks.50.hook_resid_post",
+            "hook_head_index": None,
+            "dataset_path": "lmsys/lmsys-chat-1m",
+            "apply_b_dec_to_input": False,
+        }
+    elif repo_id == "Goodfire/Llama-3.1-8B-Instruct-SAE-l19":
+        if folder_name != "Llama-3.1-8B-Instruct-SAE-l19.pth":
+            raise ValueError(f"Unsupported Goodfire SAE: {repo_id}/{folder_name}")
+        cfg_dict = {
+            "architecture": "standard",
+            "d_in": 4096,
+            "d_sae": 65536,
+            "model_name": "meta-llama/Llama-3.1-8B-Instruct",
+            "hook_name": "blocks.19.hook_resid_post",
+            "hook_head_index": None,
+            "dataset_path": "lmsys/lmsys-chat-1m",
+            "apply_b_dec_to_input": False,
+        }
+    if cfg_dict is None:
+        raise ValueError(f"Unsupported Goodfire SAE: {repo_id}/{folder_name}")
+    if device is not None:
+        cfg_dict["device"] = device
+    if cfg_overrides is not None:
+        cfg_dict.update(cfg_overrides)
+    return cfg_dict
+
+
+def get_goodfire_huggingface_loader(
+    repo_id: str,
+    folder_name: str,
+    device: str = "cpu",
+    force_download: bool = False,
+    cfg_overrides: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, torch.Tensor], torch.Tensor | None]:
+    cfg_dict = get_goodfire_config_from_hf(
+        repo_id,
+        folder_name,
+        device,
+        force_download,
+        cfg_overrides,
+    )
+
+    # Download the SAE weights
+    sae_path = hf_hub_download(
+        repo_id=repo_id,
+        filename=folder_name,
+        force_download=force_download,
+    )
+    raw_state_dict = torch.load(sae_path, map_location=device)
+
+    state_dict = {
+        "W_enc": raw_state_dict["encoder_linear.weight"].T,
+        "W_dec": raw_state_dict["decoder_linear.weight"].T,
+        "b_enc": raw_state_dict["encoder_linear.bias"],
+        "b_dec": raw_state_dict["decoder_linear.bias"],
+    }
+
+    return cfg_dict, state_dict, None
+
+
 def get_llama_scope_config_from_hf(
     repo_id: str,
     folder_name: str,
@@ -1487,6 +1563,7 @@ NAMED_PRETRAINED_SAE_LOADERS: dict[str, PretrainedSaeHuggingfaceLoader] = {
     "gemma_2_transcoder": gemma_2_transcoder_huggingface_loader,
     "mwhanna_transcoder": mwhanna_transcoder_huggingface_loader,
     "mntss_clt_layer_transcoder": mntss_clt_layer_huggingface_loader,
+    "goodfire": get_goodfire_huggingface_loader,
 }
 
 
@@ -1502,4 +1579,5 @@ NAMED_PRETRAINED_SAE_CONFIG_GETTERS: dict[str, PretrainedSaeConfigHuggingfaceLoa
     "gemma_2_transcoder": get_gemma_2_transcoder_config_from_hf,
     "mwhanna_transcoder": get_mwhanna_transcoder_config_from_hf,
     "mntss_clt_layer_transcoder": get_mntss_clt_layer_config_from_hf,
+    "goodfire": get_goodfire_config_from_hf,
 }

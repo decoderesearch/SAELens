@@ -14883,3 +14883,21 @@ qwen2.5-7b-instruct-andyrdt:
   - id: resid_post_layer_27_trainer_1
     path: resid_post_layer_27/trainer_1
     neuronpedia: qwen2.5-7b-it/27-resid-post-aa
+
+goodfire-llama-3.3-70b-instruct:
+  conversion_func: goodfire
+  model: meta-llama/Llama-3.3-70B-Instruct
+  repo_id: Goodfire/Llama-3.3-70B-Instruct-SAE-l50
+  saes:
+  - id: layer_50
+    path: Llama-3.3-70B-Instruct-SAE-l50.pt
+    l0: 121
+
+goodfire-llama-3.1-8b-instruct:
+  conversion_func: goodfire
+  model: meta-llama/Llama-3.1-8B-Instruct
+  repo_id: Goodfire/Llama-3.1-8B-Instruct-SAE-l19
+  saes:
+  - id: layer_19
+    path: Llama-3.1-8B-Instruct-SAE-l19.pth
+    l0: 91

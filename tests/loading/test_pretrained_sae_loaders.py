@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import pytest
 import torch
@@ -6,10 +7,13 @@ import yaml
 from safetensors.torch import save_file
 from sparsify import SparseCoder, SparseCoderConfig
 
+from sae_lens import StandardSAE, StandardSAEConfig
 from sae_lens.loading.pretrained_sae_loaders import (
     dictionary_learning_sae_huggingface_loader_1,
     get_deepseek_r1_config_from_hf,
     get_gemma_2_transcoder_config_from_hf,
+    get_goodfire_config_from_hf,
+    get_goodfire_huggingface_loader,
     get_llama_scope_config_from_hf,
     get_llama_scope_r1_distill_config_from_hf,
     get_mntss_clt_layer_config_from_hf,
@@ -21,6 +25,7 @@ from sae_lens.loading.pretrained_sae_loaders import (
     sparsify_huggingface_loader,
 )
 from sae_lens.saes.sae import SAE
+from tests.helpers import assert_close, random_params
 
 
 def test_load_sae_config_from_huggingface():
@@ -498,6 +503,230 @@ def test_get_llama_scope_config_from_hf():
     }
 
     assert cfg == expected_cfg
+
+
+def test_get_goodfire_config_from_hf():
+    cfg = get_goodfire_config_from_hf(
+        repo_id="Goodfire/Llama-3.3-70B-Instruct-SAE-l50",
+        folder_name="Llama-3.3-70B-Instruct-SAE-l50.pt",
+        device="cpu",
+    )
+    expected_cfg = {
+        "architecture": "standard",
+        "d_in": 8192,
+        "d_sae": 65536,
+        "model_name": "meta-llama/Llama-3.3-70B-Instruct",
+        "hook_name": "blocks.50.hook_resid_post",
+        "hook_head_index": None,
+        "dataset_path": "lmsys/lmsys-chat-1m",
+        "apply_b_dec_to_input": False,
+        "device": "cpu",
+    }
+    assert cfg == expected_cfg
+
+
+def test_get_goodfire_llama_8b_config_from_hf():
+    cfg = get_goodfire_config_from_hf(
+        repo_id="Goodfire/Llama-3.1-8B-Instruct-SAE-l19",
+        folder_name="Llama-3.1-8B-Instruct-SAE-l19.pth",
+        device="cpu",
+    )
+    expected_cfg = {
+        "architecture": "standard",
+        "d_in": 4096,
+        "d_sae": 65536,
+        "model_name": "meta-llama/Llama-3.1-8B-Instruct",
+        "hook_name": "blocks.19.hook_resid_post",
+        "hook_head_index": None,
+        "dataset_path": "lmsys/lmsys-chat-1m",
+        "apply_b_dec_to_input": False,
+        "device": "cpu",
+    }
+    assert cfg == expected_cfg
+
+
+def test_get_goodfire_config_from_hf_errors_on_unsupported_sae():
+    with pytest.raises(
+        ValueError,
+        match="Unsupported Goodfire SAE: wrong/repo",
+    ):
+        get_goodfire_config_from_hf(
+            repo_id="wrong/repo",
+            folder_name="Llama-3.3-70B-Instruct-SAE-l50.pt",
+            device="cpu",
+        )
+    with pytest.raises(
+        ValueError,
+        match="Unsupported Goodfire SAE: Goodfire/Llama-3.3-70B-Instruct-SAE-l50/wrong_filename.pt",
+    ):
+        get_goodfire_config_from_hf(
+            repo_id="Goodfire/Llama-3.3-70B-Instruct-SAE-l50",
+            folder_name="wrong_filename.pt",
+            device="cpu",
+        )
+
+
+def test_our_sae_matches_goodfires_implementation():
+    # from https://colab.research.google.com/drive/1IBMQtJqy8JiRk1Q48jDEgTISmtxhlCRL
+    class GoodfireSAE(torch.nn.Module):
+        def __init__(
+            self,
+            d_in: int,
+            d_hidden: int,
+            device: torch.device,
+            dtype: torch.dtype = torch.float32,
+        ):
+            super().__init__()
+            self.d_in = d_in
+            self.d_hidden = d_hidden
+            self.device = device
+            self.encoder_linear = torch.nn.Linear(d_in, d_hidden)
+            self.decoder_linear = torch.nn.Linear(d_hidden, d_in)
+            self.dtype = dtype
+            self.to(self.device, self.dtype)
+
+        def encode(self, x: torch.Tensor) -> torch.Tensor:
+            """Encode a batch of data using a linear, followed by a ReLU."""
+            return torch.nn.functional.relu(self.encoder_linear(x))
+
+        def decode(self, x: torch.Tensor) -> torch.Tensor:
+            """Decode a batch of data using a linear."""
+            return self.decoder_linear(x)
+
+        def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+            """SAE forward pass. Returns the reconstruction and the encoded features."""
+            f = self.encode(x)
+            return self.decode(f), f
+
+    cfg_dict = load_sae_config_from_huggingface(
+        release="goodfire-llama-3.3-70b-instruct",
+        sae_id="layer_50",
+        device="cpu",
+    )
+    cfg_dict["d_in"] = 128
+    cfg_dict["d_sae"] = 256
+    cfg_dict["dtype"] = "float32"
+
+    assert cfg_dict["architecture"] == "standard"
+    cfg = StandardSAEConfig.from_dict(cfg_dict)
+
+    # make a SAE base on the Goodfire config, but smaller since the real SAE class is huge
+    sae = StandardSAE(cfg)
+    random_params(sae)
+
+    sae_state_dict = sae.state_dict()
+    goodfire_state_dict = {
+        "encoder_linear.weight": sae_state_dict["W_enc"].T,
+        "encoder_linear.bias": sae_state_dict["b_enc"],
+        "decoder_linear.weight": sae_state_dict["W_dec"].T,
+        "decoder_linear.bias": sae_state_dict["b_dec"],
+    }
+
+    goodfire_sae = GoodfireSAE(d_in=128, d_hidden=256, device=torch.device("cpu"))
+    goodfire_sae.load_state_dict(goodfire_state_dict)
+
+    test_input = torch.randn(10, 128)
+
+    output = sae(test_input)
+    features = sae.encode(test_input)
+    goodfire_output, goodfire_features = goodfire_sae(test_input)
+
+    assert_close(output, goodfire_output, rtol=1e-4, atol=1e-4)
+    assert_close(features, goodfire_features, rtol=1e-4, atol=1e-4)
+
+
+def test_get_goodfire_huggingface_loader_with_mocked_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    repo_id = "Goodfire/Llama-3.3-70B-Instruct-SAE-l50"
+    folder_name = "Llama-3.3-70B-Instruct-SAE-l50.pt"
+    device = "cpu"
+
+    d_in = 128
+    d_sae = 256
+
+    encoder_weight = torch.randn(d_sae, d_in)
+    decoder_weight = torch.randn(d_in, d_sae)
+    encoder_bias = torch.randn(d_sae)
+    decoder_bias = torch.randn(d_in)
+
+    raw_state_dict = {
+        "encoder_linear.weight": encoder_weight,
+        "decoder_linear.weight": decoder_weight,
+        "encoder_linear.bias": encoder_bias,
+        "decoder_linear.bias": decoder_bias,
+    }
+
+    sae_file_path = tmp_path / folder_name
+    torch.save(raw_state_dict, sae_file_path)
+
+    def mock_get_goodfire_config_from_hf(
+        repo_id: str,  # noqa: ARG001
+        folder_name: str,  # noqa: ARG001
+        device: str,
+        force_download: bool = False,  # noqa: ARG001
+        cfg_overrides: dict[str, Any] | None = None,  # noqa: ARG001
+    ) -> dict[str, Any]:
+        return {
+            "architecture": "standard",
+            "d_in": d_in,
+            "d_sae": d_sae,
+            "model_name": "meta-llama/Llama-3.3-70B-Instruct",
+            "hook_name": "blocks.50.hook_resid_post",
+            "hook_head_index": None,
+            "dataset_path": "lmsys/lmsys-chat-1m",
+            "apply_b_dec_to_input": False,
+            "device": device,
+        }
+
+    def mock_hf_hub_download(
+        repo_id: str,  # noqa: ARG001
+        filename: str,  # noqa: ARG001
+        force_download: bool = False,  # noqa: ARG001
+    ) -> str:
+        return str(sae_file_path)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.get_goodfire_config_from_hf",
+        mock_get_goodfire_config_from_hf,
+    )
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+    cfg_dict, state_dict, log_sparsity = get_goodfire_huggingface_loader(
+        repo_id=repo_id,
+        folder_name=folder_name,
+        device=device,
+        force_download=False,
+        cfg_overrides=None,
+    )
+
+    expected_cfg = {
+        "architecture": "standard",
+        "d_in": d_in,
+        "d_sae": d_sae,
+        "model_name": "meta-llama/Llama-3.3-70B-Instruct",
+        "hook_name": "blocks.50.hook_resid_post",
+        "hook_head_index": None,
+        "dataset_path": "lmsys/lmsys-chat-1m",
+        "apply_b_dec_to_input": False,
+        "device": device,
+    }
+
+    assert cfg_dict == expected_cfg
+    assert log_sparsity is None
+
+    assert set(state_dict.keys()) == {"W_enc", "W_dec", "b_enc", "b_dec"}
+    torch.testing.assert_close(state_dict["W_enc"], encoder_weight.T)
+    torch.testing.assert_close(state_dict["W_dec"], decoder_weight.T)
+    torch.testing.assert_close(state_dict["b_enc"], encoder_bias)
+    torch.testing.assert_close(state_dict["b_dec"], decoder_bias)
+
+    assert state_dict["W_enc"].shape == (d_in, d_sae)
+    assert state_dict["W_dec"].shape == (d_sae, d_in)
+    assert state_dict["b_enc"].shape == (d_sae,)
+    assert state_dict["b_dec"].shape == (d_in,)
 
 
 def test_get_llama_scope_r1_distill_config_from_hf():
