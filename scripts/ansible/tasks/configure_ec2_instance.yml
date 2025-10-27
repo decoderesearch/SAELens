@@ -68,7 +68,7 @@
 
     - name: "Git checkout SAELens {{ saelens_version_or_branch }}"
       ansible.builtin.git:
-        repo: 'https://github.com/jbloomAus/SAELens.git'
+        repo: 'https://github.com/decoderesearch/SAELens.git'
         dest: /home/ubuntu/SAELens
         version: "{{ saelens_version_or_branch }}"
 

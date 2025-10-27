@@ -2,7 +2,6 @@
 name: Bug Report
 about: Submit a bug report
 title: "[Bug Report] Bug title"
-
 ---
 
 If you are submitting a bug report, please fill in the following details and use the tag [bug].
@@ -15,13 +14,14 @@ Please try to provide a minimal example to reproduce the bug. Error messages and
 
 **System Info**
 Describe the characteristic of your environment:
- * Describe how `transformer_lens` was installed (pip, docker, source, ...)
- * What OS are you using? (Linux, MacOS, Windows) 
- * Python version (We suppourt 3.10 -3.12 currently)
+
+- Describe how `transformer_lens` was installed (pip, docker, source, ...)
+- What OS are you using? (Linux, MacOS, Windows)
+- Python version (We suppourt 3.10 -3.12 currently)
 
 **Additional context**
 Add any other context about the problem here.
 
 ### Checklist
 
-- [ ] I have checked that there is no similar [issue](https://github.com/jbloomAus/SAELens/issues) in the repo (**required**)
+- [ ] I have checked that there is no similar [issue](https://github.com/decoderesearch/SAELens/issues) in the repo (**required**)

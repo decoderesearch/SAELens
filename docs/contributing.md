@@ -7,9 +7,9 @@ Contributions are welcome! To get setup for development, follow the instructions
 Make sure you have [poetry](https://python-poetry.org/) installed, clone the repository, and install dependencies with:
 
 ```bash
-git clone https://github.com/jbloomAus/SAELens.git # we recommend you make a fork for submitting PR's and clone that!
+git clone https://github.com/decoderesearch/SAELens.git # we recommend you make a fork for submitting PR's and clone that!
 poetry lock # can take a while.
-poetry install 
+poetry install
 make check-ci # validate the install
 ```
 
@@ -44,6 +44,5 @@ This project uses [mkdocs](https://www.mkdocs.org/) for documentation. You can s
 ```bash
 make docs-serve
 ```
+
 If you make changes to code which requires updating documentation, it would be greatly appreciated if you could update the docs as well.
-
-

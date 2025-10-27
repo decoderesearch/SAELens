@@ -2,8 +2,8 @@
 
 Methods development for training SAEs is rapidly evolving, so these docs may change frequently. For all available training options, see the [LanguageModelSAERunnerConfig][sae_lens.LanguageModelSAERunnerConfig] and the architecture-specific configuration classes it uses (e.g., [StandardTrainingSAEConfig][sae_lens.StandardTrainingSAEConfig], [GatedTrainingSAEConfig][sae_lens.GatedTrainingSAEConfig], [JumpReLUTrainingSAEConfig][sae_lens.JumpReLUTrainingSAEConfig], and [TopKTrainingSAEConfig][sae_lens.TopKTrainingSAEConfig]).
 
-However, we are attempting to maintain this [tutorial](https://github.com/jbloomAus/SAELens/blob/main/tutorials/training_a_sparse_autoencoder.ipynb)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/jbloomAus/SAELens/blob/main/tutorials/training_a_sparse_autoencoder.ipynb).
+However, we are attempting to maintain this [tutorial](https://github.com/decoderesearch/SAELens/blob/main/tutorials/training_a_sparse_autoencoder.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/training_a_sparse_autoencoder.ipynb).
 
 We encourage readers to join the [Open Source Mechanistic Interpretability Slack](https://join.slack.com/t/opensourcemechanistic/shared_invite/zt-375zalm04-GFd5tdBU1yLKlu_T_JSqZQ) for support!
 
@@ -35,7 +35,7 @@ Core options typically configured within the architecture-specific `sae` object 
   - For TopK and BatchTopK SAEs: `k` (the number of features to keep active). Sparsity is enforced structurally.
 - `normalize_activations`: Strategy for normalizing activations before they enter the SAE (e.g., `"expected_average_only_in"`).
 
-A sample training run from the [tutorial](https://github.com/jbloomAus/SAELens/blob/main/tutorials/training_a_sparse_autoencoder.ipynb) is shown below. Note how SAE-specific parameters are nested within the `sae` field:
+A sample training run from the [tutorial](https://github.com/decoderesearch/SAELens/blob/main/tutorials/training_a_sparse_autoencoder.ipynb) is shown below. Note how SAE-specific parameters are nested within the `sae` field:
 
 ```python
 import torch
@@ -361,7 +361,7 @@ It's also possible to use pre-tokenized datasets to speed up training, since tok
 
 ## Pretokenizing datasets
 
-We also provider a runner, [PretokenizeRunner][sae_lens.PretokenizeRunner], which can be used to pre-tokenize a dataset and upload it to Huggingface. See [PretokenizeRunnerConfig][sae_lens.PretokenizeRunnerConfig] for all available options. We also provide a [pretokenizing datasets tutorial](https://github.com/jbloomAus/SAELens/blob/main/tutorials/pretokenizing_datasets.ipynb) with more details.
+We also provider a runner, [PretokenizeRunner][sae_lens.PretokenizeRunner], which can be used to pre-tokenize a dataset and upload it to Huggingface. See [PretokenizeRunnerConfig][sae_lens.PretokenizeRunnerConfig] for all available options. We also provide a [pretokenizing datasets tutorial](https://github.com/decoderesearch/SAELens/blob/main/tutorials/pretokenizing_datasets.ipynb) with more details.
 
 A sample run from the tutorial for GPT2 and the NeelNanda/c4-10k dataset is shown below.
 
@@ -429,7 +429,7 @@ To use the cached activations during training, set `use_cached_activations=True`
 
 ## Uploading SAEs to Huggingface
 
-Once you have a set of SAEs that you're happy with, your next step is to share them with the world! SAELens has a `upload_saes_to_huggingface()` function which makes this easy to do. We also provide a [uploading saes to huggingface tutorial](https://github.com/jbloomAus/SAELens/blob/main/tutorials/uploading_saes_to_huggingface.ipynb) with more details.
+Once you have a set of SAEs that you're happy with, your next step is to share them with the world! SAELens has a `upload_saes_to_huggingface()` function which makes this easy to do. We also provide a [uploading saes to huggingface tutorial](https://github.com/decoderesearch/SAELens/blob/main/tutorials/uploading_saes_to_huggingface.ipynb) with more details.
 
 You'll just need to pass a dictionary of SAEs to upload along with the huggingface repo id to upload to. The dictionary keys will become the folders in the repo where each SAE will be located. It's best practice to use the hook point that the SAE was trained on as the key to make it clear to users where in the model to apply the SAE. The values of this dictionary can be either an SAE object, or a path to a saved SAE object on disk from the `sae.save_model()` method.
 
