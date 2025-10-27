@@ -43,7 +43,7 @@ sae = SAE.from_pretrained(
 )
 ```
 
-You can see other importable SAEs on [this page](https://jbloomaus.github.io/SAELens/sae_table/).
+You can see other importable SAEs on [this page](https://decoderesearch.github.io/SAELens/sae_table/).
 
 Any SAE on Huggingface that's trained using SAELens can also be loaded using `SAE.from_pretrained()`. In this case, `release` is the name of the Huggingface repo, and `sae_id` is the path to the SAE in the repo. You can see a list of SAEs listed on Huggingface with the [saelens tag](https://huggingface.co/models?library=saelens).
 

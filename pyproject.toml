@@ -6,8 +6,8 @@ authors = ["Joseph Bloom"]
 readme = "README.md"
 packages = [{ include = "sae_lens" }]
 include = ["pretrained_saes.yaml"]
-repository = "https://github.com/jbloomAus/SAELens"
-homepage = "https://jbloomaus.github.io/SAELens"
+repository = "https://github.com/decoderesearch/SAELens"
+homepage = "https://decoderesearch.github.io/SAELens"
 license = "MIT"
 keywords = [
     "deep-learning",

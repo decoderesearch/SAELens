@@ -301,7 +301,7 @@ class ActivationsStore:
                 )
         else:
             warnings.warn(
-                "Dataset is not tokenized. Pre-tokenizing will improve performance and allows for more control over special tokens. See https://jbloomaus.github.io/SAELens/training_saes/#pretokenizing-datasets for more info."
+                "Dataset is not tokenized. Pre-tokenizing will improve performance and allows for more control over special tokens. See https://decoderesearch.github.io/SAELens/training_saes/#pretokenizing-datasets for more info."
             )
 
         self.iterable_sequences = self._iterate_tokenized_sequences()

@@ -1,9 +1,9 @@
 site_name: SAE Lens 
 site_description: Docs for Sparse Autoencoder Training and Analysis Library
 site_author: Joseph Bloom
-site_url: https://jbloomAus.github.io/SAELens/
-repo_url: http://github.com/jbloomAus/SAELens
-repo_name: jbloomAus/SAELens
+site_url: https://decoderesearch.github.io/SAELens/
+repo_url: http://github.com/decoderesearch/SAELens
+repo_name: decoderesearch/SAELens
 edit_uri: ""
 
 theme:
