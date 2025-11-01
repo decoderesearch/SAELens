@@ -14916,6 +14916,30 @@ qwen2.5-7b-instruct-andyrdt:
     path: resid_post_layer_27/trainer_1
     neuronpedia: qwen2.5-7b-it/27-resid-post-aa
 
+gpt-oss-20b-andyrdt:
+  conversion_func: dictionary_learning_1
+  model: openai/gpt-oss-20b
+  repo_id: andyrdt/saes-gpt-oss-20b
+  saes:
+  - id: resid_post_layer_3_trainer_0
+    path: resid_post_layer_3/trainer_0
+    neuronpedia: gpt-oss-20b/3-resid-post-aa
+  - id: resid_post_layer_7_trainer_0
+    path: resid_post_layer_7/trainer_0
+    neuronpedia: gpt-oss-20b/7-resid-post-aa
+  - id: resid_post_layer_11_trainer_0
+    path: resid_post_layer_11/trainer_0
+    neuronpedia: gpt-oss-20b/11-resid-post-aa
+  - id: resid_post_layer_15_trainer_0
+    path: resid_post_layer_15/trainer_0
+    neuronpedia: gpt-oss-20b/15-resid-post-aa
+  - id: resid_post_layer_19_trainer_0
+    path: resid_post_layer_19/trainer_0
+    neuronpedia: gpt-oss-20b/19-resid-post-aa
+  - id: resid_post_layer_23_trainer_0
+    path: resid_post_layer_23/trainer_0
+    neuronpedia: gpt-oss-20b/23-resid-post-aa
+
 goodfire-llama-3.3-70b-instruct:
   conversion_func: goodfire
   model: meta-llama/Llama-3.3-70B-Instruct
