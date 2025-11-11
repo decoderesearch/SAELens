@@ -318,8 +318,8 @@ class CacheActivationsRunner:
     def _create_shard(
         self,
         buffer: tuple[
-            Float[torch.Tensor, "(bs context_size) d_in"],
-            Int[torch.Tensor, "(bs context_size)"] | None,
+            Float,  # type: ignore # [torch.Tensor, "(bs context_size) d_in"],
+            Int | None,  # type: ignore # [torch.Tensor, "(bs context_size)"] | None,
         ],
     ) -> Dataset:
         hook_names = [self.cfg.hook_name]
