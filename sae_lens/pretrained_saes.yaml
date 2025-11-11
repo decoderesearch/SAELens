@@ -14958,3 +14958,4 @@ goodfire-llama-3.1-8b-instruct:
   - id: layer_19
     path: Llama-3.1-8B-Instruct-SAE-l19.pth
     l0: 91
+    neuronpedia: llama3.1-8b-it/19-resid-post-gf
