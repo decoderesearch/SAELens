@@ -2,7 +2,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-from jaxtyping import Float
 from numpy.typing import NDArray
 from torch import nn
 from typing_extensions import override
@@ -54,9 +53,7 @@ class StandardSAE(SAE[StandardSAEConfig]):
         super().initialize_weights()
         _init_weights_standard(self)
 
-    def encode(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_sae"]:
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Encode the input tensor into the feature space.
         """
@@ -67,9 +64,7 @@ class StandardSAE(SAE[StandardSAEConfig]):
         # Apply the activation function (e.g., ReLU, depending on config)
         return self.hook_sae_acts_post(self.activation_fn(hidden_pre))
 
-    def decode(
-        self, feature_acts: Float[torch.Tensor, "... d_sae"]
-    ) -> Float[torch.Tensor, "... d_in"]:
+    def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """
         Decode the feature activations back to the input space.
         Now, if hook_z reshaping is turned on, we reverse the flattening.
@@ -127,8 +122,8 @@ class StandardTrainingSAE(TrainingSAE[StandardTrainingSAEConfig]):
         }
 
     def encode_with_hidden_pre(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> tuple[Float[torch.Tensor, "... d_sae"], Float[torch.Tensor, "... d_sae"]]:
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # Process the input (including dtype conversion, hook call, and any activation normalization)
         sae_in = self.process_sae_in(x)
         # Compute the pre-activation (and allow for a hook if desired)

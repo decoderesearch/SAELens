@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-from jaxtyping import Float
 from numpy.typing import NDArray
 from torch import nn
 from typing_extensions import override
@@ -49,9 +48,7 @@ class GatedSAE(SAE[GatedSAEConfig]):
         super().initialize_weights()
         _init_weights_gated(self)
 
-    def encode(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_sae"]:
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Encode the input tensor into the feature space using a gated encoder.
         This must match the original encode_gated implementation from SAE class.
@@ -72,9 +69,7 @@ class GatedSAE(SAE[GatedSAEConfig]):
         # Combine gating and magnitudes
         return self.hook_sae_acts_post(active_features * feature_magnitudes)
 
-    def decode(
-        self, feature_acts: Float[torch.Tensor, "... d_sae"]
-    ) -> Float[torch.Tensor, "... d_in"]:
+    def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """
         Decode the feature activations back into the input space:
           1) Apply optional finetuning scaling.
@@ -147,8 +142,8 @@ class GatedTrainingSAE(TrainingSAE[GatedTrainingSAEConfig]):
         _init_weights_gated(self)
 
     def encode_with_hidden_pre(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> tuple[Float[torch.Tensor, "... d_sae"], Float[torch.Tensor, "... d_sae"]]:
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Gated forward pass with pre-activation (for training).
         """

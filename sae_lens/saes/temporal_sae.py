@@ -13,7 +13,6 @@ from typing import Literal
 
 import torch
 import torch.nn.functional as F
-from jaxtyping import Float
 from torch import nn
 from typing_extensions import override
 
@@ -250,8 +249,8 @@ class TemporalSAE(SAE[TemporalSAEConfig]):
             )
 
     def encode_with_predictions(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> tuple[Float[torch.Tensor, "... d_sae"], Float[torch.Tensor, "... d_sae"]]:
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Encode input to novel codes only.
 
         Returns only the sparse novel codes (not predicted codes).
@@ -312,14 +311,10 @@ class TemporalSAE(SAE[TemporalSAEConfig]):
         # Return only novel codes (these are the interpretable features)
         return z_novel, z_pred
 
-    def encode(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_sae"]:
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         return self.encode_with_predictions(x)[0]
 
-    def decode(
-        self, feature_acts: Float[torch.Tensor, "... d_sae"]
-    ) -> Float[torch.Tensor, "... d_in"]:
+    def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """Decode novel codes to reconstruction.
 
         Note: This only decodes the novel codes. For full reconstruction,
@@ -342,9 +337,7 @@ class TemporalSAE(SAE[TemporalSAEConfig]):
         return sae_out
 
     @override
-    def forward(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_in"]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Full forward pass through TemporalSAE.
 
         Returns complete reconstruction (predicted + novel).

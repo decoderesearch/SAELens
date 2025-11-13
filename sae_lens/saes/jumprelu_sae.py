@@ -3,7 +3,6 @@ from typing import Any, Literal
 
 import numpy as np
 import torch
-from jaxtyping import Float
 from torch import nn
 from typing_extensions import override
 
@@ -130,9 +129,7 @@ class JumpReLUSAE(SAE[JumpReLUSAEConfig]):
             torch.zeros(self.cfg.d_sae, dtype=self.dtype, device=self.device)
         )
 
-    def encode(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_sae"]:
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Encode the input tensor into the feature space using JumpReLU.
         The threshold parameter determines which units remain active.
@@ -150,9 +147,7 @@ class JumpReLUSAE(SAE[JumpReLUSAEConfig]):
         # 3) Multiply the normally activated units by that mask.
         return self.hook_sae_acts_post(base_acts * jump_relu_mask)
 
-    def decode(
-        self, feature_acts: Float[torch.Tensor, "... d_sae"]
-    ) -> Float[torch.Tensor, "... d_in"]:
+    def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """
         Decode the feature activations back to the input space.
         Follows the same steps as StandardSAE: apply scaling, transform, hook, and optionally reshape.
@@ -265,8 +260,8 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
         return torch.exp(self.log_threshold)
 
     def encode_with_hidden_pre(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> tuple[Float[torch.Tensor, "... d_sae"], Float[torch.Tensor, "... d_sae"]]:
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         sae_in = self.process_sae_in(x)
 
         hidden_pre = sae_in @ self.W_enc + self.b_enc

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 import torch
-from jaxtyping import Float
 from torch import nn
 from transformer_lens.hook_points import HookPoint
 from typing_extensions import override
@@ -235,9 +234,7 @@ class TopKSAE(SAE[TopKSAEConfig]):
         super().initialize_weights()
         _init_weights_topk(self)
 
-    def encode(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_sae"]:
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Converts input x into feature activations.
         Uses topk activation under the hood.
@@ -251,8 +248,8 @@ class TopKSAE(SAE[TopKSAEConfig]):
 
     def decode(
         self,
-        feature_acts: Float[torch.Tensor, "... d_sae"],
-    ) -> Float[torch.Tensor, "... d_in"]:
+        feature_acts: torch.Tensor,
+    ) -> torch.Tensor:
         """
         Reconstructs the input from topk feature activations.
         Applies optional finetuning scaling, hooking to recons, out normalization,
@@ -354,8 +351,8 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
         _init_weights_topk(self)
 
     def encode_with_hidden_pre(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> tuple[Float[torch.Tensor, "... d_sae"], Float[torch.Tensor, "... d_sae"]]:
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Similar to the base training method: calculate pre-activations, then apply TopK.
         """
@@ -372,8 +369,8 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
     @override
     def decode(
         self,
-        feature_acts: Float[torch.Tensor, "... d_sae"],
-    ) -> Float[torch.Tensor, "... d_in"]:
+        feature_acts: torch.Tensor,
+    ) -> torch.Tensor:
         """
         Decodes feature activations back into input space,
         applying optional finetuning scale, hooking, out normalization, etc.

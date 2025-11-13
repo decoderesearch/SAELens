@@ -239,7 +239,6 @@ Next, we'll define our new GeluSAE class, extending the `StandardSAE` class and 
 ```python
 import torch
 import torch.nn as nn
-from jaxtyping import Float
 from typing_extensions import override
 from sae_lens.saes.sae import SAE
 

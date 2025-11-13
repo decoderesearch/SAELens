@@ -3,7 +3,6 @@ from contextlib import contextmanager
 from typing import Any, Callable
 
 import torch
-from jaxtyping import Float
 from transformer_lens.ActivationCache import ActivationCache
 from transformer_lens.components.mlps.can_be_used_as_mlp import CanBeUsedAsMLP
 from transformer_lens.hook_points import HookPoint  # Hooking utilities
@@ -11,8 +10,8 @@ from transformer_lens.HookedTransformer import HookedTransformer
 
 from sae_lens.saes.sae import SAE
 
-SingleLoss = Float[torch.Tensor, ""]  # Type alias for a single element tensor
-LossPerToken = Float[torch.Tensor, "batch pos-1"]
+SingleLoss = torch.Tensor  # Type alias for a single element tensor
+LossPerToken = torch.Tensor
 Loss = SingleLoss | LossPerToken
 
 
@@ -171,12 +170,7 @@ class HookedSAETransformer(HookedTransformer):
         reset_saes_end: bool = True,
         use_error_term: bool | None = None,
         **model_kwargs: Any,
-    ) -> (
-        None
-        | Float[torch.Tensor, "batch pos d_vocab"]
-        | Loss
-        | tuple[Float[torch.Tensor, "batch pos d_vocab"], Loss]
-    ):
+    ) -> None | torch.Tensor | Loss | tuple[torch.Tensor, Loss]:
         """Wrapper around HookedTransformer forward pass.
 
         Runs the model with the given SAEs attached for one forward pass, then removes them. By default, will reset all SAEs to original state after.
@@ -203,10 +197,7 @@ class HookedSAETransformer(HookedTransformer):
         remove_batch_dim: bool = False,
         **kwargs: Any,
     ) -> tuple[
-        None
-        | Float[torch.Tensor, "batch pos d_vocab"]
-        | Loss
-        | tuple[Float[torch.Tensor, "batch pos d_vocab"], Loss],
+        None | torch.Tensor | Loss | tuple[torch.Tensor, Loss],
         ActivationCache | dict[str, torch.Tensor],
     ]:
         """Wrapper around 'run_with_cache' in HookedTransformer.

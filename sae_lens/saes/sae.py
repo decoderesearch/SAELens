@@ -19,7 +19,6 @@ from typing import (
 
 import einops
 import torch
-from jaxtyping import Float
 from numpy.typing import NDArray
 from safetensors.torch import load_file, save_file
 from torch import nn
@@ -351,16 +350,12 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         self.W_enc = nn.Parameter(w_enc_data)
 
     @abstractmethod
-    def encode(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_sae"]:
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         """Encode input tensor to feature space."""
         pass
 
     @abstractmethod
-    def decode(
-        self, feature_acts: Float[torch.Tensor, "... d_sae"]
-    ) -> Float[torch.Tensor, "... d_in"]:
+    def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """Decode feature activations back to input space."""
         pass
 
@@ -450,9 +445,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         return super().to(*args, **kwargs)
 
-    def process_sae_in(
-        self, sae_in: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_in"]:
+    def process_sae_in(self, sae_in: torch.Tensor) -> torch.Tensor:
         sae_in = sae_in.to(self.dtype)
         sae_in = self.reshape_fn_in(sae_in)
 
@@ -859,14 +852,12 @@ class TrainingSAE(SAE[T_TRAINING_SAE_CONFIG], ABC):
 
     @abstractmethod
     def encode_with_hidden_pre(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> tuple[Float[torch.Tensor, "... d_sae"], Float[torch.Tensor, "... d_sae"]]:
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Encode with access to pre-activation values for training."""
         ...
 
-    def encode(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_sae"]:
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         For inference, just encode without returning hidden_pre.
         (training_forward_pass calls encode_with_hidden_pre).
@@ -874,9 +865,7 @@ class TrainingSAE(SAE[T_TRAINING_SAE_CONFIG], ABC):
         feature_acts, _ = self.encode_with_hidden_pre(x)
         return feature_acts
 
-    def decode(
-        self, feature_acts: Float[torch.Tensor, "... d_sae"]
-    ) -> Float[torch.Tensor, "... d_in"]:
+    def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """
         Decodes feature activations back into input space,
         applying optional finetuning scale, hooking, out normalization, etc.

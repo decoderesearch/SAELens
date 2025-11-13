@@ -2,7 +2,6 @@ import warnings
 from dataclasses import dataclass, field
 
 import torch
-from jaxtyping import Float
 from typing_extensions import override
 
 from sae_lens.saes.batchtopk_sae import (
@@ -95,10 +94,10 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
 
     def _decode_matryoshka_level(
         self,
-        feature_acts: Float[torch.Tensor, "... d_sae"],
+        feature_acts: torch.Tensor,
         width: int,
         inv_W_dec_norm: torch.Tensor,
-    ) -> Float[torch.Tensor, "... d_in"]:
+    ) -> torch.Tensor:
         """
         Decodes feature activations back into input space for a matryoshka level
         """
