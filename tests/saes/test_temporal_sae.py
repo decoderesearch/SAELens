@@ -1,3 +1,5 @@
+import os
+
 import pytest
 import torch
 
@@ -113,6 +115,10 @@ def test_TemporalSAE_n_attn_layers(n_attn_layers: int):
     assert reconstruction.shape == x.shape
 
 
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true",
+    reason="Uses too much disk space on CI",
+)
 def test_TemporalSAE_load_from_pretrained_and_forward():
     """Test loading a TemporalSAE from HuggingFace and performing a forward pass."""
     # Load the TemporalSAE from HuggingFace
