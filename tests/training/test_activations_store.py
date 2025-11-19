@@ -906,6 +906,18 @@ def test_activations_store_get_batch_tokens_no_sequence_separator_token(
     assert batch_tokens[0, 1 + len(encoded_text)] != tokenizer.bos_token_id
 
 
+def test_activations_store_from_sae_defaults_to_context_size_from_sae_config(
+    ts_model: HookedTransformer, gpt2_res_jb_l4_sae: SAE[StandardSAEConfig]
+):
+    gpt2_res_jb_l4_sae.cfg.metadata.context_size = 1234
+    store = ActivationsStore.from_sae(
+        model=ts_model,
+        sae=gpt2_res_jb_l4_sae,
+        dataset="NeelNanda/c4-10k",
+    )
+    assert store.context_size == 1234
+
+
 def test_activations_store_from_sae_allows_null_context_size_with_override(
     ts_model: HookedTransformer, gpt2_res_jb_l4_sae: SAE[StandardSAEConfig]
 ):
