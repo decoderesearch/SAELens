@@ -14,7 +14,8 @@ from transformers import AutoTokenizer
 from sae_lens.config import LanguageModelSAERunnerConfig, PretokenizeRunnerConfig
 from sae_lens.load_model import load_model
 from sae_lens.pretokenize_runner import pretokenize_dataset
-from sae_lens.saes.standard_sae import StandardTrainingSAEConfig
+from sae_lens.saes.sae import SAE
+from sae_lens.saes.standard_sae import StandardSAEConfig, StandardTrainingSAEConfig
 from sae_lens.training.activations_store import (
     ActivationsStore,
     _filter_buffer_acts,
@@ -903,3 +904,19 @@ def test_activations_store_get_batch_tokens_no_sequence_separator_token(
 
     # there's no BOS between sequences, where it would usually be
     assert batch_tokens[0, 1 + len(encoded_text)] != tokenizer.bos_token_id
+
+
+def test_activations_store_from_sae_allows_null_context_size_with_override(
+    ts_model: HookedTransformer, gpt2_res_jb_l4_sae: SAE[StandardSAEConfig]
+):
+    gpt2_res_jb_l4_sae.cfg.metadata.context_size = None
+    custom_context_size = 256
+
+    store = ActivationsStore.from_sae(
+        model=ts_model,
+        sae=gpt2_res_jb_l4_sae,
+        dataset="NeelNanda/c4-10k",
+        context_size=custom_context_size,
+    )
+
+    assert store.context_size == custom_context_size

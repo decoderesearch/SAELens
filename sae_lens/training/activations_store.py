@@ -166,9 +166,11 @@ class ActivationsStore:
         disable_concat_sequences: bool = False,
         sequence_separator_token: int | Literal["bos", "eos", "sep"] | None = "bos",
     ) -> ActivationsStore:
+        if context_size is None:
+            context_size = sae.cfg.metadata.context_size
         if sae.cfg.metadata.hook_name is None:
             raise ValueError("hook_name is required")
-        if sae.cfg.metadata.context_size is None:
+        if context_size is None:
             raise ValueError("context_size is required")
         if sae.cfg.metadata.prepend_bos is None:
             raise ValueError("prepend_bos is required")
@@ -178,9 +180,7 @@ class ActivationsStore:
             d_in=sae.cfg.d_in,
             hook_name=sae.cfg.metadata.hook_name,
             hook_head_index=sae.cfg.metadata.hook_head_index,
-            context_size=sae.cfg.metadata.context_size
-            if context_size is None
-            else context_size,
+            context_size=context_size,
             prepend_bos=sae.cfg.metadata.prepend_bos,
             streaming=streaming,
             store_batch_size_prompts=store_batch_size_prompts,
