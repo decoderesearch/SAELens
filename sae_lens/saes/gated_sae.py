@@ -89,7 +89,7 @@ class GatedSAE(SAE[GatedSAEConfig]):
     @torch.no_grad()
     def fold_W_dec_norm(self):
         """Override to handle gated-specific parameters."""
-        W_dec_norms = self.W_dec.norm(dim=-1).unsqueeze(1)
+        W_dec_norms = self.W_dec.norm(dim=-1).clamp(min=1e-8).unsqueeze(1)
         self.W_dec.data = self.W_dec.data / W_dec_norms
         self.W_enc.data = self.W_enc.data * W_dec_norms.T
 
@@ -217,7 +217,7 @@ class GatedTrainingSAE(TrainingSAE[GatedTrainingSAEConfig]):
     @torch.no_grad()
     def fold_W_dec_norm(self):
         """Override to handle gated-specific parameters."""
-        W_dec_norms = self.W_dec.norm(dim=-1).unsqueeze(1)
+        W_dec_norms = self.W_dec.norm(dim=-1).clamp(min=1e-8).unsqueeze(1)
         self.W_dec.data = self.W_dec.data / W_dec_norms
         self.W_enc.data = self.W_enc.data * W_dec_norms.T
 

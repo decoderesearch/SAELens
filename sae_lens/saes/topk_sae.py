@@ -531,7 +531,7 @@ def _fold_norm_topk(
     b_enc: torch.Tensor,
     W_dec: torch.Tensor,
 ) -> None:
-    W_dec_norm = W_dec.norm(dim=-1)
+    W_dec_norm = W_dec.norm(dim=-1).clamp(min=1e-8)
     b_enc.data = b_enc.data * W_dec_norm
     W_dec_norms = W_dec_norm.unsqueeze(1)
     W_dec.data = W_dec.data / W_dec_norms

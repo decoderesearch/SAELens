@@ -458,6 +458,87 @@ def test_sae_fold_norm_scaling_factor_all_architectures(architecture: str):
     assert_close(sae_out_1, sae_out_2, atol=1e-5)
 
 
+@pytest.mark.parametrize("architecture", ALL_FOLDABLE_ARCHITECTURES)
+@torch.no_grad()
+def test_fold_W_dec_norm_does_not_produce_nan_with_zero_norm_decoder(
+    architecture: str,
+):
+    """
+    Regression test for https://github.com/decoderesearch/SAELens/issues/588
+
+    When decoder weights have zero norm (dead latents), the division in
+    fold_W_dec_norm should not produce NaN values. This is handled by
+    clamping the norm to a minimum of 1e-8.
+    """
+    cfg = build_sae_cfg_for_arch(architecture)
+    sae = SAE.from_dict(cfg.to_dict())
+    sae.turn_off_forward_pass_hook_z_reshaping()
+
+    # Initialize parameters with random values
+    for param in sae.parameters():
+        param.data = torch.rand_like(param)
+
+    # Set some decoder rows to zero to simulate dead latents
+    num_zero_rows = min(5, sae.W_dec.shape[0])
+    sae.W_dec.data[:num_zero_rows] = 0.0
+
+    # Verify that we actually have zero-norm rows
+    norms_before = sae.W_dec.norm(dim=-1)
+    assert (norms_before[:num_zero_rows] == 0).all()
+
+    # TopK SAEs with rescale_acts_by_decoder_norm=False raise NotImplementedError
+    if architecture == "topk" and not getattr(
+        sae.cfg, "rescale_acts_by_decoder_norm", False
+    ):
+        with pytest.raises(NotImplementedError):
+            sae.fold_W_dec_norm()
+        return
+
+    # Call fold_W_dec_norm - this should not produce NaN values
+    sae.fold_W_dec_norm()
+
+    # Verify no NaN or Inf values in any parameters
+    for name, param in sae.named_parameters():
+        assert not torch.isnan(param).any(), f"NaN found in {name} after fold_W_dec_norm"
+        assert not torch.isinf(param).any(), f"Inf found in {name} after fold_W_dec_norm"
+
+
+@pytest.mark.parametrize("architecture", ALL_TRAINING_ARCHITECTURES)
+@torch.no_grad()
+def test_training_fold_W_dec_norm_does_not_produce_nan_with_zero_norm_decoder(
+    architecture: str,
+):
+    """
+    Regression test for https://github.com/decoderesearch/SAELens/issues/588
+
+    When decoder weights have zero norm (dead latents), the division in
+    fold_W_dec_norm should not produce NaN values for TrainingSAE classes.
+    """
+    cfg = build_sae_training_cfg_for_arch(architecture)
+    sae = TrainingSAE.from_dict(cfg.to_dict())
+    sae.turn_off_forward_pass_hook_z_reshaping()
+
+    # Initialize parameters with random values
+    for param in sae.parameters():
+        param.data = torch.rand_like(param)
+
+    # Set some decoder rows to zero to simulate dead latents
+    num_zero_rows = min(5, sae.W_dec.shape[0])
+    sae.W_dec.data[:num_zero_rows] = 0.0
+
+    # Verify that we actually have zero-norm rows
+    norms_before = sae.W_dec.norm(dim=-1)
+    assert (norms_before[:num_zero_rows] == 0).all()
+
+    # Call fold_W_dec_norm - this should not produce NaN values
+    sae.fold_W_dec_norm()
+
+    # Verify no NaN or Inf values in any parameters
+    for name, param in sae.named_parameters():
+        assert not torch.isnan(param).any(), f"NaN found in {name} after fold_W_dec_norm"
+        assert not torch.isinf(param).any(), f"Inf found in {name} after fold_W_dec_norm"
+
+
 def test_StandardSAE_save_and_load_from_pretrained(tmp_path: Path) -> None:
     cfg = build_sae_cfg()
     model_path = str(tmp_path)
