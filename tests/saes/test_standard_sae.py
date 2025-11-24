@@ -499,8 +499,12 @@ def test_fold_W_dec_norm_does_not_produce_nan_with_zero_norm_decoder(
 
     # Verify no NaN or Inf values in any parameters
     for name, param in sae.named_parameters():
-        assert not torch.isnan(param).any(), f"NaN found in {name} after fold_W_dec_norm"
-        assert not torch.isinf(param).any(), f"Inf found in {name} after fold_W_dec_norm"
+        assert not torch.isnan(
+            param
+        ).any(), f"NaN found in {name} after fold_W_dec_norm"
+        assert not torch.isinf(
+            param
+        ).any(), f"Inf found in {name} after fold_W_dec_norm"
 
 
 @pytest.mark.parametrize("architecture", ALL_TRAINING_ARCHITECTURES)
@@ -535,8 +539,12 @@ def test_training_fold_W_dec_norm_does_not_produce_nan_with_zero_norm_decoder(
 
     # Verify no NaN or Inf values in any parameters
     for name, param in sae.named_parameters():
-        assert not torch.isnan(param).any(), f"NaN found in {name} after fold_W_dec_norm"
-        assert not torch.isinf(param).any(), f"Inf found in {name} after fold_W_dec_norm"
+        assert not torch.isnan(
+            param
+        ).any(), f"NaN found in {name} after fold_W_dec_norm"
+        assert not torch.isinf(
+            param
+        ).any(), f"Inf found in {name} after fold_W_dec_norm"
 
 
 def test_StandardSAE_save_and_load_from_pretrained(tmp_path: Path) -> None:
