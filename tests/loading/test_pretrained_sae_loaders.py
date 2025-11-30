@@ -189,6 +189,15 @@ def test_load_sae_config_from_huggingface_gemma_2():
             None,
             None,
         ),
+        (
+            "clt/width_262080_affine_l0_small/params_layer_15",
+            "jumprelu_skip_transcoder",
+            "blocks.15.ln2.hook_normalized",
+            10080,
+            1152,
+            "blocks.15.hook_mlp_out",
+            1152,
+        ),
     ],
 )
 def test_get_gemma_3_config_from_hf(

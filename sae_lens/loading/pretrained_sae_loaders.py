@@ -544,22 +544,27 @@ def get_gemma_3_config_from_hf(
         hook_name = f"blocks.{layer}.hook_attn_out"
     elif "mlp_out" in folder_name:
         hook_name = f"blocks.{layer}.hook_mlp_out"
-    elif "transcoder" in folder_name:
+    elif "transcoder" in folder_name or "clt" in folder_name:
         hook_name = f"blocks.{layer}.ln2.hook_normalized"
         hook_name_out = f"blocks.{layer}.hook_mlp_out"
     else:
         raise ValueError("Hook name not found in folder_name.")
 
-    weights = hf_hub_url(repo_id, f"{folder_name}/params.safetensors")
+    # hackily deal with clt file names
+    params_file_part = "/params.safetensors"
+    if "clt" in folder_name:
+        params_file_part = ".safetensors"
+
+    weights = hf_hub_url(repo_id, f"{folder_name}{params_file_part}")
     shapes_dict = get_safetensors_tensor_shapes(weights)
     d_in, d_sae = shapes_dict["w_enc"]
     # TODO: update this for real model info
     model_name = "google/gemma-3-1b-pt"
 
     architecture = "jumprelu"
-    if "transcoder" in folder_name:
+    if "transcoder" in folder_name or "clt" in folder_name:
         architecture = "jumprelu_skip_transcoder"
-        d_out = shapes_dict["w_dec"][1]
+        d_out = shapes_dict["w_dec"][-1]
 
     cfg = {
         "architecture": architecture,
@@ -608,19 +613,29 @@ def gemma_3_sae_huggingface_loader(
         cfg_overrides,
     )
 
+    params_file = "params.safetensors"
+    if "clt" in folder_name:
+        params_file = folder_name.split("/")[-1] + ".safetensors"
+        folder_name = "/".join(folder_name.split("/")[:-1])
+
     # Download the SAE weights
     sae_path = hf_hub_download(
         repo_id=repo_id,
-        filename="params.safetensors",
+        filename=params_file,
         subfolder=folder_name,
         force_download=force_download,
     )
 
     raw_state_dict = load_file(sae_path, device=device)
 
+    with torch.no_grad():
+        w_dec = raw_state_dict["w_dec"]
+        if "clt" in folder_name:
+            w_dec = w_dec.sum(dim=1).contiguous()
+
     state_dict = {
         "W_enc": raw_state_dict["w_enc"],
-        "W_dec": raw_state_dict["w_dec"],
+        "W_dec": w_dec,
         "b_enc": raw_state_dict["b_enc"],
         "b_dec": raw_state_dict["b_dec"],
         "threshold": raw_state_dict["threshold"],
