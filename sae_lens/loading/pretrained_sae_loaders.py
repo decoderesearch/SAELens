@@ -523,6 +523,93 @@ def gemma_2_sae_huggingface_loader(
     return cfg_dict, state_dict, log_sparsity
 
 
+def get_gemma_3_config_from_hf(
+    repo_id: str,
+    folder_name: str,
+    device: str,
+    force_download: bool = False,  # noqa: ARG001
+    cfg_overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    # Hook specific parameters
+    layer = int(folder_name.split("_")[1])
+    if "resid_post" in folder_name:
+        hook_name = f"blocks.{layer}.hook_resid_post"
+    elif "attn_out" in folder_name:
+        hook_name = f"blocks.{layer}.hook_attn_out"
+    elif "mlp_out" in folder_name:
+        hook_name = f"blocks.{layer}.hook_mlp_out"
+    else:
+        raise ValueError("Hook name not found in folder_name.")
+
+    weights = hf_hub_url(repo_id, f"{folder_name}/params.safetensors")
+    shapes_dict = get_safetensors_tensor_shapes(weights)
+    d_in, d_sae = shapes_dict["w_enc"]
+    # TODO: update this for real model info
+    model_name = "google/gemma-3-1b-pt"
+
+    cfg = {
+        "architecture": "jumprelu",
+        "d_in": d_in,
+        "d_sae": d_sae,
+        "dtype": "float32",
+        "model_name": model_name,
+        "hook_name": hook_name,
+        "hook_head_index": None,
+        "finetuning_scaling_factor": False,
+        "sae_lens_training_version": None,
+        "prepend_bos": True,
+        "dataset_path": "monology/pile-uncopyrighted",
+        "context_size": 1024,
+        "apply_b_dec_to_input": True,
+        "normalize_activations": None,
+    }
+    if device is not None:
+        cfg["device"] = device
+
+    if cfg_overrides is not None:
+        cfg.update(cfg_overrides)
+
+    return cfg
+
+
+def gemma_3_sae_huggingface_loader(
+    repo_id: str,
+    folder_name: str,
+    device: str = "cpu",
+    force_download: bool = False,
+    cfg_overrides: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, torch.Tensor], torch.Tensor | None]:
+    """
+    Custom loader for Gemma 3 SAEs.
+    """
+    cfg_dict = get_gemma_3_config_from_hf(
+        repo_id,
+        folder_name,
+        device,
+        force_download,
+        cfg_overrides,
+    )
+
+    # Download the SAE weights
+    sae_path = hf_hub_download(
+        repo_id=repo_id,
+        filename="params.safetensors",
+        subfolder=folder_name,
+        force_download=force_download,
+    )
+
+    raw_state_dict = load_file(sae_path, device=device)
+
+    state_dict = {
+        "W_enc": raw_state_dict["w_enc"],
+        "W_dec": raw_state_dict["w_dec"],
+        "b_enc": raw_state_dict["b_enc"],
+        "b_dec": raw_state_dict["b_dec"],
+    }
+
+    return cfg_dict, state_dict, None
+
+
 def get_goodfire_config_from_hf(
     repo_id: str,
     folder_name: str,  # noqa: ARG001
