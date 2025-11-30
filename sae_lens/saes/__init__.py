@@ -33,6 +33,8 @@ from .topk_sae import (
     TopKTrainingSAEConfig,
 )
 from .transcoder import (
+    JumpReLUSkipTranscoder,
+    JumpReLUSkipTranscoderConfig,
     JumpReLUTranscoder,
     JumpReLUTranscoderConfig,
     SkipTranscoder,
@@ -70,6 +72,8 @@ __all__ = [
     "SkipTranscoderConfig",
     "JumpReLUTranscoder",
     "JumpReLUTranscoderConfig",
+    "JumpReLUSkipTranscoder",
+    "JumpReLUSkipTranscoderConfig",
     "MatryoshkaBatchTopKTrainingSAE",
     "MatryoshkaBatchTopKTrainingSAEConfig",
     "TemporalSAE",

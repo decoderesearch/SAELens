@@ -547,8 +547,12 @@ def get_gemma_3_config_from_hf(
     # TODO: update this for real model info
     model_name = "google/gemma-3-1b-pt"
 
+    architecture = "jumprelu"
+    if "transcoder" in folder_name:
+        architecture = "jumprelu_skip_transcoder"
+
     cfg = {
-        "architecture": "jumprelu",
+        "architecture": architecture,
         "d_in": d_in,
         "d_sae": d_sae,
         "dtype": "float32",
@@ -560,7 +564,7 @@ def get_gemma_3_config_from_hf(
         "prepend_bos": True,
         "dataset_path": "monology/pile-uncopyrighted",
         "context_size": 1024,
-        "apply_b_dec_to_input": True,
+        "apply_b_dec_to_input": False,
         "normalize_activations": None,
     }
     if device is not None:
@@ -606,6 +610,9 @@ def gemma_3_sae_huggingface_loader(
         "b_enc": raw_state_dict["b_enc"],
         "b_dec": raw_state_dict["b_dec"],
     }
+
+    if "affine_skip_connection" in raw_state_dict:
+        state_dict["W_skip"] = raw_state_dict["affine_skip_connection"]
 
     return cfg_dict, state_dict, None
 
