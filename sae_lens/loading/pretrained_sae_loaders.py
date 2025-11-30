@@ -530,14 +530,22 @@ def get_gemma_3_config_from_hf(
     force_download: bool = False,  # noqa: ARG001
     cfg_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    # Hook specific parameters
-    layer = int(folder_name.split("_")[1])
+    layer_match = re.search(r"layer_(\d+)", folder_name)
+    if layer_match is None:
+        raise ValueError(
+            f"Could not extract layer number from folder_name: {folder_name}"
+        )
+    layer = int(layer_match.group(1))
+    hook_name_out = None
     if "resid_post" in folder_name:
         hook_name = f"blocks.{layer}.hook_resid_post"
     elif "attn_out" in folder_name:
         hook_name = f"blocks.{layer}.hook_attn_out"
     elif "mlp_out" in folder_name:
         hook_name = f"blocks.{layer}.hook_mlp_out"
+    elif "transcoder" in folder_name:
+        hook_name = f"blocks.{layer}.ln2.hook_normalized"
+        hook_name_out = f"blocks.{layer}.hook_mlp_out"
     else:
         raise ValueError("Hook name not found in folder_name.")
 
@@ -567,6 +575,8 @@ def get_gemma_3_config_from_hf(
         "apply_b_dec_to_input": False,
         "normalize_activations": None,
     }
+    if hook_name_out is not None:
+        cfg["hook_name_out"] = hook_name_out
     if device is not None:
         cfg["device"] = device
 
@@ -609,6 +619,7 @@ def gemma_3_sae_huggingface_loader(
         "W_dec": raw_state_dict["w_dec"],
         "b_enc": raw_state_dict["b_enc"],
         "b_dec": raw_state_dict["b_dec"],
+        "threshold": raw_state_dict["threshold"],
     }
 
     if "affine_skip_connection" in raw_state_dict:

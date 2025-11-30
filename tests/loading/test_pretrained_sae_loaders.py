@@ -12,6 +12,7 @@ from sae_lens.loading.pretrained_sae_loaders import (
     dictionary_learning_sae_huggingface_loader_1,
     get_deepseek_r1_config_from_hf,
     get_gemma_2_transcoder_config_from_hf,
+    get_gemma_3_config_from_hf,
     get_goodfire_config_from_hf,
     get_goodfire_huggingface_loader,
     get_llama_scope_config_from_hf,
@@ -147,6 +148,67 @@ def test_load_sae_config_from_huggingface_gemma_2():
         "architecture": "jumprelu",
     }
 
+    assert cfg_dict == expected_cfg_dict
+
+
+@pytest.mark.parametrize(
+    ("folder_name", "architecture", "hook_name", "d_sae", "d_in", "hook_name_out"),
+    [
+        (
+            "resid_post/layer_10_width_262144_l0_small",
+            "jumprelu",
+            "blocks.10.hook_resid_post",
+            262144,
+            1152,
+            None,
+        ),
+        (
+            "transcoder/layer_10_width_262144_affine_l0_medium",
+            "jumprelu_skip_transcoder",
+            "blocks.10.ln2.hook_normalized",
+            262144,
+            1152,
+            "blocks.10.hook_mlp_out",
+        ),
+        (
+            "attn_out/layer_11_width_16384_l0_medium",
+            "jumprelu",
+            "blocks.11.hook_attn_out",
+            16384,
+            1024,
+            None,
+        ),
+    ],
+)
+def test_get_gemma_3_config_from_hf(
+    folder_name: str,
+    architecture: str,
+    hook_name: str,
+    d_sae: int,
+    d_in: int,
+    hook_name_out: str | None,
+):
+    cfg_dict = get_gemma_3_config_from_hf("gg-gs/gemma-v3-1b-pt", folder_name, "cpu")
+
+    expected_cfg_dict = {
+        "architecture": architecture,
+        "d_in": d_in,
+        "d_sae": d_sae,
+        "dtype": "float32",
+        "model_name": "google/gemma-3-1b-pt",
+        "hook_name": hook_name,
+        "hook_head_index": None,
+        "finetuning_scaling_factor": False,
+        "sae_lens_training_version": None,
+        "prepend_bos": True,
+        "dataset_path": "monology/pile-uncopyrighted",
+        "context_size": 1024,
+        "apply_b_dec_to_input": False,
+        "normalize_activations": None,
+        "device": "cpu",
+    }
+    if hook_name_out is not None:
+        expected_cfg_dict["hook_name_out"] = hook_name_out
     assert cfg_dict == expected_cfg_dict
 
 
