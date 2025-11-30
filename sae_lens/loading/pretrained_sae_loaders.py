@@ -537,6 +537,7 @@ def get_gemma_3_config_from_hf(
         )
     layer = int(layer_match.group(1))
     hook_name_out = None
+    d_out = None
     if "resid_post" in folder_name:
         hook_name = f"blocks.{layer}.hook_resid_post"
     elif "attn_out" in folder_name:
@@ -558,6 +559,7 @@ def get_gemma_3_config_from_hf(
     architecture = "jumprelu"
     if "transcoder" in folder_name:
         architecture = "jumprelu_skip_transcoder"
+        d_out = shapes_dict["w_dec"][1]
 
     cfg = {
         "architecture": architecture,
@@ -577,6 +579,8 @@ def get_gemma_3_config_from_hf(
     }
     if hook_name_out is not None:
         cfg["hook_name_out"] = hook_name_out
+    if d_out is not None:
+        cfg["d_out"] = d_out
     if device is not None:
         cfg["device"] = device
 

@@ -152,7 +152,15 @@ def test_load_sae_config_from_huggingface_gemma_2():
 
 
 @pytest.mark.parametrize(
-    ("folder_name", "architecture", "hook_name", "d_sae", "d_in", "hook_name_out"),
+    (
+        "folder_name",
+        "architecture",
+        "hook_name",
+        "d_sae",
+        "d_in",
+        "hook_name_out",
+        "d_out",
+    ),
     [
         (
             "resid_post/layer_10_width_262144_l0_small",
@@ -160,6 +168,7 @@ def test_load_sae_config_from_huggingface_gemma_2():
             "blocks.10.hook_resid_post",
             262144,
             1152,
+            None,
             None,
         ),
         (
@@ -169,6 +178,7 @@ def test_load_sae_config_from_huggingface_gemma_2():
             262144,
             1152,
             "blocks.10.hook_mlp_out",
+            1152,
         ),
         (
             "attn_out/layer_11_width_16384_l0_medium",
@@ -176,6 +186,7 @@ def test_load_sae_config_from_huggingface_gemma_2():
             "blocks.11.hook_attn_out",
             16384,
             1024,
+            None,
             None,
         ),
     ],
@@ -187,6 +198,7 @@ def test_get_gemma_3_config_from_hf(
     d_sae: int,
     d_in: int,
     hook_name_out: str | None,
+    d_out: int | None,
 ):
     cfg_dict = get_gemma_3_config_from_hf("gg-gs/gemma-v3-1b-pt", folder_name, "cpu")
 
@@ -209,6 +221,8 @@ def test_get_gemma_3_config_from_hf(
     }
     if hook_name_out is not None:
         expected_cfg_dict["hook_name_out"] = hook_name_out
+    if d_out is not None:
+        expected_cfg_dict["d_out"] = d_out
     assert cfg_dict == expected_cfg_dict
 
 
