@@ -9,6 +9,7 @@ from sparsify import SparseCoder, SparseCoderConfig
 
 from sae_lens import StandardSAE, StandardSAEConfig
 from sae_lens.loading.pretrained_sae_loaders import (
+    dictionary_learning_matryoshka_huggingface_loader,
     dictionary_learning_sae_huggingface_loader_1,
     get_deepseek_r1_config_from_hf,
     get_gemma_2_transcoder_config_from_hf,
@@ -1292,3 +1293,47 @@ def test_TemporalSAE_config_from_pretrained():
     }
 
     assert cfg_dict == expected_cfg
+
+
+def test_dictionary_learning_matryoshka_huggingface_loader():
+    cfg_dict, state_dict, sparsity = dictionary_learning_matryoshka_huggingface_loader(
+        "adamkarvonen/saebench_gemma-2-2b_width-2pow12_date-0108",
+        "MatryoshkaBatchTopK_gemma-2-2b__0108/resid_post_layer_12/trainer_0",
+        device="cpu",
+        force_download=False,
+        cfg_overrides=None,
+    )
+
+    D_IN = 2304
+    D_SAE = 4096
+
+    assert sparsity is None
+    assert state_dict.keys() == {"W_enc", "W_dec", "b_dec", "b_enc", "threshold"}
+    assert cfg_dict == {
+        # SAELens implements BatchTopK SAEs as JumpReLU for inference, we force
+        # the architecture conversion using the config.
+        "architecture": "jumprelu",
+        "d_in": D_IN,
+        "d_sae": D_SAE,
+        "dtype": "float32",
+        "device": "cpu",
+        "model_name": "gemma-2-2b",
+        "hook_name": "blocks.12.hook_resid_post",
+        "hook_head_index": None,
+        "activation_fn": "relu",
+        "activation_fn_kwargs": {},
+        "apply_b_dec_to_input": True,
+        "finetuning_scaling_factor": False,
+        "sae_lens_training_version": None,
+        "prepend_bos": True,
+        "dataset_path": "monology/pile-uncopyrighted",
+        "context_size": 1024,
+        "normalize_activations": "none",
+        "neuronpedia_id": None,
+        "dataset_trust_remote_code": True,
+    }
+    assert state_dict["W_enc"].shape == (D_IN, D_SAE)
+    assert state_dict["W_dec"].shape == (D_SAE, D_IN)
+    assert state_dict["b_dec"].shape == (D_IN,)
+    assert state_dict["b_enc"].shape == (D_SAE,)
+    assert state_dict["threshold"].shape == (D_SAE,)

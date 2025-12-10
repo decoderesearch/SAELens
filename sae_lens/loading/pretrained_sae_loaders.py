@@ -882,6 +882,50 @@ def load_sae_config_from_huggingface(
     return handle_config_defaulting(cfg)
 
 
+def dictionary_learning_matryoshka_huggingface_loader(
+    repo_id: str,
+    folder_name: str,
+    device: str = "cpu",
+    force_download: bool = False,
+    cfg_overrides: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, torch.Tensor], torch.Tensor | None]:
+    """
+    For loading Matryoshka SAEs from SAEBench, e.g.
+    https://huggingface.co/adamkarvonen/saebench_gemma-2-2b_width-2pow12_date-0108
+
+    In dictionary-learning, Matryoshka SAEs are their own class, however in
+    SAELens they are implemented as BatchTopK SAEs which are themselves
+    implemented as JumpReLU SAEs. In dictionary-learning, the class uses the
+    SAELens parameter names, rather than those referenced by
+    dictionary_learning_sae_huggingface_loader_1.
+    """
+    cfg_dict = get_dictionary_learning_config_1_from_hf(
+        repo_id,
+        folder_name,
+        device,
+        force_download,
+        cfg_overrides,
+    )
+    cfg_dict["architecture"] = "jumprelu"
+
+    encoder_path = hf_hub_download(
+        repo_id=repo_id, filename=f"{folder_name}/ae.pt", force_download=force_download
+    )
+    encoder = torch.load(encoder_path, map_location="cpu")
+
+    state_dict = {
+        "W_enc": encoder["W_enc"],
+        "b_enc": encoder["b_enc"],
+        "W_dec": encoder["W_dec"],
+        "b_dec": encoder["b_dec"],
+        "threshold": torch.full((encoder["W_enc"].size(1),), encoder["threshold"]),
+    }
+
+    # We throw away the group sizes and k, as these are only used during training.
+
+    return cfg_dict, state_dict, None
+
+
 def dictionary_learning_sae_huggingface_loader_1(
     repo_id: str,
     folder_name: str,
@@ -1673,6 +1717,7 @@ NAMED_PRETRAINED_SAE_LOADERS: dict[str, PretrainedSaeHuggingfaceLoader] = {
     "mntss_clt_layer_transcoder": mntss_clt_layer_huggingface_loader,
     "temporal": temporal_sae_huggingface_loader,
     "goodfire": get_goodfire_huggingface_loader,
+    "dictionary_learning_matryoshka": dictionary_learning_matryoshka_huggingface_loader,
 }
 
 
