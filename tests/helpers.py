@@ -10,6 +10,10 @@ from sae_lens.config import LanguageModelSAERunnerConfig, LoggingConfig
 from sae_lens.saes.batchtopk_sae import BatchTopKTrainingSAEConfig
 from sae_lens.saes.gated_sae import GatedSAEConfig, GatedTrainingSAEConfig
 from sae_lens.saes.jumprelu_sae import JumpReLUSAEConfig, JumpReLUTrainingSAEConfig
+from sae_lens.saes.matching_pursuit_sae import (
+    MatchingPursuitSAEConfig,
+    MatchingPursuitTrainingSAEConfig,
+)
 from sae_lens.saes.matryoshka_batchtopk_sae import MatryoshkaBatchTopKTrainingSAEConfig
 from sae_lens.saes.sae import T_TRAINING_SAE_CONFIG, SAEConfig, TrainingSAEConfig
 from sae_lens.saes.standard_sae import StandardSAEConfig, StandardTrainingSAEConfig
@@ -19,7 +23,14 @@ from sae_lens.saes.topk_sae import TopKSAEConfig, TopKTrainingSAEConfig
 TINYSTORIES_MODEL = "tiny-stories-1M"
 NEEL_NANDA_C4_10K_DATASET = "NeelNanda/c4-10k"
 
-ALL_ARCHITECTURES = ["standard", "gated", "jumprelu", "topk", "temporal"]
+ALL_ARCHITECTURES = [
+    "standard",
+    "gated",
+    "jumprelu",
+    "topk",
+    "temporal",
+    "matching_pursuit",
+]
 ALL_FOLDABLE_ARCHITECTURES = [
     "standard",
     "gated",
@@ -33,6 +44,7 @@ ALL_TRAINING_ARCHITECTURES = [
     "topk",
     "batchtopk",
     "matryoshka_batchtopk",
+    "matching_pursuit",
 ]
 
 
@@ -121,6 +133,7 @@ class TrainingSAEConfigDict(TypedDict, total=False):
     jumprelu_tanh_scale: float  # For JumpReLU
     rescale_acts_by_decoder_norm: bool  # For TopK
     matryoshka_widths: list[int]  # For MatryoshkaBatchTopK
+    residual_threshold: float  # for MatchingPursuitSAE
 
 
 class SAEConfigDict(TypedDict, total=False):
@@ -131,6 +144,7 @@ class SAEConfigDict(TypedDict, total=False):
     normalize_activations: str
     apply_b_dec_to_input: bool
     k: int  # For TopK
+    residual_threshold: float  # for matching pursuit
 
 
 # Helper to create the base runner config (reused by specific builders)
@@ -435,6 +449,58 @@ def build_topk_sae_training_cfg(**kwargs: Any) -> TopKTrainingSAEConfig:
     return build_topk_runner_cfg(**kwargs).sae  # type: ignore
 
 
+# --- Matching Pursuit SAE Builder ---
+
+
+def build_matching_pursuit_runner_cfg(
+    **kwargs: Any,
+) -> LanguageModelSAERunnerConfig[MatchingPursuitTrainingSAEConfig]:
+    """Helper to create a mock instance for TopK SAE."""
+    default_sae_config: TrainingSAEConfigDict = {
+        "d_in": 64,
+        "d_sae": 256,
+        "dtype": "float32",
+        "device": "cpu",
+        "normalize_activations": "none",
+        "decoder_init_norm": 0.1,
+        "apply_b_dec_to_input": True,
+        "residual_threshold": 0.1,
+    }
+    # Ensure activation_fn_kwargs has k if k is overridden
+    temp_sae_overrides = {
+        k: v for k, v in kwargs.items() if k in TrainingSAEConfigDict.__annotations__
+    }
+    temp_sae_config = {**default_sae_config, **temp_sae_overrides}
+    # Update the default config *before* passing it to _build_runner_config
+    final_default_sae_config = cast(dict[str, Any], temp_sae_config)
+
+    runner_cfg = _build_runner_config(
+        MatchingPursuitTrainingSAEConfig,
+        final_default_sae_config,
+        **kwargs,
+    )
+    _update_sae_metadata(runner_cfg)
+    return runner_cfg
+
+
+def build_matching_pursuit_sae_cfg(**kwargs: Any) -> MatchingPursuitSAEConfig:
+    default_sae_config: SAEConfigDict = {
+        "residual_threshold": 0.1,
+        "d_in": 64,
+        "d_sae": 256,
+        "dtype": "float32",
+        "device": "cpu",
+        "normalize_activations": "none",
+    }
+    return MatchingPursuitSAEConfig(**{**default_sae_config, **kwargs})  # type: ignore
+
+
+def build_matching_pursuit_sae_training_cfg(
+    **kwargs: Any,
+) -> MatchingPursuitTrainingSAEConfig:
+    return build_matching_pursuit_runner_cfg(**kwargs).sae  # type: ignore
+
+
 # --- Temporal SAE Builder ---
 def build_temporal_sae_cfg(**kwargs: Any) -> TemporalSAEConfig:
     default_sae_config: dict[str, Any] = {
@@ -652,6 +718,7 @@ SAE_TRAINING_CONFIG_BUILDERS = {
     "topk": build_topk_sae_training_cfg,
     "batchtopk": build_batchtopk_sae_training_cfg,
     "matryoshka_batchtopk": build_matryoshka_batchtopk_sae_training_cfg,
+    "matching_pursuit": build_matching_pursuit_sae_training_cfg,
 }
 
 SAE_CONFIG_BUILDERS = {
@@ -660,6 +727,7 @@ SAE_CONFIG_BUILDERS = {
     "jumprelu": build_jumprelu_sae_cfg,
     "topk": build_topk_sae_cfg,
     "temporal": build_temporal_sae_cfg,
+    "matching_pursuit": build_matching_pursuit_sae_cfg,
 }
 
 SAE_RUNNER_CONFIG_BUILDERS = {
@@ -669,4 +737,5 @@ SAE_RUNNER_CONFIG_BUILDERS = {
     "topk": build_topk_runner_cfg,
     "batchtopk": build_batchtopk_runner_cfg,
     "matryoshka_batchtopk": build_matryoshka_batchtopk_runner_cfg,
+    "matching_pursuit": build_matching_pursuit_runner_cfg,
 }

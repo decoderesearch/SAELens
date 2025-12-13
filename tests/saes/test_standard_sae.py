@@ -291,7 +291,7 @@ def test_sae_fold_w_dec_norm_all_architectures(architecture: str):
     sae2 = deepcopy(sae)
 
     # If this is a topk SAE, assert this throws a NotImplementedError
-    if architecture in {"topk", "temporal"}:
+    if architecture not in ALL_FOLDABLE_ARCHITECTURES:
         with pytest.raises(NotImplementedError):
             sae2.fold_W_dec_norm()
         return
@@ -334,6 +334,11 @@ def test_training_sae_fold_w_dec_norm_all_architectures(architecture: str):
 
     assert sae.W_dec.norm(dim=-1).mean().item() != pytest.approx(1.0, abs=1e-6)
     sae2 = deepcopy(sae)
+
+    if architecture in {"matching_pursuit"}:
+        with pytest.raises(NotImplementedError):
+            sae2.fold_W_dec_norm()
+        return
 
     sae2.fold_W_dec_norm()
 
@@ -535,6 +540,12 @@ def test_training_fold_W_dec_norm_does_not_produce_nan_with_zero_norm_decoder(
     assert (norms_before[:num_zero_rows] == 0).all()
 
     # Call fold_W_dec_norm - this should not produce NaN values
+
+    if architecture in {"matching_pursuit"}:
+        with pytest.raises(NotImplementedError):
+            sae.fold_W_dec_norm()
+        return
+
     sae.fold_W_dec_norm()
 
     # Verify no NaN or Inf values in any parameters

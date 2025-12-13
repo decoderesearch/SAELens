@@ -14,6 +14,12 @@ from .jumprelu_sae import (
     JumpReLUTrainingSAE,
     JumpReLUTrainingSAEConfig,
 )
+from .matching_pursuit_sae import (
+    MatchingPursuitSAE,
+    MatchingPursuitSAEConfig,
+    MatchingPursuitTrainingSAE,
+    MatchingPursuitTrainingSAEConfig,
+)
 from .matryoshka_batchtopk_sae import (
     MatryoshkaBatchTopKTrainingSAE,
     MatryoshkaBatchTopKTrainingSAEConfig,
@@ -74,4 +80,8 @@ __all__ = [
     "MatryoshkaBatchTopKTrainingSAEConfig",
     "TemporalSAE",
     "TemporalSAEConfig",
+    "MatchingPursuitSAE",
+    "MatchingPursuitTrainingSAE",
+    "MatchingPursuitSAEConfig",
+    "MatchingPursuitTrainingSAEConfig",
 ]
