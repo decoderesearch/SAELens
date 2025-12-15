@@ -14961,7 +14961,7 @@ goodfire-llama-3.1-8b-instruct:
     neuronpedia: llama3.1-8b-it/19-resid-post-gf
 
 saebench_gemma-2-2b_width-2pow12_date-0108:
-  conversion_func: dictionary_learning_matryoshka
+  conversion_func: dictionary_learning_1
   links:
     model: https://huggingface.co/google/gemma-2-2b
   model: gemma-2-2b
@@ -14987,7 +14987,7 @@ saebench_gemma-2-2b_width-2pow12_date-0108:
     path: MatryoshkaBatchTopK_gemma-2-2b__0108/resid_post_layer_12/trainer_5
 
 saebench_gemma-2-2b_width-2pow14_date-0107:
-  conversion_func: dictionary_learning_matryoshka
+  conversion_func: dictionary_learning_1
   links:
     model: https://huggingface.co/google/gemma-2-2b
   model: gemma-2-2b
@@ -15013,7 +15013,7 @@ saebench_gemma-2-2b_width-2pow14_date-0107:
     path: gemma-2-2b_matryoshka_batch_top_k_width-2pow14_date-0107/resid_post_layer_12/trainer_5
 
 saebench_gemma-2-2b_width-2pow16_date-0107:
-  conversion_func: dictionary_learning_matryoshka
+  conversion_func: dictionary_learning_1
   links:
     model: https://huggingface.co/google/gemma-2-2b
   model: gemma-2-2b
