@@ -198,7 +198,7 @@ def test_SAEMetadata_dynamic_attribute_setting():
     assert "another_field" in metadata
 
 
-def test_SAE_from_pretrained_deprecated_usage_as_tuple():
+def test_SAE_from_pretrained_deprecated_usage_as_tuple(cleanup_hf_downloads: None):  # noqa: ARG001
     sae = SAE.from_pretrained("gpt2-small-hook-z-kk", "blocks.2.hook_z", device="cpu")
 
     # Test tuple unpacking with deprecation warning

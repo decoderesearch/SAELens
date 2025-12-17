@@ -25,7 +25,7 @@ jobs:
 
     env:
       # Increment this number to bust all caches (HuggingFace, Poetry, venv)
-      CACHE_VERSION: 8
+      CACHE_VERSION: 9
 
     steps:
       - uses: actions/checkout@v4
@@ -33,6 +33,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - uses: mxschmitt/action-tmate@v3
       - name: Cache Huggingface assets
         uses: actions/cache@v4
         with:

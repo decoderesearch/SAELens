@@ -122,3 +122,33 @@ def gpt2_res_jb_l4_sae() -> SAE[StandardSAEConfig]:
         sae_id="blocks.4.hook_resid_pre",
         device="cpu",
     )
+
+
+def get_hf_cache_dir() -> Path:
+    """Get the HuggingFace hub cache directory."""
+    from huggingface_hub.constants import HF_HUB_CACHE
+
+    return Path(HF_HUB_CACHE)
+
+
+@pytest.fixture
+def cleanup_hf_downloads():
+    """Fixture that cleans up any HuggingFace models downloaded during a test.
+
+    Use this for tests that download large models to prevent CI disk space issues.
+    Records existing cache entries before the test, then deletes any new ones after.
+    """
+    cache_dir = get_hf_cache_dir()
+    existing_entries = set(cache_dir.iterdir()) if cache_dir.exists() else set()
+
+    yield
+
+    if cache_dir.exists():
+        current_entries = set(cache_dir.iterdir())
+        new_entries = current_entries - existing_entries
+
+        for entry in new_entries:
+            if entry.is_file():
+                entry.unlink()
+            elif entry.is_dir():
+                shutil.rmtree(entry)

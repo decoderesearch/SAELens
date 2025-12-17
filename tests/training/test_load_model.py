@@ -18,7 +18,7 @@ def gpt2_proxy_model():
     )
 
 
-def test_load_model_works_with_mamba():
+def test_load_model_works_with_mamba(cleanup_hf_downloads: None):  # noqa: ARG001
     model = load_model(
         model_class_name="HookedMamba",
         model_name="state-spaces/mamba-130m",
