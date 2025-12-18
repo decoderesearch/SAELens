@@ -659,7 +659,7 @@ def test_run_with_cache_with_saes_use_error_term_false(
     )
 
 
-def test_HookedSAETransformer_works_with_hook_z_saes(cleanup_hf_downloads: None):  # noqa: ARG001
+def test_HookedSAETransformer_works_with_hook_z_saes():
     sae = SAE.from_pretrained("gpt2-small-hook-z-kk", "blocks.2.hook_z", device="cpu")
     model = HookedSAETransformer.from_pretrained("gpt2", device="cpu")
     logits_sans_sae = model(prompt)
