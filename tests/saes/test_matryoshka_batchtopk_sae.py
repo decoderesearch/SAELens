@@ -386,6 +386,7 @@ def test_MatryoshkaBatchTopKTrainingSAE_matches_dictionary_learning_losses() -> 
         lm_name="gpt2",
         group_fractions=[0.2, 0.1, 0.1, 0.6],
         group_weights=[1.0, 1.0, 1.0, 1.0],
+        device="cpu",
     )
 
     # Copy parameters from our SAE to the comparison trainer

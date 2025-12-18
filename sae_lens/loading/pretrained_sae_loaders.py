@@ -877,10 +877,14 @@ def get_dictionary_learning_config_1_from_hf(
     activation_fn = "topk" if trainer["dict_class"] == "AutoEncoderTopK" else "relu"
     activation_fn_kwargs = {"k": trainer["k"]} if activation_fn == "topk" else {}
 
+    architecture = "standard"
+    if trainer["dict_class"] == "GatedAutoEncoder":
+        architecture = "gated"
+    elif trainer["dict_class"] == "MatryoshkaBatchTopKSAE":
+        architecture = "jumprelu"
+
     return {
-        "architecture": (
-            "gated" if trainer["dict_class"] == "GatedAutoEncoder" else "standard"
-        ),
+        "architecture": architecture,
         "d_in": trainer["activation_dim"],
         "d_sae": trainer["dict_size"],
         "dtype": "float32",
@@ -1029,9 +1033,12 @@ def dictionary_learning_sae_huggingface_loader_1(
     )
     encoder = torch.load(encoder_path, map_location="cpu")
 
+    W_enc = encoder["W_enc"] if "W_enc" in encoder else encoder["encoder.weight"].T
+    W_dec = encoder["W_dec"] if "W_dec" in encoder else encoder["decoder.weight"].T
+
     state_dict = {
-        "W_enc": encoder["encoder.weight"].T,
-        "W_dec": encoder["decoder.weight"].T,
+        "W_enc": W_enc,
+        "W_dec": W_dec,
         "b_dec": encoder.get(
             "b_dec", encoder.get("bias", encoder.get("decoder_bias", None))
         ),
@@ -1039,6 +1046,8 @@ def dictionary_learning_sae_huggingface_loader_1(
 
     if "encoder.bias" in encoder:
         state_dict["b_enc"] = encoder["encoder.bias"]
+    if "b_enc" in encoder:
+        state_dict["b_enc"] = encoder["b_enc"]
 
     if "mag_bias" in encoder:
         state_dict["b_mag"] = encoder["mag_bias"]
@@ -1046,6 +1055,12 @@ def dictionary_learning_sae_huggingface_loader_1(
         state_dict["b_gate"] = encoder["gate_bias"]
     if "r_mag" in encoder:
         state_dict["r_mag"] = encoder["r_mag"]
+
+    if "threshold" in encoder:
+        threshold = encoder["threshold"]
+        if threshold.ndim == 0:
+            threshold = torch.full((W_enc.size(1),), threshold)
+        state_dict["threshold"] = threshold
 
     return cfg_dict, state_dict, None
 

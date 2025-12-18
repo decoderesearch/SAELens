@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 import torch
 import yaml
+from huggingface_hub import hf_hub_download as real_hf_hub_download
 from safetensors.torch import save_file
 from sparsify import SparseCoder, SparseCoderConfig
 
@@ -1377,3 +1378,114 @@ def test_TemporalSAE_config_from_pretrained():
     }
 
     assert cfg_dict == expected_cfg
+
+
+def test_load_sae_config_from_huggingface_dictionary_learning_matryoshka():
+    cfg_dict = load_sae_config_from_huggingface(
+        "saebench_gemma-2-2b_width-2pow12_date-0108",
+        sae_id="blocks.12.hook_resid_post__trainer_0",
+    )
+
+    expected_cfg_dict = {
+        "d_in": 2304,
+        "d_sae": 4096,
+        "dtype": "float32",
+        "device": "cpu",
+        "apply_b_dec_to_input": True,
+        "normalize_activations": "none",
+        "reshape_activations": "none",
+        "metadata": {
+            "model_name": "gemma-2-2b",
+            "hook_name": "blocks.12.hook_resid_post",
+            "hook_head_index": None,
+            "prepend_bos": True,
+            "dataset_path": "monology/pile-uncopyrighted",
+            "context_size": 1024,
+            "neuronpedia_id": "gemma-2-2b/12-sae_bench-matryoshka-res-4k__trainer_0_step_final",
+            "sae_lens_training_version": None,
+        },
+        "architecture": "jumprelu",
+    }
+
+    assert cfg_dict == expected_cfg_dict
+
+
+def test_dictionary_learning_sae_huggingface_loader_1_matryoshka(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    repo_id = "adamkarvonen/saebench_gemma-2-2b_width-2pow12_date-0108"
+    folder_name = "MatryoshkaBatchTopK_gemma-2-2b__0108/resid_post_layer_12/trainer_0"
+    device = "cpu"
+
+    D_IN = 2304
+    D_SAE = 4096
+
+    W_enc = torch.randn(D_IN, D_SAE)
+    W_dec = torch.randn(D_SAE, D_IN)
+    b_enc = torch.randn(D_SAE)
+    b_dec = torch.randn(D_IN)
+    threshold_scalar = 0.5
+
+    raw_state_dict = {
+        "W_enc": W_enc,
+        "W_dec": W_dec,
+        "b_enc": b_enc,
+        "b_dec": b_dec,
+        "threshold": torch.tensor(threshold_scalar),
+    }
+
+    sae_file_path = tmp_path / "ae.pt"
+    torch.save(raw_state_dict, sae_file_path)
+
+    def mock_hf_hub_download(
+        repo_id: str,
+        filename: str,
+        force_download: bool = False,
+    ) -> str:
+        if filename.endswith("ae.pt"):
+            return str(sae_file_path)
+        return real_hf_hub_download(
+            repo_id=repo_id, filename=filename, force_download=force_download
+        )
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+    cfg_dict, state_dict, sparsity = dictionary_learning_sae_huggingface_loader_1(
+        repo_id,
+        folder_name,
+        device=device,
+        force_download=False,
+        cfg_overrides=None,
+    )
+
+    assert sparsity is None
+    assert state_dict.keys() == {"W_enc", "W_dec", "b_dec", "b_enc", "threshold"}
+    assert cfg_dict == {
+        "architecture": "jumprelu",
+        "d_in": D_IN,
+        "d_sae": D_SAE,
+        "dtype": "float32",
+        "device": device,
+        "model_name": "gemma-2-2b",
+        "hook_name": "blocks.12.hook_resid_post",
+        "hook_head_index": None,
+        "activation_fn": "relu",
+        "activation_fn_kwargs": {},
+        "apply_b_dec_to_input": True,
+        "finetuning_scaling_factor": False,
+        "sae_lens_training_version": None,
+        "prepend_bos": True,
+        "dataset_path": "monology/pile-uncopyrighted",
+        "context_size": 1024,
+        "normalize_activations": "none",
+        "neuronpedia_id": None,
+        "dataset_trust_remote_code": True,
+    }
+    torch.testing.assert_close(state_dict["W_enc"], W_enc)
+    torch.testing.assert_close(state_dict["W_dec"], W_dec)
+    torch.testing.assert_close(state_dict["b_dec"], b_dec)
+    torch.testing.assert_close(state_dict["b_enc"], b_enc)
+    assert state_dict["threshold"].shape == (D_SAE,)
+    assert torch.all(state_dict["threshold"] == threshold_scalar)
