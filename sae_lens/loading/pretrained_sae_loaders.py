@@ -9,7 +9,7 @@ import requests
 import torch
 import yaml
 from huggingface_hub import hf_hub_download, hf_hub_url
-from huggingface_hub.utils import EntryNotFoundError
+from huggingface_hub.utils import EntryNotFoundError, build_hf_headers
 from packaging.version import Version
 from safetensors import safe_open
 from safetensors.torch import load_file
@@ -46,6 +46,8 @@ LLM_METADATA_KEYS = {
     "sae_lens_training_version",
     "hook_name_out",
     "hook_head_index_out",
+    "hf_hook_name",
+    "hf_hook_name_out",
 }
 
 
@@ -530,6 +532,18 @@ def get_gemma_3_config_from_hf(
     force_download: bool = False,  # noqa: ARG001
     cfg_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    config_path = hf_hub_download(
+        repo_id, f"{folder_name}/config.json", force_download=force_download
+    )
+
+    with open(config_path) as config_file:
+        raw_cfg_dict = json.load(config_file)
+
+    if raw_cfg_dict.get("architecture") != "jump_relu":
+        raise ValueError(
+            f"Unexpected architecture in Gemma 3 config: {raw_cfg_dict.get('architecture')}"
+        )
+
     layer_match = re.search(r"layer_(\d+)", folder_name)
     if layer_match is None:
         raise ValueError(
@@ -555,11 +569,15 @@ def get_gemma_3_config_from_hf(
     if "clt" in folder_name:
         params_file_part = ".safetensors"
 
-    weights = hf_hub_url(repo_id, f"{folder_name}{params_file_part}")
-    shapes_dict = get_safetensors_tensor_shapes(weights)
+    shapes_dict = get_safetensors_tensor_shapes(
+        repo_id, f"{folder_name}{params_file_part}"
+    )
     d_in, d_sae = shapes_dict["w_enc"]
     # TODO: update this for real model info
-    model_name = "google/gemma-3-1b-pt"
+    model_name = raw_cfg_dict["model_name"]
+    if "google" not in model_name:
+        model_name = "google/" + model_name
+    model_name = model_name.replace("-v3", "-3")
 
     architecture = "jumprelu"
     if "transcoder" in folder_name or "clt" in folder_name:
@@ -581,9 +599,11 @@ def get_gemma_3_config_from_hf(
         "context_size": 1024,
         "apply_b_dec_to_input": False,
         "normalize_activations": None,
+        "hf_hook_name": raw_cfg_dict.get("hf_hook_point_in"),
     }
     if hook_name_out is not None:
         cfg["hook_name_out"] = hook_name_out
+        cfg["hf_hook_name_out"] = raw_cfg_dict.get("hf_hook_point_out")
     if d_out is not None:
         cfg["d_out"] = d_out
     if device is not None:
@@ -1553,38 +1573,36 @@ def mwhanna_transcoder_huggingface_loader(
     return cfg_dict, state_dict, None
 
 
-def get_safetensors_tensor_shapes(url: str) -> dict[str, list[int]]:
+def get_safetensors_tensor_shapes(repo_id: str, filename: str) -> dict[str, list[int]]:
     """
-    Get tensor shapes from a safetensors file using HTTP range requests
+    Get tensor shapes from a safetensors file on HuggingFace Hub
     without downloading the entire file.
 
+    Uses HTTP range requests to fetch only the metadata header.
+
     Args:
-        url: Direct URL to the safetensors file
+        repo_id: HuggingFace repo ID (e.g., "gg-gs/gemma-scope-2-1b-pt")
+        filename: Path to the safetensors file within the repo
 
     Returns:
         Dictionary mapping tensor names to their shapes
     """
-    # Check if server supports range requests
-    response = requests.head(url, timeout=10)
-    response.raise_for_status()
+    url = hf_hub_url(repo_id, filename)
 
-    accept_ranges = response.headers.get("Accept-Ranges", "")
-    if "bytes" not in accept_ranges:
-        raise ValueError("Server does not support range requests")
+    # Get HuggingFace headers (includes auth token if available)
+    hf_headers = build_hf_headers()
 
     # Fetch first 8 bytes to get metadata size
-    headers = {"Range": "bytes=0-7"}
+    headers = {**hf_headers, "Range": "bytes=0-7"}
     response = requests.get(url, headers=headers, timeout=10)
-    if response.status_code != 206:
-        raise ValueError("Failed to fetch initial bytes for metadata size")
+    response.raise_for_status()
 
     meta_size = int.from_bytes(response.content, byteorder="little")
 
     # Fetch the metadata header
-    headers = {"Range": f"bytes=8-{8 + meta_size - 1}"}
+    headers = {**hf_headers, "Range": f"bytes=8-{8 + meta_size - 1}"}
     response = requests.get(url, headers=headers, timeout=10)
-    if response.status_code != 206:
-        raise ValueError("Failed to fetch metadata header")
+    response.raise_for_status()
 
     metadata_json = response.content.decode("utf-8").strip()
     metadata = json.loads(metadata_json)
@@ -1664,9 +1682,10 @@ def get_mntss_clt_layer_config_from_hf(
     with open(base_config_path) as f:
         cfg_info: dict[str, Any] = yaml.safe_load(f)
 
-    # Get tensor shapes without downloading full files using HTTP range requests
-    encoder_url = hf_hub_url(repo_id, f"W_enc_{folder_name}.safetensors")
-    encoder_shapes = get_safetensors_tensor_shapes(encoder_url)
+    # Get tensor shapes without downloading full files
+    encoder_shapes = get_safetensors_tensor_shapes(
+        repo_id, f"W_enc_{folder_name}.safetensors"
+    )
 
     # Extract shapes for the required tensors
     b_dec_shape = encoder_shapes[f"b_dec_{folder_name}"]

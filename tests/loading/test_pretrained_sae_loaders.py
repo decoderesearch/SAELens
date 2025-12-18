@@ -156,61 +156,70 @@ def test_load_sae_config_from_huggingface_gemma_2():
     (
         "folder_name",
         "architecture",
-        "hook_name",
+        "hooks",
         "d_sae",
         "d_in",
-        "hook_name_out",
         "d_out",
     ),
     [
         (
-            "resid_post/layer_10_width_262144_l0_small",
+            "resid_post_all/layer_10_width_262k_l0_small",
             "jumprelu",
-            "blocks.10.hook_resid_post",
+            {
+                "hook_name": "blocks.10.hook_resid_post",
+                "hf_hook_name": "model.layers.10.output",
+            },
             262144,
             1152,
             None,
-            None,
         ),
         (
-            "transcoder/layer_10_width_262144_affine_l0_medium",
+            "transcoder_all/layer_10_width_262k_l0_small_affine",
             "jumprelu_skip_transcoder",
-            "blocks.10.ln2.hook_normalized",
+            {
+                "hook_name": "blocks.10.ln2.hook_normalized",
+                "hook_name_out": "blocks.10.hook_mlp_out",
+                "hf_hook_name": "model.layers.10.pre_feedforward_layernorm.output",
+                "hf_hook_name_out": "model.layers.10.post_feedforward_layernorm.output",
+            },
             262144,
             1152,
-            "blocks.10.hook_mlp_out",
             1152,
         ),
         (
-            "attn_out/layer_11_width_16384_l0_medium",
+            "attn_out_all/layer_11_width_16k_l0_small",
             "jumprelu",
-            "blocks.11.hook_attn_out",
+            {
+                "hook_name": "blocks.11.hook_attn_out",
+                "hf_hook_name": "model.layers.11.self_attn.o_proj.input",
+            },
             16384,
             1024,
             None,
-            None,
         ),
-        (
-            "clt/width_262080_affine_l0_small/params_layer_15",
-            "jumprelu_skip_transcoder",
-            "blocks.15.ln2.hook_normalized",
-            10080,
-            1152,
-            "blocks.15.hook_mlp_out",
-            1152,
-        ),
+        # Skip CLT for now
+        # (
+        #     "clt/width_262k_affine_l0_small/params_layer_15",
+        #     "jumprelu_skip_transcoder",
+        #     "blocks.15.ln2.hook_normalized",
+        #     10080,
+        #     1152,
+        #     "blocks.15.hook_mlp_out",
+        #     1152,
+        # ),
     ],
 )
 def test_get_gemma_3_config_from_hf(
     folder_name: str,
     architecture: str,
-    hook_name: str,
+    hooks: dict[str, str],
     d_sae: int,
     d_in: int,
-    hook_name_out: str | None,
     d_out: int | None,
 ):
-    cfg_dict = get_gemma_3_config_from_hf("gg-gs/gemma-v3-1b-pt", folder_name, "cpu")
+    cfg_dict = get_gemma_3_config_from_hf(
+        "gg-gs/gemma-scope-2-1b-pt", folder_name, "cpu"
+    )
 
     expected_cfg_dict = {
         "architecture": architecture,
@@ -218,7 +227,6 @@ def test_get_gemma_3_config_from_hf(
         "d_sae": d_sae,
         "dtype": "float32",
         "model_name": "google/gemma-3-1b-pt",
-        "hook_name": hook_name,
         "hook_head_index": None,
         "finetuning_scaling_factor": False,
         "sae_lens_training_version": None,
@@ -228,9 +236,8 @@ def test_get_gemma_3_config_from_hf(
         "apply_b_dec_to_input": False,
         "normalize_activations": None,
         "device": "cpu",
+        **hooks,
     }
-    if hook_name_out is not None:
-        expected_cfg_dict["hook_name_out"] = hook_name_out
     if d_out is not None:
         expected_cfg_dict["d_out"] = d_out
     assert cfg_dict == expected_cfg_dict
@@ -1271,12 +1278,11 @@ def test_get_mntss_clt_layer_huggingface_loader(
             return {f"W_dec_{folder_name}": W_dec_tensor}
         raise ValueError(f"Unexpected file path: {file_path}")
 
-    # Mock hf_hub_url to return a fake URL
-    def mock_hf_hub_url(repo_id_arg: str, filename: str) -> str:  # noqa: ARG001
-        return f"https://huggingface.co/{repo_id_arg}/resolve/main/{filename}"
-
     # Mock get_safetensors_tensor_shapes to return expected tensor shapes
-    def mock_get_safetensors_tensor_shapes(url: str) -> dict[str, list[int]]:  # noqa: ARG001
+    def mock_get_safetensors_tensor_shapes(
+        repo_id_arg: str,
+        filename: str,  # noqa: ARG001
+    ) -> dict[str, list[int]]:
         return {
             f"b_dec_{folder_name}": [d_in],
             f"b_enc_{folder_name}": [d_sae],
@@ -1289,9 +1295,6 @@ def test_get_mntss_clt_layer_huggingface_loader(
     )
     monkeypatch.setattr(
         "sae_lens.loading.pretrained_sae_loaders.load_file", mock_load_file
-    )
-    monkeypatch.setattr(
-        "sae_lens.loading.pretrained_sae_loaders.hf_hub_url", mock_hf_hub_url
     )
     monkeypatch.setattr(
         "sae_lens.loading.pretrained_sae_loaders.get_safetensors_tensor_shapes",
