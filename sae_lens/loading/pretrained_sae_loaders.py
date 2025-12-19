@@ -578,6 +578,9 @@ def get_gemma_3_config_from_hf(
     if "google" not in model_name:
         model_name = "google/" + model_name
     model_name = model_name.replace("-v3", "-3")
+    if "270m" in model_name:
+        # for some reason the 270m model on huggingface doesn't have the -pt suffix
+        model_name = model_name.replace("-pt", "")
 
     architecture = "jumprelu"
     if "transcoder" in folder_name or "clt" in folder_name:
@@ -632,6 +635,15 @@ def gemma_3_sae_huggingface_loader(
         force_download,
         cfg_overrides,
     )
+
+    # replace folder name of 65k with 64k
+    # TODO: remove this workaround once weights are fixed
+    if "270m-pt" in repo_id:
+        if "65k" in folder_name:
+            folder_name = folder_name.replace("65k", "64k")
+        # replace folder name of 262k with 250k
+        if "262k" in folder_name:
+            folder_name = folder_name.replace("262k", "250k")
 
     params_file = "params.safetensors"
     if "clt" in folder_name:
