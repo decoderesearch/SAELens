@@ -215,7 +215,7 @@ class ActivationsStore:
             load_dataset(
                 dataset,
                 split="train",
-                streaming=streaming,
+                streaming=streaming,  # type: ignore
                 trust_remote_code=dataset_trust_remote_code,  # type: ignore
             )
             if isinstance(dataset, str)

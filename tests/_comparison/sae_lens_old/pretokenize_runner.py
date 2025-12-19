@@ -184,13 +184,13 @@ class PretokenizeRunner:
         """
         Load the dataset, tokenize it, and save it to disk and/or upload to Huggingface.
         """
-        dataset = load_dataset(
+        dataset = load_dataset(  # type: ignore
             self.cfg.dataset_path,
             name=self.cfg.dataset_name,
             data_dir=self.cfg.data_dir,
             data_files=self.cfg.data_files,
-            split=self.cfg.split,
-            streaming=self.cfg.streaming,
+            split=self.cfg.split,  # type: ignore
+            streaming=self.cfg.streaming,  # type: ignore
         )
         if isinstance(dataset, DatasetDict):
             raise ValueError(
