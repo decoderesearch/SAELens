@@ -10,6 +10,7 @@ from sparsify import SparseCoder, SparseCoderConfig
 
 from sae_lens import StandardSAE, StandardSAEConfig
 from sae_lens.loading.pretrained_sae_loaders import (
+    _infer_gemma_3_raw_cfg_dict,
     dictionary_learning_sae_huggingface_loader_1,
     get_deepseek_r1_config_from_hf,
     get_gemma_2_transcoder_config_from_hf,
@@ -197,16 +198,6 @@ def test_load_sae_config_from_huggingface_gemma_2():
             1024,
             None,
         ),
-        # Skip CLT for now
-        # (
-        #     "clt/width_262k_affine_l0_small/params_layer_15",
-        #     "jumprelu_skip_transcoder",
-        #     "blocks.15.ln2.hook_normalized",
-        #     10080,
-        #     1152,
-        #     "blocks.15.hook_mlp_out",
-        #     1152,
-        # ),
     ],
 )
 def test_get_gemma_3_config_from_hf(
@@ -218,7 +209,7 @@ def test_get_gemma_3_config_from_hf(
     d_out: int | None,
 ):
     cfg_dict = get_gemma_3_config_from_hf(
-        "gg-gs/gemma-scope-2-1b-pt", folder_name, "cpu"
+        "google/gemma-scope-2-1b-pt", folder_name, "cpu"
     )
 
     expected_cfg_dict = {
@@ -241,6 +232,81 @@ def test_get_gemma_3_config_from_hf(
     if d_out is not None:
         expected_cfg_dict["d_out"] = d_out
     assert cfg_dict == expected_cfg_dict
+
+
+@pytest.mark.parametrize(
+    ("repo_id", "folder_name", "expected_cfg"),
+    [
+        (
+            "google/gemma-scope-2-1b-pt",
+            "resid_post_all/layer_10_width_262k_l0_small",
+            {
+                "architecture": "jump_relu",
+                "model_name": "google/gemma-3-1b-pt",
+                "hf_hook_point_in": "model.layers.10.output",
+            },
+        ),
+        (
+            "google/gemma-scope-2-4b-it",
+            "transcoder_all/layer_5_width_16k_l0_big_affine",
+            {
+                "architecture": "jump_relu",
+                "model_name": "google/gemma-3-4b-it",
+                "hf_hook_point_in": "model.layers.5.pre_feedforward_layernorm.output",
+                "hf_hook_point_out": "model.layers.5.post_feedforward_layernorm.output",
+            },
+        ),
+        (
+            "google/gemma-scope-2-12b-pt",
+            "attn_out_all/layer_11_width_16k_l0_small",
+            {
+                "architecture": "jump_relu",
+                "model_name": "google/gemma-3-12b-pt",
+                "hf_hook_point_in": "model.layers.11.self_attn.o_proj.input",
+            },
+        ),
+        (
+            "google/gemma-scope-2-27b-it",
+            "mlp_out/layer_17_width_16k_l0_big",
+            {
+                "architecture": "jump_relu",
+                "model_name": "google/gemma-3-27b-it",
+                "hf_hook_point_in": "model.layers.17.post_feedforward_layernorm.output",
+            },
+        ),
+        (
+            "google/gemma-scope-2-270m-pt",
+            "clt/layer_3_width_16k_l0_medium",
+            {
+                "architecture": "jump_relu",
+                "model_name": "google/gemma-3-270m-pt",
+                "hf_hook_point_in": "model.layers.3.pre_feedforward_layernorm.output",
+                "hf_hook_point_out": "model.layers.3.post_feedforward_layernorm.output",
+            },
+        ),
+    ],
+)
+def test_infer_gemma_3_raw_cfg_dict(
+    repo_id: str,
+    folder_name: str,
+    expected_cfg: dict[str, str],
+):
+    cfg = _infer_gemma_3_raw_cfg_dict(repo_id, folder_name)
+    assert cfg == expected_cfg
+
+
+def test_infer_gemma_3_raw_cfg_dict_invalid_folder_name():
+    with pytest.raises(
+        ValueError, match="Could not extract layer number from folder_name"
+    ):
+        _infer_gemma_3_raw_cfg_dict("google/gemma-scope-2-1b-pt", "invalid_folder_name")
+
+
+def test_infer_gemma_3_raw_cfg_dict_unknown_hook_type():
+    with pytest.raises(ValueError, match="Could not infer hook type from folder_name"):
+        _infer_gemma_3_raw_cfg_dict(
+            "google/gemma-scope-2-1b-pt", "unknown_hook/layer_5_width_16k"
+        )
 
 
 def test_load_sae_config_from_huggingface_gemma_2_hook_z_saes():

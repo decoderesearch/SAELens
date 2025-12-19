@@ -525,19 +525,65 @@ def gemma_2_sae_huggingface_loader(
     return cfg_dict, state_dict, log_sparsity
 
 
+def _infer_gemma_3_raw_cfg_dict(repo_id: str, folder_name: str) -> dict[str, Any]:
+    """
+    Infer the raw config dict for Gemma 3 SAEs from the repo_id and folder_name.
+    This is used when config.json doesn't exist in the repo.
+    """
+    # Extract layer number from folder name
+    layer_match = re.search(r"layer_(\d+)", folder_name)
+    if layer_match is None:
+        raise ValueError(
+            f"Could not extract layer number from folder_name: {folder_name}"
+        )
+    layer = int(layer_match.group(1))
+
+    # Convert repo_id to model_name: google/gemma-scope-2-{size}-{suffix} -> google/gemma-3-{size}-{suffix}
+    model_name = repo_id.replace("gemma-scope-2", "gemma-3")
+
+    # Determine hook type and HF hook points based on folder_name
+    if "transcoder" in folder_name or "clt" in folder_name:
+        hf_hook_point_in = f"model.layers.{layer}.pre_feedforward_layernorm.output"
+        hf_hook_point_out = f"model.layers.{layer}.post_feedforward_layernorm.output"
+    elif "resid_post" in folder_name:
+        hf_hook_point_in = f"model.layers.{layer}.output"
+        hf_hook_point_out = None
+    elif "attn_out" in folder_name:
+        hf_hook_point_in = f"model.layers.{layer}.self_attn.o_proj.input"
+        hf_hook_point_out = None
+    elif "mlp_out" in folder_name:
+        hf_hook_point_in = f"model.layers.{layer}.post_feedforward_layernorm.output"
+        hf_hook_point_out = None
+    else:
+        raise ValueError(f"Could not infer hook type from folder_name: {folder_name}")
+
+    cfg: dict[str, Any] = {
+        "architecture": "jump_relu",
+        "model_name": model_name,
+        "hf_hook_point_in": hf_hook_point_in,
+    }
+    if hf_hook_point_out is not None:
+        cfg["hf_hook_point_out"] = hf_hook_point_out
+
+    return cfg
+
+
 def get_gemma_3_config_from_hf(
     repo_id: str,
     folder_name: str,
     device: str,
-    force_download: bool = False,  # noqa: ARG001
+    force_download: bool = False,
     cfg_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    config_path = hf_hub_download(
-        repo_id, f"{folder_name}/config.json", force_download=force_download
-    )
-
-    with open(config_path) as config_file:
-        raw_cfg_dict = json.load(config_file)
+    # Try to load config.json from the repo, fall back to inferring if it doesn't exist
+    try:
+        config_path = hf_hub_download(
+            repo_id, f"{folder_name}/config.json", force_download=force_download
+        )
+        with open(config_path) as config_file:
+            raw_cfg_dict = json.load(config_file)
+    except EntryNotFoundError:
+        raw_cfg_dict = _infer_gemma_3_raw_cfg_dict(repo_id, folder_name)
 
     if raw_cfg_dict.get("architecture") != "jump_relu":
         raise ValueError(
