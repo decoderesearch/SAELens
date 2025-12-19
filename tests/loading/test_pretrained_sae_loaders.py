@@ -1346,7 +1346,7 @@ def test_get_mntss_clt_layer_huggingface_loader(
 
     # Mock get_safetensors_tensor_shapes to return expected tensor shapes
     def mock_get_safetensors_tensor_shapes(
-        repo_id_arg: str,
+        repo_id_arg: str,  # noqa: ARG001
         filename: str,  # noqa: ARG001
     ) -> dict[str, list[int]]:
         return {
