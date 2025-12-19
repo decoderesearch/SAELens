@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sae-lens"
-version = "6.22.3"
+version = "6.23.0"
 description = "Training and Analyzing Sparse Autoencoders (SAEs)"
 authors = ["Joseph Bloom"]
 readme = "README.md"
@@ -47,6 +47,7 @@ docstr-coverage = "^2.3.2"
 mkdocs = "^1.6.1"
 mkdocs-material = "^9.5.34"
 mkdocs-autorefs = "^1.4.2"
+mkdocs-redirects = "^1.2.1"
 mkdocs-section-index = "^0.3.9"
 mkdocstrings = "^0.25.2"
 mkdocstrings-python = "^1.10.9"
