@@ -12073,7 +12073,7 @@ gemma-scope-2-27b-it-att:
     l0: 20
 gemma-scope-2-270m-pt-transcoders-all:
   conversion_func: gemma_3
-  model: google/gemma-3-270m-pt
+  model: google/gemma-3-270m
   repo_id: gg-gs/gemma-scope-2-270m-pt
   saes:
   - id: transcoder_all/layer_0_width_16k_l0_big
@@ -12510,7 +12510,7 @@ gemma-scope-2-270m-pt-transcoders-all:
     l0: 20
 gemma-scope-2-270m-pt-transcoders:
   conversion_func: gemma_3
-  model: google/gemma-3-270m-pt
+  model: google/gemma-3-270m
   repo_id: gg-gs/gemma-scope-2-270m-pt
   saes:
   - id: transcoder/layer_15_width_262k_l0_big_affine
@@ -12521,7 +12521,7 @@ gemma-scope-2-270m-pt-transcoders:
     l0: 20
 gemma-scope-2-270m-pt-res-all:
   conversion_func: gemma_3
-  model: google/gemma-3-270m-pt
+  model: google/gemma-3-270m
   repo_id: gg-gs/gemma-scope-2-270m-pt
   saes:
   - id: resid_post_all/layer_0_width_16k_l0_big
@@ -12742,7 +12742,7 @@ gemma-scope-2-270m-pt-res-all:
     l0: 20
 gemma-scope-2-270m-pt-res:
   conversion_func: gemma_3
-  model: google/gemma-3-270m-pt
+  model: google/gemma-3-270m
   repo_id: gg-gs/gemma-scope-2-270m-pt
   saes:
   - id: resid_post/layer_12_width_16k_l0_big
@@ -12919,7 +12919,7 @@ gemma-scope-2-270m-pt-res:
     l0: 20
 gemma-scope-2-270m-pt-mlp-all:
   conversion_func: gemma_3
-  model: google/gemma-3-270m-pt
+  model: google/gemma-3-270m
   repo_id: gg-gs/gemma-scope-2-270m-pt
   saes:
   - id: mlp_out_all/layer_0_width_16k_l0_big
@@ -13140,7 +13140,7 @@ gemma-scope-2-270m-pt-mlp-all:
     l0: 20
 gemma-scope-2-270m-pt-mlp:
   conversion_func: gemma_3
-  model: google/gemma-3-270m-pt
+  model: google/gemma-3-270m
   repo_id: gg-gs/gemma-scope-2-270m-pt
   saes:
   - id: mlp_out/layer_12_width_16k_l0_big
@@ -13253,7 +13253,7 @@ gemma-scope-2-270m-pt-mlp:
     l0: 20
 gemma-scope-2-270m-pt-att-all:
   conversion_func: gemma_3
-  model: google/gemma-3-270m-pt
+  model: google/gemma-3-270m
   repo_id: gg-gs/gemma-scope-2-270m-pt
   saes:
   - id: attn_out_all/layer_0_width_16k_l0_big
@@ -13474,7 +13474,7 @@ gemma-scope-2-270m-pt-att-all:
     l0: 20
 gemma-scope-2-270m-pt-att:
   conversion_func: gemma_3
-  model: google/gemma-3-270m-pt
+  model: google/gemma-3-270m
   repo_id: gg-gs/gemma-scope-2-270m-pt
   saes:
   - id: attn_out/layer_12_width_16k_l0_big
