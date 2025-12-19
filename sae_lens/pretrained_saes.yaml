@@ -1,7 +1,7 @@
 gemma-scope-2-4b-pt-transcoders-all:
   conversion_func: gemma_3
   model: google/gemma-3-4b-pt
-  repo_id: gg-gs/gemma-scope-2-4b-pt
+  repo_id: google/gemma-scope-2-4b-pt
   saes:
   - id: transcoder_all/layer_0_width_16k_l0_big
     path: transcoder_all/layer_0_width_16k_l0_big
@@ -822,7 +822,7 @@ gemma-scope-2-4b-pt-transcoders-all:
 gemma-scope-2-4b-pt-transcoders:
   conversion_func: gemma_3
   model: google/gemma-3-4b-pt
-  repo_id: gg-gs/gemma-scope-2-4b-pt
+  repo_id: google/gemma-scope-2-4b-pt
   saes:
   - id: transcoder/layer_17_width_16k_l0_big
     path: transcoder/layer_17_width_16k_l0_big
@@ -1043,7 +1043,7 @@ gemma-scope-2-4b-pt-transcoders:
 gemma-scope-2-4b-pt-res-all:
   conversion_func: gemma_3
   model: google/gemma-3-4b-pt
-  repo_id: gg-gs/gemma-scope-2-4b-pt
+  repo_id: google/gemma-scope-2-4b-pt
   saes:
   - id: resid_post_all/layer_0_width_16k_l0_big
     path: resid_post_all/layer_0_width_16k_l0_big
@@ -1456,7 +1456,7 @@ gemma-scope-2-4b-pt-res-all:
 gemma-scope-2-4b-pt-res:
   conversion_func: gemma_3
   model: google/gemma-3-4b-pt
-  repo_id: gg-gs/gemma-scope-2-4b-pt
+  repo_id: google/gemma-scope-2-4b-pt
   saes:
   - id: resid_post/layer_17_width_16k_l0_big
     path: resid_post/layer_17_width_16k_l0_big
@@ -1633,7 +1633,7 @@ gemma-scope-2-4b-pt-res:
 gemma-scope-2-4b-pt-mlp-all:
   conversion_func: gemma_3
   model: google/gemma-3-4b-pt
-  repo_id: gg-gs/gemma-scope-2-4b-pt
+  repo_id: google/gemma-scope-2-4b-pt
   saes:
   - id: mlp_out_all/layer_0_width_16k_l0_big
     path: mlp_out_all/layer_0_width_16k_l0_big
@@ -2046,7 +2046,7 @@ gemma-scope-2-4b-pt-mlp-all:
 gemma-scope-2-4b-pt-mlp:
   conversion_func: gemma_3
   model: google/gemma-3-4b-pt
-  repo_id: gg-gs/gemma-scope-2-4b-pt
+  repo_id: google/gemma-scope-2-4b-pt
   saes:
   - id: mlp_out/layer_17_width_16k_l0_big
     path: mlp_out/layer_17_width_16k_l0_big
@@ -2159,7 +2159,7 @@ gemma-scope-2-4b-pt-mlp:
 gemma-scope-2-4b-pt-att-all:
   conversion_func: gemma_3
   model: google/gemma-3-4b-pt
-  repo_id: gg-gs/gemma-scope-2-4b-pt
+  repo_id: google/gemma-scope-2-4b-pt
   saes:
   - id: attn_out_all/layer_0_width_16k_l0_big
     path: attn_out_all/layer_0_width_16k_l0_big
@@ -2572,7 +2572,7 @@ gemma-scope-2-4b-pt-att-all:
 gemma-scope-2-4b-pt-att:
   conversion_func: gemma_3
   model: google/gemma-3-4b-pt
-  repo_id: gg-gs/gemma-scope-2-4b-pt
+  repo_id: google/gemma-scope-2-4b-pt
   saes:
   - id: attn_out/layer_17_width_16k_l0_big
     path: attn_out/layer_17_width_16k_l0_big
@@ -2685,7 +2685,7 @@ gemma-scope-2-4b-pt-att:
 gemma-scope-2-4b-it-transcoders-all:
   conversion_func: gemma_3
   model: google/gemma-3-4b-it
-  repo_id: gg-gs/gemma-scope-2-4b-it
+  repo_id: google/gemma-scope-2-4b-it
   saes:
   - id: transcoder_all/layer_0_width_16k_l0_big
     path: transcoder_all/layer_0_width_16k_l0_big
@@ -3506,7 +3506,7 @@ gemma-scope-2-4b-it-transcoders-all:
 gemma-scope-2-4b-it-transcoders:
   conversion_func: gemma_3
   model: google/gemma-3-4b-it
-  repo_id: gg-gs/gemma-scope-2-4b-it
+  repo_id: google/gemma-scope-2-4b-it
   saes:
   - id: transcoder/layer_17_width_16k_l0_big
     path: transcoder/layer_17_width_16k_l0_big
@@ -3727,7 +3727,7 @@ gemma-scope-2-4b-it-transcoders:
 gemma-scope-2-4b-it-res-all:
   conversion_func: gemma_3
   model: google/gemma-3-4b-it
-  repo_id: gg-gs/gemma-scope-2-4b-it
+  repo_id: google/gemma-scope-2-4b-it
   saes:
   - id: resid_post_all/layer_0_width_16k_l0_big
     path: resid_post_all/layer_0_width_16k_l0_big
@@ -4140,7 +4140,7 @@ gemma-scope-2-4b-it-res-all:
 gemma-scope-2-4b-it-res:
   conversion_func: gemma_3
   model: google/gemma-3-4b-it
-  repo_id: gg-gs/gemma-scope-2-4b-it
+  repo_id: google/gemma-scope-2-4b-it
   saes:
   - id: resid_post/layer_17_width_16k_l0_big
     path: resid_post/layer_17_width_16k_l0_big
@@ -4301,7 +4301,7 @@ gemma-scope-2-4b-it-res:
 gemma-scope-2-4b-it-mlp-all:
   conversion_func: gemma_3
   model: google/gemma-3-4b-it
-  repo_id: gg-gs/gemma-scope-2-4b-it
+  repo_id: google/gemma-scope-2-4b-it
   saes:
   - id: mlp_out_all/layer_0_width_16k_l0_big
     path: mlp_out_all/layer_0_width_16k_l0_big
@@ -4714,7 +4714,7 @@ gemma-scope-2-4b-it-mlp-all:
 gemma-scope-2-4b-it-mlp:
   conversion_func: gemma_3
   model: google/gemma-3-4b-it
-  repo_id: gg-gs/gemma-scope-2-4b-it
+  repo_id: google/gemma-scope-2-4b-it
   saes:
   - id: mlp_out/layer_17_width_16k_l0_big
     path: mlp_out/layer_17_width_16k_l0_big
@@ -4827,7 +4827,7 @@ gemma-scope-2-4b-it-mlp:
 gemma-scope-2-4b-it-att-all:
   conversion_func: gemma_3
   model: google/gemma-3-4b-it
-  repo_id: gg-gs/gemma-scope-2-4b-it
+  repo_id: google/gemma-scope-2-4b-it
   saes:
   - id: attn_out_all/layer_0_width_16k_l0_big
     path: attn_out_all/layer_0_width_16k_l0_big
@@ -5240,7 +5240,7 @@ gemma-scope-2-4b-it-att-all:
 gemma-scope-2-4b-it-att:
   conversion_func: gemma_3
   model: google/gemma-3-4b-it
-  repo_id: gg-gs/gemma-scope-2-4b-it
+  repo_id: google/gemma-scope-2-4b-it
   saes:
   - id: attn_out/layer_17_width_16k_l0_big
     path: attn_out/layer_17_width_16k_l0_big
@@ -5353,7 +5353,7 @@ gemma-scope-2-4b-it-att:
 gemma-scope-2-27b-pt-transcoders-all:
   conversion_func: gemma_3
   model: google/gemma-3-27b-pt
-  repo_id: gg-gs/gemma-scope-2-27b-pt
+  repo_id: google/gemma-scope-2-27b-pt
   saes:
   - id: transcoder_all/layer_0_width_16k_l0_big
     path: transcoder_all/layer_0_width_16k_l0_big
@@ -6831,7 +6831,7 @@ gemma-scope-2-27b-pt-transcoders-all:
 gemma-scope-2-27b-pt-res-all:
   conversion_func: gemma_3
   model: google/gemma-3-27b-pt
-  repo_id: gg-gs/gemma-scope-2-27b-pt
+  repo_id: google/gemma-scope-2-27b-pt
   saes:
   - id: resid_post_all/layer_0_width_16k_l0_big
     path: resid_post_all/layer_0_width_16k_l0_big
@@ -7580,7 +7580,7 @@ gemma-scope-2-27b-pt-res-all:
 gemma-scope-2-27b-pt-res:
   conversion_func: gemma_3
   model: google/gemma-3-27b-pt
-  repo_id: gg-gs/gemma-scope-2-27b-pt
+  repo_id: google/gemma-scope-2-27b-pt
   saes:
   - id: resid_post/layer_16_width_16k_l0_big
     path: resid_post/layer_16_width_16k_l0_big
@@ -7741,7 +7741,7 @@ gemma-scope-2-27b-pt-res:
 gemma-scope-2-27b-it-transcoders-all:
   conversion_func: gemma_3
   model: google/gemma-3-27b-it
-  repo_id: gg-gs/gemma-scope-2-27b-it
+  repo_id: google/gemma-scope-2-27b-it
   saes:
   - id: transcoder_all/layer_0_width_16k_l0_big
     path: transcoder_all/layer_0_width_16k_l0_big
@@ -9219,7 +9219,7 @@ gemma-scope-2-27b-it-transcoders-all:
 gemma-scope-2-27b-it-transcoders:
   conversion_func: gemma_3
   model: google/gemma-3-27b-it
-  repo_id: gg-gs/gemma-scope-2-27b-it
+  repo_id: google/gemma-scope-2-27b-it
   saes:
   - id: transcoder/layer_16_width_16k_l0_big
     path: transcoder/layer_16_width_16k_l0_big
@@ -9440,7 +9440,7 @@ gemma-scope-2-27b-it-transcoders:
 gemma-scope-2-27b-it-res-all:
   conversion_func: gemma_3
   model: google/gemma-3-27b-it
-  repo_id: gg-gs/gemma-scope-2-27b-it
+  repo_id: google/gemma-scope-2-27b-it
   saes:
   - id: resid_post_all/layer_0_width_16k_l0_big
     path: resid_post_all/layer_0_width_16k_l0_big
@@ -10189,7 +10189,7 @@ gemma-scope-2-27b-it-res-all:
 gemma-scope-2-27b-it-res:
   conversion_func: gemma_3
   model: google/gemma-3-27b-it
-  repo_id: gg-gs/gemma-scope-2-27b-it
+  repo_id: google/gemma-scope-2-27b-it
   saes:
   - id: resid_post/layer_16_width_16k_l0_big
     path: resid_post/layer_16_width_16k_l0_big
@@ -10350,7 +10350,7 @@ gemma-scope-2-27b-it-res:
 gemma-scope-2-27b-it-mlp-all:
   conversion_func: gemma_3
   model: google/gemma-3-27b-it
-  repo_id: gg-gs/gemma-scope-2-27b-it
+  repo_id: google/gemma-scope-2-27b-it
   saes:
   - id: mlp_out_all/layer_0_width_16k_l0_big
     path: mlp_out_all/layer_0_width_16k_l0_big
@@ -11099,7 +11099,7 @@ gemma-scope-2-27b-it-mlp-all:
 gemma-scope-2-27b-it-mlp:
   conversion_func: gemma_3
   model: google/gemma-3-27b-it
-  repo_id: gg-gs/gemma-scope-2-27b-it
+  repo_id: google/gemma-scope-2-27b-it
   saes:
   - id: mlp_out/layer_16_width_16k_l0_big
     path: mlp_out/layer_16_width_16k_l0_big
@@ -11212,7 +11212,7 @@ gemma-scope-2-27b-it-mlp:
 gemma-scope-2-27b-it-att-all:
   conversion_func: gemma_3
   model: google/gemma-3-27b-it
-  repo_id: gg-gs/gemma-scope-2-27b-it
+  repo_id: google/gemma-scope-2-27b-it
   saes:
   - id: attn_out_all/layer_0_width_16k_l0_big
     path: attn_out_all/layer_0_width_16k_l0_big
@@ -11961,7 +11961,7 @@ gemma-scope-2-27b-it-att-all:
 gemma-scope-2-27b-it-att:
   conversion_func: gemma_3
   model: google/gemma-3-27b-it
-  repo_id: gg-gs/gemma-scope-2-27b-it
+  repo_id: google/gemma-scope-2-27b-it
   saes:
   - id: attn_out/layer_16_width_16k_l0_big
     path: attn_out/layer_16_width_16k_l0_big
@@ -12074,7 +12074,7 @@ gemma-scope-2-27b-it-att:
 gemma-scope-2-270m-pt-transcoders-all:
   conversion_func: gemma_3
   model: google/gemma-3-270m
-  repo_id: gg-gs/gemma-scope-2-270m-pt
+  repo_id: google/gemma-scope-2-270m-pt
   saes:
   - id: transcoder_all/layer_0_width_16k_l0_big
     path: transcoder_all/layer_0_width_16k_l0_big
@@ -12511,7 +12511,7 @@ gemma-scope-2-270m-pt-transcoders-all:
 gemma-scope-2-270m-pt-transcoders:
   conversion_func: gemma_3
   model: google/gemma-3-270m
-  repo_id: gg-gs/gemma-scope-2-270m-pt
+  repo_id: google/gemma-scope-2-270m-pt
   saes:
   - id: transcoder/layer_15_width_262k_l0_big_affine
     path: transcoder/layer_15_width_262k_l0_big_affine
@@ -12522,7 +12522,7 @@ gemma-scope-2-270m-pt-transcoders:
 gemma-scope-2-270m-pt-res-all:
   conversion_func: gemma_3
   model: google/gemma-3-270m
-  repo_id: gg-gs/gemma-scope-2-270m-pt
+  repo_id: google/gemma-scope-2-270m-pt
   saes:
   - id: resid_post_all/layer_0_width_16k_l0_big
     path: resid_post_all/layer_0_width_16k_l0_big
@@ -12743,7 +12743,7 @@ gemma-scope-2-270m-pt-res-all:
 gemma-scope-2-270m-pt-res:
   conversion_func: gemma_3
   model: google/gemma-3-270m
-  repo_id: gg-gs/gemma-scope-2-270m-pt
+  repo_id: google/gemma-scope-2-270m-pt
   saes:
   - id: resid_post/layer_12_width_16k_l0_big
     path: resid_post/layer_12_width_16k_l0_big
@@ -12920,7 +12920,7 @@ gemma-scope-2-270m-pt-res:
 gemma-scope-2-270m-pt-mlp-all:
   conversion_func: gemma_3
   model: google/gemma-3-270m
-  repo_id: gg-gs/gemma-scope-2-270m-pt
+  repo_id: google/gemma-scope-2-270m-pt
   saes:
   - id: mlp_out_all/layer_0_width_16k_l0_big
     path: mlp_out_all/layer_0_width_16k_l0_big
@@ -13141,7 +13141,7 @@ gemma-scope-2-270m-pt-mlp-all:
 gemma-scope-2-270m-pt-mlp:
   conversion_func: gemma_3
   model: google/gemma-3-270m
-  repo_id: gg-gs/gemma-scope-2-270m-pt
+  repo_id: google/gemma-scope-2-270m-pt
   saes:
   - id: mlp_out/layer_12_width_16k_l0_big
     path: mlp_out/layer_12_width_16k_l0_big
@@ -13254,7 +13254,7 @@ gemma-scope-2-270m-pt-mlp:
 gemma-scope-2-270m-pt-att-all:
   conversion_func: gemma_3
   model: google/gemma-3-270m
-  repo_id: gg-gs/gemma-scope-2-270m-pt
+  repo_id: google/gemma-scope-2-270m-pt
   saes:
   - id: attn_out_all/layer_0_width_16k_l0_big
     path: attn_out_all/layer_0_width_16k_l0_big
@@ -13475,7 +13475,7 @@ gemma-scope-2-270m-pt-att-all:
 gemma-scope-2-270m-pt-att:
   conversion_func: gemma_3
   model: google/gemma-3-270m
-  repo_id: gg-gs/gemma-scope-2-270m-pt
+  repo_id: google/gemma-scope-2-270m-pt
   saes:
   - id: attn_out/layer_12_width_16k_l0_big
     path: attn_out/layer_12_width_16k_l0_big
@@ -13588,7 +13588,7 @@ gemma-scope-2-270m-pt-att:
 gemma-scope-2-270m-it-transcoders-all:
   conversion_func: gemma_3
   model: google/gemma-3-270m-it
-  repo_id: gg-gs/gemma-scope-2-270m-it
+  repo_id: google/gemma-scope-2-270m-it
   saes:
   - id: transcoder_all/layer_0_width_16k_l0_big
     path: transcoder_all/layer_0_width_16k_l0_big
@@ -14025,7 +14025,7 @@ gemma-scope-2-270m-it-transcoders-all:
 gemma-scope-2-270m-it-transcoders:
   conversion_func: gemma_3
   model: google/gemma-3-270m-it
-  repo_id: gg-gs/gemma-scope-2-270m-it
+  repo_id: google/gemma-scope-2-270m-it
   saes:
   - id: transcoder/layer_12_width_16k_l0_big
     path: transcoder/layer_12_width_16k_l0_big
@@ -14246,7 +14246,7 @@ gemma-scope-2-270m-it-transcoders:
 gemma-scope-2-270m-it-res-all:
   conversion_func: gemma_3
   model: google/gemma-3-270m-it
-  repo_id: gg-gs/gemma-scope-2-270m-it
+  repo_id: google/gemma-scope-2-270m-it
   saes:
   - id: resid_post_all/layer_0_width_16k_l0_big
     path: resid_post_all/layer_0_width_16k_l0_big
@@ -14467,7 +14467,7 @@ gemma-scope-2-270m-it-res-all:
 gemma-scope-2-270m-it-res:
   conversion_func: gemma_3
   model: google/gemma-3-270m-it
-  repo_id: gg-gs/gemma-scope-2-270m-it
+  repo_id: google/gemma-scope-2-270m-it
   saes:
   - id: resid_post/layer_12_width_16k_l0_big
     path: resid_post/layer_12_width_16k_l0_big
@@ -14628,7 +14628,7 @@ gemma-scope-2-270m-it-res:
 gemma-scope-2-270m-it-mlp-all:
   conversion_func: gemma_3
   model: google/gemma-3-270m-it
-  repo_id: gg-gs/gemma-scope-2-270m-it
+  repo_id: google/gemma-scope-2-270m-it
   saes:
   - id: mlp_out_all/layer_0_width_16k_l0_big
     path: mlp_out_all/layer_0_width_16k_l0_big
@@ -14849,7 +14849,7 @@ gemma-scope-2-270m-it-mlp-all:
 gemma-scope-2-270m-it-mlp:
   conversion_func: gemma_3
   model: google/gemma-3-270m-it
-  repo_id: gg-gs/gemma-scope-2-270m-it
+  repo_id: google/gemma-scope-2-270m-it
   saes:
   - id: mlp_out/layer_12_width_16k_l0_big
     path: mlp_out/layer_12_width_16k_l0_big
@@ -14962,7 +14962,7 @@ gemma-scope-2-270m-it-mlp:
 gemma-scope-2-270m-it-att-all:
   conversion_func: gemma_3
   model: google/gemma-3-270m-it
-  repo_id: gg-gs/gemma-scope-2-270m-it
+  repo_id: google/gemma-scope-2-270m-it
   saes:
   - id: attn_out_all/layer_0_width_16k_l0_big
     path: attn_out_all/layer_0_width_16k_l0_big
@@ -15183,7 +15183,7 @@ gemma-scope-2-270m-it-att-all:
 gemma-scope-2-270m-it-att:
   conversion_func: gemma_3
   model: google/gemma-3-270m-it
-  repo_id: gg-gs/gemma-scope-2-270m-it
+  repo_id: google/gemma-scope-2-270m-it
   saes:
   - id: attn_out/layer_12_width_16k_l0_big
     path: attn_out/layer_12_width_16k_l0_big
@@ -15296,7 +15296,7 @@ gemma-scope-2-270m-it-att:
 gemma-scope-2-1b-pt-transcoders-all:
   conversion_func: gemma_3
   model: google/gemma-3-1b-pt
-  repo_id: gg-gs/gemma-scope-2-1b-pt
+  repo_id: google/gemma-scope-2-1b-pt
   saes:
   - id: transcoder_all/layer_0_width_16k_l0_big
     path: transcoder_all/layer_0_width_16k_l0_big
@@ -15925,7 +15925,7 @@ gemma-scope-2-1b-pt-transcoders-all:
 gemma-scope-2-1b-pt-transcoders:
   conversion_func: gemma_3
   model: google/gemma-3-1b-pt
-  repo_id: gg-gs/gemma-scope-2-1b-pt
+  repo_id: google/gemma-scope-2-1b-pt
   saes:
   - id: transcoder/layer_13_width_16k_l0_big
     path: transcoder/layer_13_width_16k_l0_big
@@ -16146,7 +16146,7 @@ gemma-scope-2-1b-pt-transcoders:
 gemma-scope-2-1b-pt-res-all:
   conversion_func: gemma_3
   model: google/gemma-3-1b-pt
-  repo_id: gg-gs/gemma-scope-2-1b-pt
+  repo_id: google/gemma-scope-2-1b-pt
   saes:
   - id: resid_post_all/layer_0_width_16k_l0_big
     path: resid_post_all/layer_0_width_16k_l0_big
@@ -16463,7 +16463,7 @@ gemma-scope-2-1b-pt-res-all:
 gemma-scope-2-1b-pt-res:
   conversion_func: gemma_3
   model: google/gemma-3-1b-pt
-  repo_id: gg-gs/gemma-scope-2-1b-pt
+  repo_id: google/gemma-scope-2-1b-pt
   saes:
   - id: resid_post/layer_13_width_16k_l0_big
     path: resid_post/layer_13_width_16k_l0_big
@@ -16640,7 +16640,7 @@ gemma-scope-2-1b-pt-res:
 gemma-scope-2-1b-pt-mlp-all:
   conversion_func: gemma_3
   model: google/gemma-3-1b-pt
-  repo_id: gg-gs/gemma-scope-2-1b-pt
+  repo_id: google/gemma-scope-2-1b-pt
   saes:
   - id: mlp_out_all/layer_0_width_16k_l0_big
     path: mlp_out_all/layer_0_width_16k_l0_big
@@ -16957,7 +16957,7 @@ gemma-scope-2-1b-pt-mlp-all:
 gemma-scope-2-1b-pt-mlp:
   conversion_func: gemma_3
   model: google/gemma-3-1b-pt
-  repo_id: gg-gs/gemma-scope-2-1b-pt
+  repo_id: google/gemma-scope-2-1b-pt
   saes:
   - id: mlp_out/layer_13_width_16k_l0_big
     path: mlp_out/layer_13_width_16k_l0_big
@@ -17106,7 +17106,7 @@ gemma-scope-2-1b-pt-mlp:
 gemma-scope-2-1b-pt-att-all:
   conversion_func: gemma_3
   model: google/gemma-3-1b-pt
-  repo_id: gg-gs/gemma-scope-2-1b-pt
+  repo_id: google/gemma-scope-2-1b-pt
   saes:
   - id: attn_out_all/layer_0_width_16k_l0_big
     path: attn_out_all/layer_0_width_16k_l0_big
@@ -17423,7 +17423,7 @@ gemma-scope-2-1b-pt-att-all:
 gemma-scope-2-1b-pt-att:
   conversion_func: gemma_3
   model: google/gemma-3-1b-pt
-  repo_id: gg-gs/gemma-scope-2-1b-pt
+  repo_id: google/gemma-scope-2-1b-pt
   saes:
   - id: attn_out/layer_13_width_16k_l0_big
     path: attn_out/layer_13_width_16k_l0_big
@@ -17536,7 +17536,7 @@ gemma-scope-2-1b-pt-att:
 gemma-scope-2-1b-it-transcoders-all:
   conversion_func: gemma_3
   model: google/gemma-3-1b-it
-  repo_id: gg-gs/gemma-scope-2-1b-it
+  repo_id: google/gemma-scope-2-1b-it
   saes:
   - id: transcoder_all/layer_0_width_16k_l0_big
     path: transcoder_all/layer_0_width_16k_l0_big
@@ -18165,7 +18165,7 @@ gemma-scope-2-1b-it-transcoders-all:
 gemma-scope-2-1b-it-transcoders:
   conversion_func: gemma_3
   model: google/gemma-3-1b-it
-  repo_id: gg-gs/gemma-scope-2-1b-it
+  repo_id: google/gemma-scope-2-1b-it
   saes:
   - id: transcoder/layer_13_width_16k_l0_big
     path: transcoder/layer_13_width_16k_l0_big
@@ -18386,7 +18386,7 @@ gemma-scope-2-1b-it-transcoders:
 gemma-scope-2-1b-it-res-all:
   conversion_func: gemma_3
   model: google/gemma-3-1b-it
-  repo_id: gg-gs/gemma-scope-2-1b-it
+  repo_id: google/gemma-scope-2-1b-it
   saes:
   - id: resid_post_all/layer_0_width_16k_l0_big
     path: resid_post_all/layer_0_width_16k_l0_big
@@ -18703,7 +18703,7 @@ gemma-scope-2-1b-it-res-all:
 gemma-scope-2-1b-it-res:
   conversion_func: gemma_3
   model: google/gemma-3-1b-it
-  repo_id: gg-gs/gemma-scope-2-1b-it
+  repo_id: google/gemma-scope-2-1b-it
   saes:
   - id: resid_post/layer_13_width_16k_l0_big
     path: resid_post/layer_13_width_16k_l0_big
@@ -18864,7 +18864,7 @@ gemma-scope-2-1b-it-res:
 gemma-scope-2-1b-it-mlp-all:
   conversion_func: gemma_3
   model: google/gemma-3-1b-it
-  repo_id: gg-gs/gemma-scope-2-1b-it
+  repo_id: google/gemma-scope-2-1b-it
   saes:
   - id: mlp_out_all/layer_0_width_16k_l0_big
     path: mlp_out_all/layer_0_width_16k_l0_big
@@ -19181,7 +19181,7 @@ gemma-scope-2-1b-it-mlp-all:
 gemma-scope-2-1b-it-mlp:
   conversion_func: gemma_3
   model: google/gemma-3-1b-it
-  repo_id: gg-gs/gemma-scope-2-1b-it
+  repo_id: google/gemma-scope-2-1b-it
   saes:
   - id: mlp_out/layer_13_width_16k_l0_big
     path: mlp_out/layer_13_width_16k_l0_big
@@ -19330,7 +19330,7 @@ gemma-scope-2-1b-it-mlp:
 gemma-scope-2-1b-it-att-all:
   conversion_func: gemma_3
   model: google/gemma-3-1b-it
-  repo_id: gg-gs/gemma-scope-2-1b-it
+  repo_id: google/gemma-scope-2-1b-it
   saes:
   - id: attn_out_all/layer_0_width_16k_l0_big
     path: attn_out_all/layer_0_width_16k_l0_big
@@ -19647,7 +19647,7 @@ gemma-scope-2-1b-it-att-all:
 gemma-scope-2-1b-it-att:
   conversion_func: gemma_3
   model: google/gemma-3-1b-it
-  repo_id: gg-gs/gemma-scope-2-1b-it
+  repo_id: google/gemma-scope-2-1b-it
   saes:
   - id: attn_out/layer_13_width_16k_l0_big
     path: attn_out/layer_13_width_16k_l0_big
@@ -19760,7 +19760,7 @@ gemma-scope-2-1b-it-att:
 gemma-scope-2-12b-pt-transcoders-all:
   conversion_func: gemma_3
   model: google/gemma-3-12b-pt
-  repo_id: gg-gs/gemma-scope-2-12b-pt
+  repo_id: google/gemma-scope-2-12b-pt
   saes:
   - id: transcoder_all/layer_0_width_16k_l0_big
     path: transcoder_all/layer_0_width_16k_l0_big
@@ -20917,7 +20917,7 @@ gemma-scope-2-12b-pt-transcoders-all:
 gemma-scope-2-12b-pt-transcoders:
   conversion_func: gemma_3
   model: google/gemma-3-12b-pt
-  repo_id: gg-gs/gemma-scope-2-12b-pt
+  repo_id: google/gemma-scope-2-12b-pt
   saes:
   - id: transcoder/layer_12_width_16k_l0_big
     path: transcoder/layer_12_width_16k_l0_big
@@ -21138,7 +21138,7 @@ gemma-scope-2-12b-pt-transcoders:
 gemma-scope-2-12b-pt-res-all:
   conversion_func: gemma_3
   model: google/gemma-3-12b-pt
-  repo_id: gg-gs/gemma-scope-2-12b-pt
+  repo_id: google/gemma-scope-2-12b-pt
   saes:
   - id: resid_post_all/layer_0_width_16k_l0_big
     path: resid_post_all/layer_0_width_16k_l0_big
@@ -21719,7 +21719,7 @@ gemma-scope-2-12b-pt-res-all:
 gemma-scope-2-12b-pt-res:
   conversion_func: gemma_3
   model: google/gemma-3-12b-pt
-  repo_id: gg-gs/gemma-scope-2-12b-pt
+  repo_id: google/gemma-scope-2-12b-pt
   saes:
   - id: resid_post/layer_12_width_16k_l0_big
     path: resid_post/layer_12_width_16k_l0_big
@@ -21880,7 +21880,7 @@ gemma-scope-2-12b-pt-res:
 gemma-scope-2-12b-pt-mlp-all:
   conversion_func: gemma_3
   model: google/gemma-3-12b-pt
-  repo_id: gg-gs/gemma-scope-2-12b-pt
+  repo_id: google/gemma-scope-2-12b-pt
   saes:
   - id: mlp_out_all/layer_0_width_16k_l0_big
     path: mlp_out_all/layer_0_width_16k_l0_big
@@ -22461,7 +22461,7 @@ gemma-scope-2-12b-pt-mlp-all:
 gemma-scope-2-12b-pt-mlp:
   conversion_func: gemma_3
   model: google/gemma-3-12b-pt
-  repo_id: gg-gs/gemma-scope-2-12b-pt
+  repo_id: google/gemma-scope-2-12b-pt
   saes:
   - id: mlp_out/layer_12_width_16k_l0_big
     path: mlp_out/layer_12_width_16k_l0_big
@@ -22574,7 +22574,7 @@ gemma-scope-2-12b-pt-mlp:
 gemma-scope-2-12b-pt-att-all:
   conversion_func: gemma_3
   model: google/gemma-3-12b-pt
-  repo_id: gg-gs/gemma-scope-2-12b-pt
+  repo_id: google/gemma-scope-2-12b-pt
   saes:
   - id: attn_out_all/layer_0_width_16k_l0_big
     path: attn_out_all/layer_0_width_16k_l0_big
@@ -23155,7 +23155,7 @@ gemma-scope-2-12b-pt-att-all:
 gemma-scope-2-12b-pt-att:
   conversion_func: gemma_3
   model: google/gemma-3-12b-pt
-  repo_id: gg-gs/gemma-scope-2-12b-pt
+  repo_id: google/gemma-scope-2-12b-pt
   saes:
   - id: attn_out/layer_12_width_16k_l0_big
     path: attn_out/layer_12_width_16k_l0_big
@@ -23268,7 +23268,7 @@ gemma-scope-2-12b-pt-att:
 gemma-scope-2-12b-it-transcoders-all:
   conversion_func: gemma_3
   model: google/gemma-3-12b-it
-  repo_id: gg-gs/gemma-scope-2-12b-it
+  repo_id: google/gemma-scope-2-12b-it
   saes:
   - id: transcoder_all/layer_0_width_16k_l0_big
     path: transcoder_all/layer_0_width_16k_l0_big
@@ -24425,7 +24425,7 @@ gemma-scope-2-12b-it-transcoders-all:
 gemma-scope-2-12b-it-transcoders:
   conversion_func: gemma_3
   model: google/gemma-3-12b-it
-  repo_id: gg-gs/gemma-scope-2-12b-it
+  repo_id: google/gemma-scope-2-12b-it
   saes:
   - id: transcoder/layer_12_width_16k_l0_big
     path: transcoder/layer_12_width_16k_l0_big
@@ -24646,7 +24646,7 @@ gemma-scope-2-12b-it-transcoders:
 gemma-scope-2-12b-it-res-all:
   conversion_func: gemma_3
   model: google/gemma-3-12b-it
-  repo_id: gg-gs/gemma-scope-2-12b-it
+  repo_id: google/gemma-scope-2-12b-it
   saes:
   - id: resid_post_all/layer_0_width_16k_l0_big
     path: resid_post_all/layer_0_width_16k_l0_big
@@ -25227,7 +25227,7 @@ gemma-scope-2-12b-it-res-all:
 gemma-scope-2-12b-it-res:
   conversion_func: gemma_3
   model: google/gemma-3-12b-it
-  repo_id: gg-gs/gemma-scope-2-12b-it
+  repo_id: google/gemma-scope-2-12b-it
   saes:
   - id: resid_post/layer_12_width_16k_l0_big
     path: resid_post/layer_12_width_16k_l0_big
@@ -25388,7 +25388,7 @@ gemma-scope-2-12b-it-res:
 gemma-scope-2-12b-it-mlp-all:
   conversion_func: gemma_3
   model: google/gemma-3-12b-it
-  repo_id: gg-gs/gemma-scope-2-12b-it
+  repo_id: google/gemma-scope-2-12b-it
   saes:
   - id: mlp_out_all/layer_0_width_16k_l0_big
     path: mlp_out_all/layer_0_width_16k_l0_big
@@ -25969,7 +25969,7 @@ gemma-scope-2-12b-it-mlp-all:
 gemma-scope-2-12b-it-mlp:
   conversion_func: gemma_3
   model: google/gemma-3-12b-it
-  repo_id: gg-gs/gemma-scope-2-12b-it
+  repo_id: google/gemma-scope-2-12b-it
   saes:
   - id: mlp_out/layer_12_width_16k_l0_big
     path: mlp_out/layer_12_width_16k_l0_big
@@ -26082,7 +26082,7 @@ gemma-scope-2-12b-it-mlp:
 gemma-scope-2-12b-it-att-all:
   conversion_func: gemma_3
   model: google/gemma-3-12b-it
-  repo_id: gg-gs/gemma-scope-2-12b-it
+  repo_id: google/gemma-scope-2-12b-it
   saes:
   - id: attn_out_all/layer_0_width_16k_l0_big
     path: attn_out_all/layer_0_width_16k_l0_big
@@ -26663,7 +26663,7 @@ gemma-scope-2-12b-it-att-all:
 gemma-scope-2-12b-it-att:
   conversion_func: gemma_3
   model: google/gemma-3-12b-it
-  repo_id: gg-gs/gemma-scope-2-12b-it
+  repo_id: google/gemma-scope-2-12b-it
   saes:
   - id: attn_out/layer_12_width_16k_l0_big
     path: attn_out/layer_12_width_16k_l0_big
