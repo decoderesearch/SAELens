@@ -16,7 +16,7 @@ from sae_lens.loading.pretrained_sae_loaders import (
     load_sae_config_from_huggingface,
 )
 
-MAX_WORKERS = 8
+MAX_WORKERS = 4
 
 INCLUDED_CFG = [
     "id",
