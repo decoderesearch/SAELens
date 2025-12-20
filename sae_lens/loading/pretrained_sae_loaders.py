@@ -682,15 +682,6 @@ def gemma_3_sae_huggingface_loader(
         cfg_overrides,
     )
 
-    # replace folder name of 65k with 64k
-    # TODO: remove this workaround once weights are fixed
-    if "270m-pt" in repo_id:
-        if "65k" in folder_name:
-            folder_name = folder_name.replace("65k", "64k")
-        # replace folder name of 262k with 250k
-        if "262k" in folder_name:
-            folder_name = folder_name.replace("262k", "250k")
-
     params_file = "params.safetensors"
     if "clt" in folder_name:
         params_file = folder_name.split("/")[-1] + ".safetensors"
