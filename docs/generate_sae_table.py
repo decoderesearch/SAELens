@@ -2,6 +2,7 @@
 # ruff: noqa: T201
 import json
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from textwrap import dedent
 
@@ -13,6 +14,8 @@ from sae_lens import SAEConfig
 from sae_lens.loading.pretrained_sae_loaders import (
     load_sae_config_from_huggingface,
 )
+
+MAX_WORKERS = 8
 
 INCLUDED_CFG = [
     "id",
@@ -85,7 +88,9 @@ def on_pre_build(config):  # noqa: ARG001
     print("SAE table generation complete.")
 
 
-def generate_release_content(release: str, model_info: dict) -> str:
+def generate_release_content(
+    release: str, model_info: dict, executor: ThreadPoolExecutor
+) -> str:
     """Generate markdown content for a single release."""
     content = ""
     repo_link = f"https://huggingface.co/{model_info['repo_id']}"
@@ -99,9 +104,21 @@ def generate_release_content(release: str, model_info: dict) -> str:
 
     content += "\n"
 
-    for info in tqdm(model_info["saes"], desc=f"  {release}", leave=False):
-        sae_id = info["id"]
-        raw_cfg = load_sae_config_cached(release, sae_id)
+    # Load all configs in parallel
+    sae_list = model_info["saes"]
+    future_to_info = {
+        executor.submit(load_sae_config_cached, release, info["id"]): info
+        for info in sae_list
+    }
+
+    for future in tqdm(
+        as_completed(future_to_info),
+        total=len(future_to_info),
+        desc=f"  {release}",
+        leave=False,
+    ):
+        info = future_to_info[future]
+        raw_cfg = future.result()
         cfg = SAEConfig.from_dict(raw_cfg).to_dict()
 
         if "neuronpedia" not in info:
@@ -125,7 +142,9 @@ def generate_release_content(release: str, model_info: dict) -> str:
     return content
 
 
-def generate_model_page(model: str, releases: list[tuple[str, dict]]) -> str:
+def generate_model_page(
+    model: str, releases: list[tuple[str, dict]], executor: ThreadPoolExecutor
+) -> str:
     """Generate a full page for a model with all its releases."""
     display_name = model_to_display_name(model)
     content = f"# {display_name}\n\n"
@@ -134,7 +153,7 @@ def generate_model_page(model: str, releases: list[tuple[str, dict]]) -> str:
     )
 
     for release, model_info in sorted(releases, key=lambda x: x[0].lower()):
-        content += generate_release_content(release, model_info)
+        content += generate_release_content(release, model_info, executor)
 
     content += MODAL_HTML
     return content
@@ -181,16 +200,17 @@ def generate_sae_table() -> None:
     # Generate a page for each model
     models_with_counts: list[tuple[str, int, int]] = []
 
-    for model, releases in tqdm(model_releases.items(), desc="Models"):
-        filename = model_to_filename(model)
-        page_content = generate_model_page(model, releases)
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        for model, releases in tqdm(model_releases.items(), desc="Models"):
+            filename = model_to_filename(model)
+            page_content = generate_model_page(model, releases, executor)
 
-        output_path = OUTPUT_DIR / f"{filename}.md"
-        with open(output_path, "w") as f:
-            f.write(page_content)
+            output_path = OUTPUT_DIR / f"{filename}.md"
+            with open(output_path, "w") as f:
+                f.write(page_content)
 
-        total_saes = sum(len(model_info["saes"]) for _, model_info in releases)
-        models_with_counts.append((model, len(releases), total_saes))
+            total_saes = sum(len(model_info["saes"]) for _, model_info in releases)
+            models_with_counts.append((model, len(releases), total_saes))
 
     # Generate index page
     index_content = generate_index_page(models_with_counts)
