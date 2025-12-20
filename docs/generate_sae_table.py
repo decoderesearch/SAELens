@@ -26,7 +26,9 @@ INCLUDED_CFG = [
     "normalize_activations",
 ]
 
-CACHE_DIR = Path(os.environ.get("SAE_CONFIG_CACHE_DIR", "docs/.sae_config_cache"))
+CACHE_DIR = Path(
+    os.environ.get("SAE_CONFIG_CACHE_DIR", "docs/.sae_config_cache")
+).expanduser()
 OUTPUT_DIR = Path("docs/pretrained_saes")
 
 # Modal HTML that gets added to each page

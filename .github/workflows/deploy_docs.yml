@@ -141,7 +141,7 @@ jobs:
             poetry run mike set-default --push dev
           fi
       - name: Save SAE config cache
-        if: always() && steps.cache-sae-config-restore.outputs.cache-hit != 'true'
+        if: always()
         uses: actions/cache/save@v4
         with:
           key: ${{ steps.cache-sae-config-restore.outputs.cache-primary-key }}
