@@ -1,6 +1,7 @@
 # type: ignore
 # ruff: noqa: T201
 import json
+import os
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -25,7 +26,7 @@ INCLUDED_CFG = [
     "normalize_activations",
 ]
 
-CACHE_DIR = Path("docs/.sae_config_cache")
+CACHE_DIR = Path(os.environ.get("SAE_CONFIG_CACHE_DIR", "docs/.sae_config_cache"))
 OUTPUT_DIR = Path("docs/pretrained_saes")
 
 # Modal HTML that gets added to each page

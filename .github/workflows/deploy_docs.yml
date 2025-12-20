@@ -29,6 +29,7 @@ jobs:
       actions: read
     env:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      SAE_CONFIG_CACHE_DIR: ~/.cache/sae_config_cache
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,6 +46,14 @@ jobs:
           path: ~/.cache/huggingface
           restore-keys: |
             huggingface-${{ runner.os }}-3.11-
+      - name: Cache SAE config cache
+        uses: actions/cache@v4
+        with:
+          key: sae-config-cache-${{ hashFiles('sae_lens/pretrained_saes.yaml') }}
+          path: ~/.cache/sae_config_cache
+          save-always: true
+          restore-keys: |
+            sae-config-cache-
       - name: Load cached Poetry installation
         id: cached-poetry
         uses: actions/cache@v4
