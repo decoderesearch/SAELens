@@ -13,6 +13,7 @@ from sae_lens.saes.sae import (
     TrainingSAE,
     TrainingSAEConfig,
     TrainStepInput,
+    TrainStepOutput,
 )
 from sae_lens.saes.topk_sae import calculate_topk_aux_acts
 
@@ -202,6 +203,15 @@ class MatchingPursuitTrainingSAE(TrainingSAE[MatchingPursuitTrainingSAEConfig]):
         return {"auxiliary_reconstruction_loss": aux_loss}
 
     @override
+    def training_forward_pass(self, step_input: TrainStepInput) -> TrainStepOutput:
+        output = super().training_forward_pass(step_input)
+        l0 = output.feature_acts.bool().float().sum(-1).to_dense()
+        output.metrics["max_l0"] = l0.max()
+        output.metrics["min_l0"] = l0.min()
+
+        return output
+
+    @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """
         Decode the feature activations back to the input space.
@@ -258,6 +268,7 @@ def _encode_matching_pursuit(
     sae_in_centered: torch.Tensor,
     W_dec: torch.Tensor,
     residual_threshold: float,
+    check_done_freq: int = 10,
 ) -> torch.Tensor:
     residual = sae_in_centered.clone()
 
@@ -274,37 +285,39 @@ def _encode_matching_pursuit(
     done = torch.zeros(batch_size, dtype=torch.bool, device=W_dec.device)
 
     while not done.all():
-        # Find indices without gradients - the full [batch, d_sae] matmul result
-        # doesn't need to be saved for backward since max indices don't need gradients
-        with torch.no_grad():
-            indices = (residual @ W_dec.T).relu().max(dim=1, keepdim=True).indices
-            indices_flat = indices.squeeze(1)  # [batch_size]
+        # the "not done.all()" forces a GPU sync, so we instead only check done every check_done_freq iterations
+        for _ in range(check_done_freq):
+            # Find indices without gradients - the full [batch, d_sae] matmul result
+            # doesn't need to be saved for backward since max indices don't need gradients
+            with torch.no_grad():
+                indices = (residual @ W_dec.T).relu().max(dim=1, keepdim=True).indices
+                indices_flat = indices.squeeze(1)  # [batch_size]
 
-        # Compute values with gradients using only the selected decoder rows.
-        # This stores [batch, d_in] for backward instead of [batch, d_sae].
-        selected_dec = W_dec[indices_flat]  # [batch_size, d_in]
-        values = (residual * selected_dec).sum(dim=-1, keepdim=True).relu()
+            # Compute values with gradients using only the selected decoder rows.
+            # This stores [batch, d_in] for backward instead of [batch, d_sae].
+            selected_dec = W_dec[indices_flat]  # [batch_size, d_in]
+            values = (residual * selected_dec).sum(dim=-1, keepdim=True).relu()
 
-        # Mask values for samples that are already done
-        active_mask = (~done).unsqueeze(1)
-        masked_values = (values * active_mask.to(values.dtype)).to(acts.dtype)
+            # Mask values for samples that are already done
+            active_mask = (~done).unsqueeze(1)
+            masked_values = (values * active_mask.to(values.dtype)).to(acts.dtype)
 
-        acts.scatter_add_(1, indices, masked_values)
+            acts.scatter_add_(1, indices, masked_values)
 
-        # Update residual
-        residual = residual - masked_values * selected_dec
+            # Update residual
+            residual = residual - masked_values * selected_dec
 
-        with torch.no_grad():
-            support = acts != 0
+            with torch.no_grad():
+                support = acts != 0
 
-            # A sample is considered converged if:
-            # (1) the support set hasn't changed from the previous iteration (stability), or
-            # (2) the residual norm is below a given threshold (good enough reconstruction)
-            converged = (support == prev_support).all(dim=1) | (
-                residual.norm(dim=-1) < residual_threshold
-            )
-            done = done | converged
-            prev_support = support
+                # A sample is considered converged if:
+                # (1) the support set hasn't changed from the previous iteration (stability), or
+                # (2) the residual norm is below a given threshold (good enough reconstruction)
+                converged = (support == prev_support).all(dim=1) | (
+                    residual.norm(dim=-1) < residual_threshold
+                )
+                done = done | converged
+                prev_support = support
 
     # Reshape acts back to original shape (replacing last dimension with d_sae)
     if len(original_shape) > 2:
