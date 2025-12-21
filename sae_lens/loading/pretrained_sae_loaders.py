@@ -9,7 +9,7 @@ import requests
 import torch
 import yaml
 from huggingface_hub import hf_hub_download, hf_hub_url
-from huggingface_hub.utils import EntryNotFoundError
+from huggingface_hub.utils import EntryNotFoundError, build_hf_headers
 from packaging.version import Version
 from safetensors import safe_open
 from safetensors.torch import load_file
@@ -46,6 +46,8 @@ LLM_METADATA_KEYS = {
     "sae_lens_training_version",
     "hook_name_out",
     "hook_head_index_out",
+    "hf_hook_name",
+    "hf_hook_name_out",
 }
 
 
@@ -523,6 +525,206 @@ def gemma_2_sae_huggingface_loader(
     return cfg_dict, state_dict, log_sparsity
 
 
+def _infer_gemma_3_raw_cfg_dict(repo_id: str, folder_name: str) -> dict[str, Any]:
+    """
+    Infer the raw config dict for Gemma 3 SAEs from the repo_id and folder_name.
+    This is used when config.json doesn't exist in the repo.
+    """
+    # Extract layer number from folder name
+    layer_match = re.search(r"layer_(\d+)", folder_name)
+    if layer_match is None:
+        raise ValueError(
+            f"Could not extract layer number from folder_name: {folder_name}"
+        )
+    layer = int(layer_match.group(1))
+
+    # Convert repo_id to model_name: google/gemma-scope-2-{size}-{suffix} -> google/gemma-3-{size}-{suffix}
+    model_name = repo_id.replace("gemma-scope-2", "gemma-3")
+
+    # Determine hook type and HF hook points based on folder_name
+    if "transcoder" in folder_name or "clt" in folder_name:
+        hf_hook_point_in = f"model.layers.{layer}.pre_feedforward_layernorm.output"
+        hf_hook_point_out = f"model.layers.{layer}.post_feedforward_layernorm.output"
+    elif "resid_post" in folder_name:
+        hf_hook_point_in = f"model.layers.{layer}.output"
+        hf_hook_point_out = None
+    elif "attn_out" in folder_name:
+        hf_hook_point_in = f"model.layers.{layer}.self_attn.o_proj.input"
+        hf_hook_point_out = None
+    elif "mlp_out" in folder_name:
+        hf_hook_point_in = f"model.layers.{layer}.post_feedforward_layernorm.output"
+        hf_hook_point_out = None
+    else:
+        raise ValueError(f"Could not infer hook type from folder_name: {folder_name}")
+
+    cfg: dict[str, Any] = {
+        "architecture": "jump_relu",
+        "model_name": model_name,
+        "hf_hook_point_in": hf_hook_point_in,
+    }
+    if hf_hook_point_out is not None:
+        cfg["hf_hook_point_out"] = hf_hook_point_out
+
+    return cfg
+
+
+def get_gemma_3_config_from_hf(
+    repo_id: str,
+    folder_name: str,
+    device: str,
+    force_download: bool = False,
+    cfg_overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    # Try to load config.json from the repo, fall back to inferring if it doesn't exist
+    try:
+        config_path = hf_hub_download(
+            repo_id, f"{folder_name}/config.json", force_download=force_download
+        )
+        with open(config_path) as config_file:
+            raw_cfg_dict = json.load(config_file)
+    except EntryNotFoundError:
+        raw_cfg_dict = _infer_gemma_3_raw_cfg_dict(repo_id, folder_name)
+
+    if raw_cfg_dict.get("architecture") != "jump_relu":
+        raise ValueError(
+            f"Unexpected architecture in Gemma 3 config: {raw_cfg_dict.get('architecture')}"
+        )
+
+    layer_match = re.search(r"layer_(\d+)", folder_name)
+    if layer_match is None:
+        raise ValueError(
+            f"Could not extract layer number from folder_name: {folder_name}"
+        )
+    layer = int(layer_match.group(1))
+    hook_name_out = None
+    d_out = None
+    if "resid_post" in folder_name:
+        hook_name = f"blocks.{layer}.hook_resid_post"
+    elif "attn_out" in folder_name:
+        hook_name = f"blocks.{layer}.hook_attn_out"
+    elif "mlp_out" in folder_name:
+        hook_name = f"blocks.{layer}.hook_mlp_out"
+    elif "transcoder" in folder_name or "clt" in folder_name:
+        hook_name = f"blocks.{layer}.ln2.hook_normalized"
+        hook_name_out = f"blocks.{layer}.hook_mlp_out"
+    else:
+        raise ValueError("Hook name not found in folder_name.")
+
+    # hackily deal with clt file names
+    params_file_part = "/params.safetensors"
+    if "clt" in folder_name:
+        params_file_part = ".safetensors"
+
+    shapes_dict = get_safetensors_tensor_shapes(
+        repo_id, f"{folder_name}{params_file_part}"
+    )
+    d_in, d_sae = shapes_dict["w_enc"]
+    # TODO: update this for real model info
+    model_name = raw_cfg_dict["model_name"]
+    if "google" not in model_name:
+        model_name = "google/" + model_name
+    model_name = model_name.replace("-v3", "-3")
+    if "270m" in model_name:
+        # for some reason the 270m model on huggingface doesn't have the -pt suffix
+        model_name = model_name.replace("-pt", "")
+
+    architecture = "jumprelu"
+    if "transcoder" in folder_name or "clt" in folder_name:
+        architecture = "jumprelu_skip_transcoder"
+        d_out = shapes_dict["w_dec"][-1]
+
+    cfg = {
+        "architecture": architecture,
+        "d_in": d_in,
+        "d_sae": d_sae,
+        "dtype": "float32",
+        "model_name": model_name,
+        "hook_name": hook_name,
+        "hook_head_index": None,
+        "finetuning_scaling_factor": False,
+        "sae_lens_training_version": None,
+        "prepend_bos": True,
+        "dataset_path": "monology/pile-uncopyrighted",
+        "context_size": 1024,
+        "apply_b_dec_to_input": False,
+        "normalize_activations": None,
+        "hf_hook_name": raw_cfg_dict.get("hf_hook_point_in"),
+    }
+    if hook_name_out is not None:
+        cfg["hook_name_out"] = hook_name_out
+        cfg["hf_hook_name_out"] = raw_cfg_dict.get("hf_hook_point_out")
+    if d_out is not None:
+        cfg["d_out"] = d_out
+    if device is not None:
+        cfg["device"] = device
+
+    if cfg_overrides is not None:
+        cfg.update(cfg_overrides)
+
+    return cfg
+
+
+def gemma_3_sae_huggingface_loader(
+    repo_id: str,
+    folder_name: str,
+    device: str = "cpu",
+    force_download: bool = False,
+    cfg_overrides: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, torch.Tensor], torch.Tensor | None]:
+    """
+    Custom loader for Gemma 3 SAEs.
+    """
+    cfg_dict = get_gemma_3_config_from_hf(
+        repo_id,
+        folder_name,
+        device,
+        force_download,
+        cfg_overrides,
+    )
+
+    # replace folder name of 65k with 64k
+    # TODO: remove this workaround once weights are fixed
+    if "270m-pt" in repo_id:
+        if "65k" in folder_name:
+            folder_name = folder_name.replace("65k", "64k")
+        # replace folder name of 262k with 250k
+        if "262k" in folder_name:
+            folder_name = folder_name.replace("262k", "250k")
+
+    params_file = "params.safetensors"
+    if "clt" in folder_name:
+        params_file = folder_name.split("/")[-1] + ".safetensors"
+        folder_name = "/".join(folder_name.split("/")[:-1])
+
+    # Download the SAE weights
+    sae_path = hf_hub_download(
+        repo_id=repo_id,
+        filename=params_file,
+        subfolder=folder_name,
+        force_download=force_download,
+    )
+
+    raw_state_dict = load_file(sae_path, device=device)
+
+    with torch.no_grad():
+        w_dec = raw_state_dict["w_dec"]
+        if "clt" in folder_name:
+            w_dec = w_dec.sum(dim=1).contiguous()
+
+    state_dict = {
+        "W_enc": raw_state_dict["w_enc"],
+        "W_dec": w_dec,
+        "b_enc": raw_state_dict["b_enc"],
+        "b_dec": raw_state_dict["b_dec"],
+        "threshold": raw_state_dict["threshold"],
+    }
+
+    if "affine_skip_connection" in raw_state_dict:
+        state_dict["W_skip"] = raw_state_dict["affine_skip_connection"]
+
+    return cfg_dict, state_dict, None
+
+
 def get_goodfire_config_from_hf(
     repo_id: str,
     folder_name: str,  # noqa: ARG001
@@ -753,10 +955,14 @@ def get_dictionary_learning_config_1_from_hf(
     activation_fn = "topk" if trainer["dict_class"] == "AutoEncoderTopK" else "relu"
     activation_fn_kwargs = {"k": trainer["k"]} if activation_fn == "topk" else {}
 
+    architecture = "standard"
+    if trainer["dict_class"] == "GatedAutoEncoder":
+        architecture = "gated"
+    elif trainer["dict_class"] == "MatryoshkaBatchTopKSAE":
+        architecture = "jumprelu"
+
     return {
-        "architecture": (
-            "gated" if trainer["dict_class"] == "GatedAutoEncoder" else "standard"
-        ),
+        "architecture": architecture,
         "d_in": trainer["activation_dim"],
         "d_sae": trainer["dict_size"],
         "dtype": "float32",
@@ -905,9 +1111,12 @@ def dictionary_learning_sae_huggingface_loader_1(
     )
     encoder = torch.load(encoder_path, map_location="cpu")
 
+    W_enc = encoder["W_enc"] if "W_enc" in encoder else encoder["encoder.weight"].T
+    W_dec = encoder["W_dec"] if "W_dec" in encoder else encoder["decoder.weight"].T
+
     state_dict = {
-        "W_enc": encoder["encoder.weight"].T,
-        "W_dec": encoder["decoder.weight"].T,
+        "W_enc": W_enc,
+        "W_dec": W_dec,
         "b_dec": encoder.get(
             "b_dec", encoder.get("bias", encoder.get("decoder_bias", None))
         ),
@@ -915,6 +1124,8 @@ def dictionary_learning_sae_huggingface_loader_1(
 
     if "encoder.bias" in encoder:
         state_dict["b_enc"] = encoder["encoder.bias"]
+    if "b_enc" in encoder:
+        state_dict["b_enc"] = encoder["b_enc"]
 
     if "mag_bias" in encoder:
         state_dict["b_mag"] = encoder["mag_bias"]
@@ -922,6 +1133,12 @@ def dictionary_learning_sae_huggingface_loader_1(
         state_dict["b_gate"] = encoder["gate_bias"]
     if "r_mag" in encoder:
         state_dict["r_mag"] = encoder["r_mag"]
+
+    if "threshold" in encoder:
+        threshold = encoder["threshold"]
+        if threshold.ndim == 0:
+            threshold = torch.full((W_enc.size(1),), threshold)
+        state_dict["threshold"] = threshold
 
     return cfg_dict, state_dict, None
 
@@ -1414,38 +1631,36 @@ def mwhanna_transcoder_huggingface_loader(
     return cfg_dict, state_dict, None
 
 
-def get_safetensors_tensor_shapes(url: str) -> dict[str, list[int]]:
+def get_safetensors_tensor_shapes(repo_id: str, filename: str) -> dict[str, list[int]]:
     """
-    Get tensor shapes from a safetensors file using HTTP range requests
+    Get tensor shapes from a safetensors file on HuggingFace Hub
     without downloading the entire file.
 
+    Uses HTTP range requests to fetch only the metadata header.
+
     Args:
-        url: Direct URL to the safetensors file
+        repo_id: HuggingFace repo ID (e.g., "gg-gs/gemma-scope-2-1b-pt")
+        filename: Path to the safetensors file within the repo
 
     Returns:
         Dictionary mapping tensor names to their shapes
     """
-    # Check if server supports range requests
-    response = requests.head(url, timeout=10)
-    response.raise_for_status()
+    url = hf_hub_url(repo_id, filename)
 
-    accept_ranges = response.headers.get("Accept-Ranges", "")
-    if "bytes" not in accept_ranges:
-        raise ValueError("Server does not support range requests")
+    # Get HuggingFace headers (includes auth token if available)
+    hf_headers = build_hf_headers()
 
     # Fetch first 8 bytes to get metadata size
-    headers = {"Range": "bytes=0-7"}
+    headers = {**hf_headers, "Range": "bytes=0-7"}
     response = requests.get(url, headers=headers, timeout=10)
-    if response.status_code != 206:
-        raise ValueError("Failed to fetch initial bytes for metadata size")
+    response.raise_for_status()
 
     meta_size = int.from_bytes(response.content, byteorder="little")
 
     # Fetch the metadata header
-    headers = {"Range": f"bytes=8-{8 + meta_size - 1}"}
+    headers = {**hf_headers, "Range": f"bytes=8-{8 + meta_size - 1}"}
     response = requests.get(url, headers=headers, timeout=10)
-    if response.status_code != 206:
-        raise ValueError("Failed to fetch metadata header")
+    response.raise_for_status()
 
     metadata_json = response.content.decode("utf-8").strip()
     metadata = json.loads(metadata_json)
@@ -1525,9 +1740,10 @@ def get_mntss_clt_layer_config_from_hf(
     with open(base_config_path) as f:
         cfg_info: dict[str, Any] = yaml.safe_load(f)
 
-    # Get tensor shapes without downloading full files using HTTP range requests
-    encoder_url = hf_hub_url(repo_id, f"W_enc_{folder_name}.safetensors")
-    encoder_shapes = get_safetensors_tensor_shapes(encoder_url)
+    # Get tensor shapes without downloading full files
+    encoder_shapes = get_safetensors_tensor_shapes(
+        repo_id, f"W_enc_{folder_name}.safetensors"
+    )
 
     # Extract shapes for the required tensors
     b_dec_shape = encoder_shapes[f"b_dec_{folder_name}"]
@@ -1663,6 +1879,7 @@ NAMED_PRETRAINED_SAE_LOADERS: dict[str, PretrainedSaeHuggingfaceLoader] = {
     "sae_lens": sae_lens_huggingface_loader,
     "connor_rob_hook_z": connor_rob_hook_z_huggingface_loader,
     "gemma_2": gemma_2_sae_huggingface_loader,
+    "gemma_3": gemma_3_sae_huggingface_loader,
     "llama_scope": llama_scope_sae_huggingface_loader,
     "llama_scope_r1_distill": llama_scope_r1_distill_sae_huggingface_loader,
     "dictionary_learning_1": dictionary_learning_sae_huggingface_loader_1,
@@ -1680,6 +1897,7 @@ NAMED_PRETRAINED_SAE_CONFIG_GETTERS: dict[str, PretrainedSaeConfigHuggingfaceLoa
     "sae_lens": get_sae_lens_config_from_hf,
     "connor_rob_hook_z": get_connor_rob_hook_z_config_from_hf,
     "gemma_2": get_gemma_2_config_from_hf,
+    "gemma_3": get_gemma_3_config_from_hf,
     "llama_scope": get_llama_scope_config_from_hf,
     "llama_scope_r1_distill": get_llama_scope_r1_distill_config_from_hf,
     "dictionary_learning_1": get_dictionary_learning_config_1_from_hf,

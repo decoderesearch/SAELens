@@ -368,3 +368,44 @@ class JumpReLUTranscoder(Transcoder):
     def from_dict(cls, config_dict: dict[str, Any]) -> "JumpReLUTranscoder":
         cfg = JumpReLUTranscoderConfig.from_dict(config_dict)
         return cls(cfg)
+
+
+@dataclass
+class JumpReLUSkipTranscoderConfig(JumpReLUTranscoderConfig):
+    """Configuration for JumpReLU transcoder."""
+
+    @classmethod
+    def architecture(cls) -> str:
+        """Return the architecture name for this config."""
+        return "jumprelu_skip_transcoder"
+
+    @classmethod
+    def from_dict(cls, config_dict: dict[str, Any]) -> "JumpReLUSkipTranscoderConfig":
+        """Create a JumpReLUSkipTranscoderConfig from a dictionary."""
+        # Filter to only include valid dataclass fields
+        filtered_config_dict = filter_valid_dataclass_fields(config_dict, cls)
+
+        # Create the config instance
+        res = cls(**filtered_config_dict)
+
+        # Handle metadata if present
+        if "metadata" in config_dict:
+            res.metadata = SAEMetadata(**config_dict["metadata"])
+
+        return res
+
+
+class JumpReLUSkipTranscoder(JumpReLUTranscoder, SkipTranscoder):
+    """
+    A transcoder with a learnable skip connection and JumpReLU activation function.
+    """
+
+    cfg: JumpReLUSkipTranscoderConfig  # type: ignore[assignment]
+
+    def __init__(self, cfg: JumpReLUSkipTranscoderConfig):
+        super().__init__(cfg)
+
+    @classmethod
+    def from_dict(cls, config_dict: dict[str, Any]) -> "JumpReLUSkipTranscoder":
+        cfg = JumpReLUSkipTranscoderConfig.from_dict(config_dict)
+        return cls(cfg)

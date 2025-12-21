@@ -31,6 +31,7 @@ theme:
 
   features:
     - navigation.instant
+    - navigation.path
 
   icon:
     repo: fontawesome/brands/github
@@ -53,13 +54,20 @@ nav:
   - Contributing: contributing.md
   - Migrating to v6: migrating.md
   - API: api.md
-  - Supported SAEs: sae_table.md
+  - Pretrained SAEs: pretrained_saes/index.md
+
+validation:
+  nav:
+    not_in_nav: ignore
 
 plugins:
   - search
   - autorefs
   - section-index
   - mike
+  - redirects:
+      redirect_maps:
+        'sae_table.md': 'pretrained_saes/index.md'
   - mkdocstrings:
       custom_templates: null
       watch:

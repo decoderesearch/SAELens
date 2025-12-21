@@ -5,8 +5,12 @@ import pytest
 import torch
 
 from sae_lens.saes.transcoder import (
+    JumpReLUSkipTranscoder,
+    JumpReLUSkipTranscoderConfig,
     JumpReLUTranscoder,
     JumpReLUTranscoderConfig,
+    SkipTranscoder,
+    SkipTranscoderConfig,
     Transcoder,
     TranscoderConfig,
 )
@@ -60,6 +64,22 @@ def build_jumprelu_transcoder_cfg(**kwargs: Any) -> JumpReLUTranscoderConfig:
     default_dict.pop("architecture", None)
     default_dict.pop("metadata", None)
     return JumpReLUTranscoderConfig(**default_dict)
+
+
+def build_skip_transcoder_cfg(**kwargs: Any) -> SkipTranscoderConfig:
+    """Helper to create a SkipTranscoderConfig with defaults."""
+    default_dict = build_transcoder_cfg(**kwargs).to_dict()
+    default_dict.pop("architecture", None)
+    default_dict.pop("metadata", None)
+    return SkipTranscoderConfig(**default_dict)
+
+
+def build_jumprelu_skip_transcoder_cfg(**kwargs: Any) -> JumpReLUSkipTranscoderConfig:
+    """Helper to create a JumpReLUSkipTranscoderConfig with defaults."""
+    default_dict = build_transcoder_cfg(**kwargs).to_dict()
+    default_dict.pop("architecture", None)
+    default_dict.pop("metadata", None)
+    return JumpReLUSkipTranscoderConfig(**default_dict)
 
 
 class TestTranscoderConfig:
@@ -287,6 +307,334 @@ class TestJumpReLUTranscoder:
     def test_jumprelu_transcoder_architecture(self):
         cfg = build_jumprelu_transcoder_cfg()
         assert cfg.architecture() == "jumprelu_transcoder"
+
+
+class TestSkipTranscoder:
+    """Test SkipTranscoder functionality."""
+
+    def test_skip_transcoder_initialization(self):
+        cfg = build_skip_transcoder_cfg()
+        transcoder = SkipTranscoder(cfg)
+
+        # Check W_skip parameter exists and has correct shape
+        assert hasattr(transcoder, "W_skip")
+        assert transcoder.W_skip.shape == (cfg.d_out, cfg.d_in)
+        # W_skip should be initialized to zeros
+        assert torch.all(transcoder.W_skip == 0)
+
+    def test_skip_transcoder_forward_with_zero_skip(self):
+        """With W_skip=0, output should match base Transcoder."""
+        cfg = build_skip_transcoder_cfg(d_in=32, d_sae=64, d_out=48)
+        skip_transcoder = SkipTranscoder(cfg)
+
+        # Create base transcoder with same weights
+        base_cfg = build_transcoder_cfg(d_in=32, d_sae=64, d_out=48)
+        base_transcoder = Transcoder(base_cfg)
+        base_transcoder.W_enc.data = skip_transcoder.W_enc.data.clone()
+        base_transcoder.W_dec.data = skip_transcoder.W_dec.data.clone()
+        base_transcoder.b_enc.data = skip_transcoder.b_enc.data.clone()
+        base_transcoder.b_dec.data = skip_transcoder.b_dec.data.clone()
+
+        x = torch.randn(10, cfg.d_in)
+        skip_out, skip_feat = skip_transcoder.forward_with_activations(x)
+        base_out, base_feat = base_transcoder.forward_with_activations(x)
+
+        # With W_skip=0, outputs should be identical
+        assert_close(skip_out, base_out)
+        assert_close(skip_feat, base_feat)
+
+    def test_skip_transcoder_forward_with_nonzero_skip(self):
+        """Test that skip connection is properly applied."""
+        cfg = build_skip_transcoder_cfg(d_in=32, d_sae=64, d_out=48)
+        transcoder = SkipTranscoder(cfg)
+
+        # Set W_skip to non-zero
+        transcoder.W_skip.data = torch.randn_like(transcoder.W_skip)
+
+        x = torch.randn(10, cfg.d_in)
+        output, _ = transcoder.forward_with_activations(x)
+
+        # Compute expected skip contribution
+        skip_contribution = x @ transcoder.W_skip.T
+
+        # Get output without skip (by temporarily zeroing W_skip)
+        w_skip_backup = transcoder.W_skip.data.clone()
+        transcoder.W_skip.data.zero_()
+        output_no_skip, _ = transcoder.forward_with_activations(x)
+        transcoder.W_skip.data = w_skip_backup
+
+        # Output should be no-skip output + skip contribution
+        assert_close(output, output_no_skip + skip_contribution)
+
+    def test_skip_transcoder_architecture(self):
+        cfg = build_skip_transcoder_cfg()
+        assert cfg.architecture() == "skip_transcoder"
+
+    def test_skip_transcoder_from_dict(self):
+        config_dict = {
+            "d_in": 256,
+            "d_sae": 512,
+            "d_out": 384,
+            "dtype": "float32",
+            "device": "cpu",
+            "architecture": "skip_transcoder",
+            "apply_b_dec_to_input": False,
+        }
+
+        transcoder = SkipTranscoder.from_dict(config_dict)
+        assert isinstance(transcoder, SkipTranscoder)
+        assert hasattr(transcoder, "W_skip")
+        assert transcoder.cfg.d_in == 256
+        assert transcoder.cfg.d_out == 384
+
+
+class TestJumpReLUSkipTranscoder:
+    """Test JumpReLUSkipTranscoder functionality (double inheritance)."""
+
+    def test_jumprelu_skip_transcoder_initialization(self):
+        """Test that both W_skip and threshold parameters are initialized."""
+        cfg = build_jumprelu_skip_transcoder_cfg()
+        transcoder = JumpReLUSkipTranscoder(cfg)
+
+        # Check W_skip from SkipTranscoder
+        assert hasattr(transcoder, "W_skip")
+        assert transcoder.W_skip.shape == (cfg.d_out, cfg.d_in)
+        assert torch.all(transcoder.W_skip == 0)
+
+        # Check threshold from JumpReLUTranscoder
+        assert hasattr(transcoder, "threshold")
+        assert transcoder.threshold.shape == (cfg.d_sae,)
+        assert torch.all(transcoder.threshold == 0)
+
+        # Check base transcoder weights
+        assert transcoder.W_enc.shape == (cfg.d_in, cfg.d_sae)
+        assert transcoder.W_dec.shape == (cfg.d_sae, cfg.d_out)
+        assert transcoder.b_enc.shape == (cfg.d_sae,)
+        assert transcoder.b_dec.shape == (cfg.d_out,)
+
+    def test_jumprelu_skip_transcoder_uses_jumprelu_activation(self):
+        """Test that JumpReLU activation is used, not regular ReLU."""
+        cfg = build_jumprelu_skip_transcoder_cfg(d_in=8, d_sae=16, d_out=12)
+        transcoder = JumpReLUSkipTranscoder(cfg)
+
+        # Set threshold high enough to zero out some activations
+        transcoder.threshold.data = torch.ones(cfg.d_sae) * 0.5
+
+        # Set W_enc to identity-like for predictable pre-activations
+        transcoder.W_enc.data = torch.eye(cfg.d_in, cfg.d_sae)
+        transcoder.b_enc.data = torch.zeros(cfg.d_sae)
+
+        # Input with values < threshold for first 8 features
+        x = torch.ones(4, cfg.d_in) * 0.3
+
+        features = transcoder.encode(x)
+
+        # Pre-activations should be ~0.3 which is < 0.5 threshold
+        # So first 8 features should be zeroed by JumpReLU
+        assert torch.all(features[:, :8] == 0)
+
+    def test_jumprelu_skip_transcoder_uses_skip_connection(self):
+        """Test that skip connection is applied in forward pass."""
+        cfg = build_jumprelu_skip_transcoder_cfg(d_in=32, d_sae=64, d_out=48)
+        transcoder = JumpReLUSkipTranscoder(cfg)
+
+        # Set non-zero W_skip
+        transcoder.W_skip.data = torch.randn_like(transcoder.W_skip)
+
+        x = torch.randn(10, cfg.d_in)
+        output, _ = transcoder.forward_with_activations(x)
+
+        # Compute expected skip contribution
+        skip_contribution = x @ transcoder.W_skip.T
+
+        # Get output without skip
+        w_skip_backup = transcoder.W_skip.data.clone()
+        transcoder.W_skip.data.zero_()
+        output_no_skip, _ = transcoder.forward_with_activations(x)
+        transcoder.W_skip.data = w_skip_backup
+
+        # Output should include skip contribution
+        assert_close(output, output_no_skip + skip_contribution)
+
+    def test_jumprelu_skip_transcoder_architecture(self):
+        cfg = build_jumprelu_skip_transcoder_cfg()
+        assert cfg.architecture() == "jumprelu_skip_transcoder"
+
+    def test_jumprelu_skip_transcoder_fold_w_dec_norm(self):
+        """Test that fold_W_dec_norm properly scales threshold (from JumpReLU)."""
+        cfg = build_jumprelu_skip_transcoder_cfg()
+        transcoder = JumpReLUSkipTranscoder(cfg)
+
+        # Set non-zero threshold
+        transcoder.threshold.data = torch.ones_like(transcoder.threshold) * 0.5
+
+        # Set W_dec to non-unit norm
+        transcoder.W_dec.data = torch.randn_like(transcoder.W_dec) * 2.0
+        original_dec_norms = transcoder.W_dec.norm(dim=1).clone()
+        original_threshold = transcoder.threshold.clone()
+
+        transcoder.fold_W_dec_norm()
+
+        # Check W_dec is normalized
+        assert transcoder.W_dec.norm(dim=1).mean().item() == pytest.approx(
+            1.0, abs=1e-6
+        )
+
+        # Check threshold is scaled by decoder norms
+        expected_threshold = original_threshold * original_dec_norms
+        assert_close(transcoder.threshold, expected_threshold)
+
+    def test_jumprelu_skip_transcoder_from_dict(self):
+        config_dict = {
+            "d_in": 256,
+            "d_sae": 512,
+            "d_out": 384,
+            "dtype": "float32",
+            "device": "cpu",
+            "architecture": "jumprelu_skip_transcoder",
+            "apply_b_dec_to_input": False,
+        }
+
+        transcoder = JumpReLUSkipTranscoder.from_dict(config_dict)
+        assert isinstance(transcoder, JumpReLUSkipTranscoder)
+        assert hasattr(transcoder, "W_skip")
+        assert hasattr(transcoder, "threshold")
+
+    def test_jumprelu_skip_transcoder_mro(self):
+        """Test that method resolution order is correct for diamond inheritance."""
+        # JumpReLUSkipTranscoder should inherit:
+        # - encode from JumpReLUTranscoder (with threshold)
+        # - forward/forward_with_activations from SkipTranscoder (with skip)
+        cfg = build_jumprelu_skip_transcoder_cfg()
+        transcoder = JumpReLUSkipTranscoder(cfg)
+
+        # Check MRO - JumpReLUTranscoder should come before SkipTranscoder
+        mro = type(transcoder).__mro__
+        jumprelu_idx = mro.index(JumpReLUTranscoder)
+        skip_idx = mro.index(SkipTranscoder)
+        assert (
+            jumprelu_idx < skip_idx
+        ), "JumpReLUTranscoder should be before SkipTranscoder in MRO"
+
+
+class TestJumpReLUTranscoderVariants:
+    """Parametrized tests for JumpReLUTranscoder and JumpReLUSkipTranscoder."""
+
+    @pytest.fixture(params=["jumprelu", "jumprelu_skip"])
+    def jumprelu_transcoder(
+        self, request: pytest.FixtureRequest
+    ) -> JumpReLUTranscoder | JumpReLUSkipTranscoder:
+        """Create either JumpReLUTranscoder or JumpReLUSkipTranscoder."""
+        if request.param == "jumprelu":
+            cfg = build_jumprelu_transcoder_cfg(d_in=32, d_sae=64, d_out=48)
+            return JumpReLUTranscoder(cfg)
+        cfg = build_jumprelu_skip_transcoder_cfg(d_in=32, d_sae=64, d_out=48)
+        return JumpReLUSkipTranscoder(cfg)
+
+    def test_has_threshold_parameter(
+        self, jumprelu_transcoder: JumpReLUTranscoder | JumpReLUSkipTranscoder
+    ) -> None:
+        """Both variants should have threshold parameter."""
+        assert hasattr(jumprelu_transcoder, "threshold")
+        assert jumprelu_transcoder.threshold.shape == (64,)
+
+    def test_threshold_affects_encoding(
+        self, jumprelu_transcoder: JumpReLUTranscoder | JumpReLUSkipTranscoder
+    ) -> None:
+        """Both variants should apply threshold in encoding."""
+        jumprelu_transcoder.threshold.data = (
+            torch.ones(64) * 1000
+        )  # Very high threshold
+        jumprelu_transcoder.b_enc.data.zero_()
+
+        x = torch.randn(10, 32)
+        features = jumprelu_transcoder.encode(x)
+
+        # With very high threshold, all features should be zero
+        assert torch.all(features == 0)
+
+    def test_forward_output_shape(
+        self, jumprelu_transcoder: JumpReLUTranscoder | JumpReLUSkipTranscoder
+    ) -> None:
+        """Both variants should produce correct output shapes."""
+        x = torch.randn(10, 32)
+        output, features = jumprelu_transcoder.forward_with_activations(x)
+
+        assert output.shape == (10, 48)
+        assert features.shape == (10, 64)
+
+    def test_fold_w_dec_norm_scales_threshold(
+        self, jumprelu_transcoder: JumpReLUTranscoder | JumpReLUSkipTranscoder
+    ) -> None:
+        """Both variants should scale threshold when folding decoder norms."""
+        jumprelu_transcoder.threshold.data = torch.ones(64) * 0.5
+        jumprelu_transcoder.W_dec.data = (
+            torch.randn_like(jumprelu_transcoder.W_dec) * 2.0
+        )
+        original_dec_norms = jumprelu_transcoder.W_dec.norm(dim=1).clone()
+        original_threshold = jumprelu_transcoder.threshold.clone()
+
+        jumprelu_transcoder.fold_W_dec_norm()
+
+        expected_threshold = original_threshold * original_dec_norms
+        assert_close(jumprelu_transcoder.threshold, expected_threshold)
+
+
+class TestSkipTranscoderVariants:
+    """Parametrized tests for SkipTranscoder and JumpReLUSkipTranscoder."""
+
+    @pytest.fixture(params=["skip", "jumprelu_skip"])
+    def skip_transcoder(
+        self, request: pytest.FixtureRequest
+    ) -> SkipTranscoder | JumpReLUSkipTranscoder:
+        """Create either SkipTranscoder or JumpReLUSkipTranscoder."""
+        if request.param == "skip":
+            cfg = build_skip_transcoder_cfg(d_in=32, d_sae=64, d_out=48)
+            return SkipTranscoder(cfg)
+        cfg = build_jumprelu_skip_transcoder_cfg(d_in=32, d_sae=64, d_out=48)
+        return JumpReLUSkipTranscoder(cfg)
+
+    def test_has_w_skip_parameter(
+        self, skip_transcoder: SkipTranscoder | JumpReLUSkipTranscoder
+    ) -> None:
+        """Both variants should have W_skip parameter."""
+        assert hasattr(skip_transcoder, "W_skip")
+        assert skip_transcoder.W_skip.shape == (48, 32)
+
+    def test_w_skip_initialized_to_zeros(
+        self, skip_transcoder: SkipTranscoder | JumpReLUSkipTranscoder
+    ) -> None:
+        """Both variants should initialize W_skip to zeros."""
+        assert torch.all(skip_transcoder.W_skip == 0)
+
+    def test_skip_connection_applied(
+        self, skip_transcoder: SkipTranscoder | JumpReLUSkipTranscoder
+    ) -> None:
+        """Both variants should apply skip connection in forward pass."""
+        # Set non-zero W_skip
+        skip_transcoder.W_skip.data = torch.randn_like(skip_transcoder.W_skip)
+
+        x = torch.randn(10, 32)
+        skip_contribution = x @ skip_transcoder.W_skip.T
+
+        output, _ = skip_transcoder.forward_with_activations(x)
+
+        # Get output without skip
+        skip_transcoder.W_skip.data.zero_()
+        output_no_skip, _ = skip_transcoder.forward_with_activations(x)
+
+        # Re-add skip for comparison
+        assert_close(output, output_no_skip + skip_contribution, atol=1e-5)
+
+    def test_forward_output_shape(
+        self, skip_transcoder: SkipTranscoder | JumpReLUSkipTranscoder
+    ) -> None:
+        """Both variants should produce correct output shapes."""
+        x = torch.randn(10, 32)
+        output, features = skip_transcoder.forward_with_activations(x)
+
+        assert output.shape == (10, 48)
+        assert features.shape == (10, 64)
 
 
 class TestTranscoderIntegration:
