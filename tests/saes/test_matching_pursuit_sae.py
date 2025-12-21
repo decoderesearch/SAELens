@@ -3,8 +3,10 @@ from transformer_lens.hook_points import torch
 from sae_lens.saes.matching_pursuit_sae import (
     MatchingPursuitSAE,
     MatchingPursuitTrainingSAE,
+    _encode_matching_pursuit,
 )
 from tests.helpers import (
+    assert_close,
     build_matching_pursuit_sae_cfg,
     build_matching_pursuit_sae_training_cfg,
 )
@@ -40,3 +42,60 @@ def test_MatchingPursuitTrainingSAE_selects_correct_latents_with_orthognal_dicti
     feats = sae.encode(sae_in)
     assert torch.allclose(feats, true_feats, rtol=1e-4, atol=1e-6)
     assert torch.allclose(sae.decode(feats), sae_in, rtol=1e-4, atol=1e-6)
+
+
+def _encode_matching_pursuit_reference_implementation(
+    sae_in_centered: torch.Tensor,
+    W_dec: torch.Tensor,
+    residual_threshold: float,
+) -> torch.Tensor:
+    residual = sae_in_centered.clone()
+    batch_size = sae_in_centered.shape[0]
+
+    z = torch.zeros(batch_size, W_dec.shape[0], device=W_dec.device)
+    prev_support = torch.zeros_like(z).bool()
+    done = torch.zeros(batch_size, dtype=torch.bool, device=W_dec.device)
+
+    while not done.all():
+        WTr = torch.relu(residual @ W_dec.T)
+
+        values, indices = torch.max(torch.relu(WTr), dim=1, keepdim=True)
+
+        z_ = torch.zeros_like(z)
+        z_.scatter_(1, indices, values)
+        z = torch.where(done.unsqueeze(1), z, z + z_)
+
+        update = torch.matmul(z_, W_dec)
+        residual = torch.where(done.unsqueeze(1), residual, residual - update)
+
+        support = z != 0
+
+        # A sample is considered converged if:
+        # (1) the support set hasn't changed from the previous iteration (stability), or
+        # (2) the residual norm is below a given threshold (good enough reconstruction)
+        converged = (support == prev_support).all(dim=1) | (
+            residual.norm(dim=1) < residual_threshold
+        )
+        done = done | converged
+        prev_support = support
+
+    return z
+
+
+def test_encode_matching_pursuit_matches_reference_implementation():
+    sae_in_centered = torch.randn(10, 10)
+    W_dec = torch.randn(10, 10, requires_grad=True)
+    W_dec_ref = W_dec.clone().detach().requires_grad_(True)
+    residual_threshold = 1e-2
+    z_ref = _encode_matching_pursuit_reference_implementation(
+        sae_in_centered, W_dec_ref, residual_threshold
+    )
+    z = _encode_matching_pursuit(sae_in_centered, W_dec, residual_threshold)
+
+    (sae_in_centered - z_ref).norm(dim=1).mean().backward()
+    (sae_in_centered - z).norm(dim=1).mean().backward()
+
+    assert_close(z, z_ref)
+    assert W_dec.grad is not None
+    assert W_dec_ref.grad is not None
+    assert_close(W_dec.grad, W_dec_ref.grad)

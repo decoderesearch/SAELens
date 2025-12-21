@@ -215,22 +215,27 @@ def _encode_matching_pursuit(
 ) -> torch.Tensor:
     residual = sae_in_centered.clone()
     batch_size = sae_in_centered.shape[0]
+    d_sae = W_dec.shape[0]
 
-    z = torch.zeros(batch_size, W_dec.shape[0], device=W_dec.device)
-    prev_support = torch.zeros_like(z).bool()
+    z = torch.zeros(batch_size, d_sae, device=W_dec.device, dtype=sae_in_centered.dtype)
+    prev_support = torch.zeros(batch_size, d_sae, dtype=torch.bool, device=W_dec.device)
     done = torch.zeros(batch_size, dtype=torch.bool, device=W_dec.device)
 
     while not done.all():
         WTr = torch.relu(residual @ W_dec.T)
 
-        values, indices = torch.max(torch.relu(WTr), dim=1, keepdim=True)
+        values, indices = WTr.max(dim=1, keepdim=True)
+        indices_flat = indices.squeeze(1)  # [batch_size]
 
-        z_ = torch.zeros_like(z)
-        z_.scatter_(1, indices, values)
-        z = torch.where(done.unsqueeze(1), z, z + z_)
+        # Mask values for samples that are already done
+        active_mask = (~done).unsqueeze(1)
+        masked_values = values * active_mask.to(values.dtype)
 
-        update = torch.matmul(z_, W_dec)
-        residual = torch.where(done.unsqueeze(1), residual, residual - update)
+        z.scatter_add_(1, indices, masked_values)
+
+        # Compute residual update efficiently by indexing W_dec directly
+        selected_dec = W_dec[indices_flat]  # [batch_size, d_in]
+        residual = residual - masked_values * selected_dec
 
         support = z != 0
 
