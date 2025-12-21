@@ -274,8 +274,16 @@ def _encode_matching_pursuit(
     done = torch.zeros(batch_size, dtype=torch.bool, device=W_dec.device)
 
     while not done.all():
-        values, indices = (residual @ W_dec.T).relu().max(dim=1, keepdim=True)
-        indices_flat = indices.squeeze(1)  # [batch_size]
+        # Find indices without gradients - the full [batch, d_sae] matmul result
+        # doesn't need to be saved for backward since max indices don't need gradients
+        with torch.no_grad():
+            indices = (residual @ W_dec.T).relu().max(dim=1, keepdim=True).indices
+            indices_flat = indices.squeeze(1)  # [batch_size]
+
+        # Compute values with gradients using only the selected decoder rows.
+        # This stores [batch, d_in] for backward instead of [batch, d_sae].
+        selected_dec = W_dec[indices_flat]  # [batch_size, d_in]
+        values = (residual * selected_dec).sum(dim=-1, keepdim=True).relu()
 
         # Mask values for samples that are already done
         active_mask = (~done).unsqueeze(1)
@@ -283,8 +291,7 @@ def _encode_matching_pursuit(
 
         acts.scatter_add_(1, indices, masked_values)
 
-        # Compute residual update efficiently by indexing W_dec directly
-        selected_dec = W_dec[indices_flat]  # [batch_size, d_in]
+        # Update residual
         residual = residual - masked_values * selected_dec
 
         with torch.no_grad():

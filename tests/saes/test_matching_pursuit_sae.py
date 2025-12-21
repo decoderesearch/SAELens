@@ -116,4 +116,7 @@ def test_encode_matching_pursuit_matches_reference_implementation():
     assert_close(z, z_ref)
     assert W_dec.grad is not None
     assert W_dec_ref.grad is not None
-    assert_close(W_dec.grad, W_dec_ref.grad)
+    # Use looser tolerances for gradients since the optimized implementation
+    # computes values differently (via indexing + dot product instead of full matmul),
+    # leading to small numerical differences in floating-point accumulation
+    assert_close(W_dec.grad, W_dec_ref.grad, atol=1e-4, rtol=1e-4)
