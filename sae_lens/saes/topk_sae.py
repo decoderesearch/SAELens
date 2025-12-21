@@ -465,7 +465,7 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
         scale = min(num_dead / k_aux, 1.0)
         k_aux = min(k_aux, num_dead)
 
-        auxk_acts = _calculate_topk_aux_acts(
+        auxk_acts = calculate_topk_aux_acts(
             k_aux=k_aux,
             hidden_pre=hidden_pre,
             dead_neuron_mask=dead_neuron_mask,
@@ -490,7 +490,7 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
             )
 
 
-def _calculate_topk_aux_acts(
+def calculate_topk_aux_acts(
     k_aux: int,
     hidden_pre: torch.Tensor,
     dead_neuron_mask: torch.Tensor,

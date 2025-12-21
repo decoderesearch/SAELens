@@ -14,6 +14,7 @@ from sae_lens.saes.sae import (
     TrainingSAEConfig,
     TrainStepInput,
 )
+from sae_lens.saes.topk_sae import calculate_topk_aux_acts
 
 # --- inference ---
 
@@ -111,6 +112,8 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
 
     Args:
         residual_threshold (float): residual error at which to stop selecting latents. Default 1e-2.
+        aux_loss_coefficient (float): Coefficient for the auxiliary loss that revives dead latents.
+            Defaults to 1.0.
         decoder_init_norm (float | None): Norm to initialize decoder weights to.
             0.1 corresponds to the "heuristic" initialization from Anthropic's April update.
             Use None to disable. Inherited from TrainingSAEConfig. Defaults to 0.1.
@@ -135,6 +138,7 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
     """
 
     residual_threshold: float = 1e-2
+    aux_loss_coefficient: float = 1.0
 
     @override
     @classmethod
@@ -188,7 +192,14 @@ class MatchingPursuitTrainingSAE(TrainingSAE[MatchingPursuitTrainingSAEConfig]):
         hidden_pre: torch.Tensor,
         sae_out: torch.Tensor,
     ) -> dict[str, torch.Tensor]:
-        return {}
+        # Calculate the auxiliary loss for dead neurons
+        aux_loss = self.calculate_topk_aux_loss(
+            sae_in=step_input.sae_in,
+            sae_out=sae_out,
+            hidden_pre=hidden_pre,
+            dead_neuron_mask=step_input.dead_neuron_mask,
+        )
+        return {"auxiliary_reconstruction_loss": aux_loss}
 
     @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
@@ -203,6 +214,41 @@ class MatchingPursuitTrainingSAE(TrainingSAE[MatchingPursuitTrainingSAEConfig]):
         sae_out_pre = self.hook_sae_recons(sae_out_pre)
         sae_out_pre = self.run_time_activation_norm_fn_out(sae_out_pre)
         return self.reshape_fn_out(sae_out_pre, self.d_head)
+
+    def calculate_topk_aux_loss(
+        self,
+        sae_in: torch.Tensor,
+        sae_out: torch.Tensor,
+        hidden_pre: torch.Tensor,
+        dead_neuron_mask: torch.Tensor | None,
+    ) -> torch.Tensor:
+        """
+        Calculate auxiliary loss, based aux loss for topk SAEs.
+        """
+        # Mostly taken from https://github.com/EleutherAI/sae/blob/main/sae/sae.py, except without variance normalization
+        # NOTE: checking the number of dead neurons will force a GPU sync, so performance can likely be improved here
+        if dead_neuron_mask is None or (num_dead := int(dead_neuron_mask.sum())) == 0:
+            return sae_out.new_tensor(0.0)
+        residual = (sae_in - sae_out).detach()
+
+        # Heuristic from Appendix B.1 in the paper
+        k_aux = sae_in.shape[-1] // 2
+
+        # Reduce the scale of the loss if there are a small number of dead latents
+        scale = min(num_dead / k_aux, 1.0)
+        k_aux = min(k_aux, num_dead)
+
+        auxk_acts = calculate_topk_aux_acts(
+            k_aux=k_aux,
+            hidden_pre=hidden_pre,
+            dead_neuron_mask=dead_neuron_mask,
+        )
+
+        # Encourage the top ~50% of dead latents to predict the residual of the
+        # top k living latents
+        recons = self.decode(auxk_acts)
+        auxk_loss = (recons - residual).pow(2).sum(dim=-1).mean()
+        return self.cfg.aux_loss_coefficient * scale * auxk_loss
 
 
 # --- shared ---
