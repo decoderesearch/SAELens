@@ -44,6 +44,24 @@ def test_MatchingPursuitTrainingSAE_selects_correct_latents_with_orthognal_dicti
     assert torch.allclose(sae.decode(feats), sae_in, rtol=1e-4, atol=1e-6)
 
 
+def test_MatchingPursuitTrainingSAE_handles_3d_inputs():
+    sae = MatchingPursuitTrainingSAE(
+        build_matching_pursuit_sae_training_cfg(
+            d_in=10, d_sae=10, residual_threshold=1e-8
+        )
+    )
+    sae.b_dec.data = torch.randn_like(sae.b_dec)
+
+    sae_in_3d = torch.randn(32, 10, 10)
+    sae_in_2d = sae_in_3d.view(320, 10)
+
+    feats_3d = sae.encode(sae_in_3d)
+    feats_2d = sae.encode(sae_in_2d)
+    assert feats_3d.shape == (32, 10, 10)
+    assert feats_2d.shape == (320, 10)
+    assert_close(feats_3d.view(320, 10), feats_2d)
+
+
 def _encode_matching_pursuit_reference_implementation(
     sae_in_centered: torch.Tensor,
     W_dec: torch.Tensor,

@@ -214,10 +214,16 @@ def _encode_matching_pursuit(
     residual_threshold: float,
 ) -> torch.Tensor:
     residual = sae_in_centered.clone()
-    batch_size = sae_in_centered.shape[0]
+
+    # Handle multi-dimensional inputs by flattening all but the last dimension
+    original_shape = residual.shape
+    if residual.ndim > 2:
+        residual = residual.reshape(-1, residual.shape[-1])
+
+    batch_size = residual.shape[0]
     d_sae = W_dec.shape[0]
 
-    z = torch.zeros(batch_size, d_sae, device=W_dec.device, dtype=sae_in_centered.dtype)
+    acts = torch.zeros(batch_size, d_sae, device=W_dec.device, dtype=residual.dtype)
     prev_support = torch.zeros(batch_size, d_sae, dtype=torch.bool, device=W_dec.device)
     done = torch.zeros(batch_size, dtype=torch.bool, device=W_dec.device)
 
@@ -231,13 +237,13 @@ def _encode_matching_pursuit(
         active_mask = (~done).unsqueeze(1)
         masked_values = values * active_mask.to(values.dtype)
 
-        z.scatter_add_(1, indices, masked_values)
+        acts.scatter_add_(1, indices, masked_values)
 
         # Compute residual update efficiently by indexing W_dec directly
         selected_dec = W_dec[indices_flat]  # [batch_size, d_in]
         residual = residual - masked_values * selected_dec
 
-        support = z != 0
+        support = acts != 0
 
         # A sample is considered converged if:
         # (1) the support set hasn't changed from the previous iteration (stability), or
@@ -248,4 +254,8 @@ def _encode_matching_pursuit(
         done = done | converged
         prev_support = support
 
-    return z
+    # Reshape acts back to original shape (replacing last dimension with d_sae)
+    if len(original_shape) > 2:
+        acts = acts.reshape(*original_shape[:-1], acts.shape[-1])
+
+    return acts
