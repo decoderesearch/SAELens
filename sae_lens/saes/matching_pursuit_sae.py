@@ -27,6 +27,8 @@ class MatchingPursuitSAEConfig(SAEConfig):
 
     Args:
         residual_threshold (float): residual error at which to stop selecting latents. Default 1e-2.
+        max_iterations (int | None): Maximum iterations (default: d_in if set to None).
+            Defaults to None.
         d_in (int): Input dimension (dimensionality of the activations being encoded).
             Inherited from SAEConfig.
         d_sae (int): SAE latent dimension (number of features in the SAE).
@@ -48,6 +50,7 @@ class MatchingPursuitSAEConfig(SAEConfig):
     """
 
     residual_threshold: float = 1e-2
+    max_iterations: int | None = None
 
     @override
     @classmethod
@@ -118,6 +121,8 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
         use_gram (bool): Whether to use the Gram matrix for incremental correlation updates.
             This is faster per-iteration but uses O(d_sae^2) memory. Recommended for small d_sae.
             Defaults to False.
+        max_iterations (int | None): Maximum iterations (default: d_in if set to None).
+            Defaults to None.
         decoder_init_norm (float | None): Norm to initialize decoder weights to.
             0.1 corresponds to the "heuristic" initialization from Anthropic's April update.
             Use None to disable. Inherited from TrainingSAEConfig. Defaults to 0.1.
@@ -144,6 +149,7 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
     residual_threshold: float = 1e-2
     aux_loss_coefficient: float = 1.0
     use_gram: bool = False
+    max_iterations: int | None = None
 
     @override
     @classmethod
@@ -176,7 +182,11 @@ class MatchingPursuitTrainingSAE(TrainingSAE[MatchingPursuitTrainingSAEConfig]):
 
         sae_in = self.process_sae_in(x)
         acts = _encode_matching_pursuit(
-            sae_in, self.W_dec, self.cfg.residual_threshold, use_gram=self.cfg.use_gram
+            sae_in,
+            self.W_dec,
+            self.cfg.residual_threshold,
+            use_gram=self.cfg.use_gram,
+            max_iterations=self.cfg.max_iterations,
         )
         return acts, torch.zeros_like(acts)
 
@@ -284,7 +294,7 @@ def _encode_matching_pursuit(
         sae_in_centered: Input activations, centered by b_dec. Shape [..., d_in].
         W_dec: Decoder weight matrix. Shape [d_sae, d_in].
         residual_threshold: Stop when residual norm falls below this.
-        max_iterations: Maximum iterations (default: d_sae). Prevents infinite loops.
+        max_iterations: Maximum iterations (default: d_in). Prevents infinite loops.
         use_gram: If True, compute the Gram matrix (W_dec @ W_dec.T) and use incremental
             correlation updates. This is faster per-iteration but uses O(d_sae^2) memory.
             Only recommended for small d_sae (e.g., during training with small SAEs).
