@@ -274,9 +274,7 @@ def _encode_matching_pursuit(
     done = torch.zeros(batch_size, dtype=torch.bool, device=W_dec.device)
 
     while not done.all():
-        WTr = torch.relu(residual @ W_dec.T)
-
-        values, indices = WTr.max(dim=1, keepdim=True)
+        values, indices = (residual @ W_dec.T).relu().max(dim=1, keepdim=True)
         indices_flat = indices.squeeze(1)  # [batch_size]
 
         # Mask values for samples that are already done
@@ -289,16 +287,17 @@ def _encode_matching_pursuit(
         selected_dec = W_dec[indices_flat]  # [batch_size, d_in]
         residual = residual - masked_values * selected_dec
 
-        support = acts != 0
+        with torch.no_grad():
+            support = acts != 0
 
-        # A sample is considered converged if:
-        # (1) the support set hasn't changed from the previous iteration (stability), or
-        # (2) the residual norm is below a given threshold (good enough reconstruction)
-        converged = (support == prev_support).all(dim=1) | (
-            residual.norm(dim=1) < residual_threshold
-        )
-        done = done | converged
-        prev_support = support
+            # A sample is considered converged if:
+            # (1) the support set hasn't changed from the previous iteration (stability), or
+            # (2) the residual norm is below a given threshold (good enough reconstruction)
+            converged = (support == prev_support).all(dim=1) | (
+                residual.norm(dim=-1) < residual_threshold
+            )
+            done = done | converged
+            prev_support = support
 
     # Reshape acts back to original shape (replacing last dimension with d_sae)
     if len(original_shape) > 2:
