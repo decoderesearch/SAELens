@@ -235,7 +235,7 @@ def _encode_matching_pursuit(
 
         # Mask values for samples that are already done
         active_mask = (~done).unsqueeze(1)
-        masked_values = values * active_mask.to(values.dtype)
+        masked_values = (values * active_mask.to(values.dtype)).to(acts.dtype)
 
         acts.scatter_add_(1, indices, masked_values)
 
