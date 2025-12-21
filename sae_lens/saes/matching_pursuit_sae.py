@@ -57,7 +57,7 @@ class MatchingPursuitSAEConfig(SAEConfig):
 
 class MatchingPursuitSAE(SAE[MatchingPursuitSAEConfig]):
     """
-    An inference-only sparse autoencoder using a "matching pursuit" activation function
+    An inference-only sparse autoencoder using a "matching pursuit" activation function.
     """
 
     # Matching pursuit is a tied SAE, so we use W_enc as the decoder transposed
@@ -115,6 +115,9 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
         residual_threshold (float): residual error at which to stop selecting latents. Default 1e-2.
         aux_loss_coefficient (float): Coefficient for the auxiliary loss that revives dead latents.
             Defaults to 1.0.
+        use_gram (bool): Whether to use the Gram matrix for incremental correlation updates.
+            This is faster per-iteration but uses O(d_sae^2) memory. Recommended for small d_sae.
+            Defaults to False.
         decoder_init_norm (float | None): Norm to initialize decoder weights to.
             0.1 corresponds to the "heuristic" initialization from Anthropic's April update.
             Use None to disable. Inherited from TrainingSAEConfig. Defaults to 0.1.
@@ -140,6 +143,7 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
 
     residual_threshold: float = 1e-2
     aux_loss_coefficient: float = 1.0
+    use_gram: bool = False
 
     @override
     @classmethod
@@ -171,7 +175,9 @@ class MatchingPursuitTrainingSAE(TrainingSAE[MatchingPursuitTrainingSAEConfig]):
         """
 
         sae_in = self.process_sae_in(x)
-        acts = _encode_matching_pursuit(sae_in, self.W_dec, self.cfg.residual_threshold)
+        acts = _encode_matching_pursuit(
+            sae_in, self.W_dec, self.cfg.residual_threshold, use_gram=self.cfg.use_gram
+        )
         return acts, torch.zeros_like(acts)
 
     @override
@@ -268,8 +274,21 @@ def _encode_matching_pursuit(
     sae_in_centered: torch.Tensor,
     W_dec: torch.Tensor,
     residual_threshold: float,
-    check_done_freq: int = 10,
+    max_iterations: int | None = None,
+    use_gram: bool = False,
 ) -> torch.Tensor:
+    """
+    Matching pursuit encoding.
+
+    Args:
+        sae_in_centered: Input activations, centered by b_dec. Shape [..., d_in].
+        W_dec: Decoder weight matrix. Shape [d_sae, d_in].
+        residual_threshold: Stop when residual norm falls below this.
+        max_iterations: Maximum iterations (default: d_sae). Prevents infinite loops.
+        use_gram: If True, compute the Gram matrix (W_dec @ W_dec.T) and use incremental
+            correlation updates. This is faster per-iteration but uses O(d_sae^2) memory.
+            Only recommended for small d_sae (e.g., during training with small SAEs).
+    """
     residual = sae_in_centered.clone()
 
     # Handle multi-dimensional inputs by flattening all but the last dimension
@@ -278,46 +297,68 @@ def _encode_matching_pursuit(
         residual = residual.reshape(-1, residual.shape[-1])
 
     batch_size = residual.shape[0]
-    d_sae = W_dec.shape[0]
+    d_sae, d_in = W_dec.shape
+
+    if max_iterations is None:
+        max_iterations = d_in  # Sensible upper bound
 
     acts = torch.zeros(batch_size, d_sae, device=W_dec.device, dtype=residual.dtype)
     prev_support = torch.zeros(batch_size, d_sae, dtype=torch.bool, device=W_dec.device)
     done = torch.zeros(batch_size, dtype=torch.bool, device=W_dec.device)
 
-    while not done.all():
-        # the "not done.all()" forces a GPU sync, so we instead only check done every check_done_freq iterations
-        for _ in range(check_done_freq):
+    # Optionally use Gram matrix for incremental correlation updates
+    W_dec_gram: torch.Tensor | None = None
+    correlations: torch.Tensor | None = None
+    if use_gram:
+        W_dec_gram = W_dec @ W_dec.T
+        correlations = residual @ W_dec.T
+
+    for _ in range(max_iterations):
+        if use_gram and correlations is not None:
+            with torch.no_grad():
+                indices = correlations.relu().max(dim=1, keepdim=True).indices
+                indices_flat = indices.squeeze(1)
+        else:
             # Find indices without gradients - the full [batch, d_sae] matmul result
             # doesn't need to be saved for backward since max indices don't need gradients
             with torch.no_grad():
                 indices = (residual @ W_dec.T).relu().max(dim=1, keepdim=True).indices
                 indices_flat = indices.squeeze(1)  # [batch_size]
 
-            # Compute values with gradients using only the selected decoder rows.
-            # This stores [batch, d_in] for backward instead of [batch, d_sae].
-            selected_dec = W_dec[indices_flat]  # [batch_size, d_in]
-            values = (residual * selected_dec).sum(dim=-1, keepdim=True).relu()
+        # Compute values with gradients using only the selected decoder rows.
+        # This stores [batch, d_in] for backward instead of [batch, d_sae].
+        selected_dec = W_dec[indices_flat]  # [batch_size, d_in]
+        values = (residual * selected_dec).sum(dim=-1, keepdim=True).relu()
 
-            # Mask values for samples that are already done
-            active_mask = (~done).unsqueeze(1)
-            masked_values = (values * active_mask.to(values.dtype)).to(acts.dtype)
+        # Mask values for samples that are already done
+        active_mask = (~done).unsqueeze(1)
+        masked_values = (values * active_mask.to(values.dtype)).to(acts.dtype)
 
-            acts.scatter_add_(1, indices, masked_values)
+        acts.scatter_add_(1, indices, masked_values)
 
-            # Update residual
-            residual = residual - masked_values * selected_dec
+        # Update residual
+        residual = residual - masked_values * selected_dec
 
+        # Incremental correlation update using Gram matrix
+        if use_gram and W_dec_gram is not None and correlations is not None:
             with torch.no_grad():
-                support = acts != 0
+                gram_rows = W_dec_gram[indices_flat]
+            correlations = correlations - masked_values * gram_rows
 
-                # A sample is considered converged if:
-                # (1) the support set hasn't changed from the previous iteration (stability), or
-                # (2) the residual norm is below a given threshold (good enough reconstruction)
-                converged = (support == prev_support).all(dim=1) | (
-                    residual.norm(dim=-1) < residual_threshold
-                )
-                done = done | converged
-                prev_support = support
+        with torch.no_grad():
+            support = acts != 0
+
+            # A sample is considered converged if:
+            # (1) the support set hasn't changed from the previous iteration (stability), or
+            # (2) the residual norm is below a given threshold (good enough reconstruction)
+            converged = (support == prev_support).all(dim=1) | (
+                residual.norm(dim=-1) < residual_threshold
+            )
+            done = done | converged
+            prev_support = support
+
+            if done.all():
+                break
 
     # Reshape acts back to original shape (replacing last dimension with d_sae)
     if len(original_shape) > 2:

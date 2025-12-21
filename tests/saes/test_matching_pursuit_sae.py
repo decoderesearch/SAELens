@@ -1,3 +1,4 @@
+import pytest
 from transformer_lens.hook_points import torch
 
 from sae_lens.saes.matching_pursuit_sae import (
@@ -100,7 +101,8 @@ def _encode_matching_pursuit_reference_implementation(
     return z
 
 
-def test_encode_matching_pursuit_matches_reference_implementation():
+@pytest.mark.parametrize("use_gram", [True, False])
+def test_encode_matching_pursuit_matches_reference_implementation(use_gram: bool):
     sae_in_centered = torch.randn(10, 10)
     W_dec = torch.randn(10, 10, requires_grad=True)
     W_dec_ref = W_dec.clone().detach().requires_grad_(True)
@@ -108,7 +110,9 @@ def test_encode_matching_pursuit_matches_reference_implementation():
     z_ref = _encode_matching_pursuit_reference_implementation(
         sae_in_centered, W_dec_ref, residual_threshold
     )
-    z = _encode_matching_pursuit(sae_in_centered, W_dec, residual_threshold)
+    z = _encode_matching_pursuit(
+        sae_in_centered, W_dec, residual_threshold, use_gram=use_gram
+    )
 
     (sae_in_centered - z_ref).norm(dim=1).mean().backward()
     (sae_in_centered - z).norm(dim=1).mean().backward()
