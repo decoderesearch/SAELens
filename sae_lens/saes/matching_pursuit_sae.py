@@ -118,9 +118,6 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
         residual_threshold (float): residual error at which to stop selecting latents. Default 1e-2.
         aux_loss_coefficient (float): Coefficient for the auxiliary loss that revives dead latents.
             Defaults to 1.0.
-        use_gram (bool): Whether to use the Gram matrix for incremental correlation updates.
-            This is faster per-iteration but uses O(d_sae^2) memory. Recommended for small d_sae.
-            Defaults to False.
         max_iterations (int | None): Maximum iterations (default: d_in if set to None).
             Defaults to None.
         decoder_init_norm (float | None): Norm to initialize decoder weights to.
@@ -148,7 +145,6 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
 
     residual_threshold: float = 1e-2
     aux_loss_coefficient: float = 1.0
-    use_gram: bool = False
     max_iterations: int | None = None
 
     @override
@@ -185,7 +181,6 @@ class MatchingPursuitTrainingSAE(TrainingSAE[MatchingPursuitTrainingSAEConfig]):
             sae_in,
             self.W_dec,
             self.cfg.residual_threshold,
-            use_gram=self.cfg.use_gram,
             max_iterations=self.cfg.max_iterations,
         )
         return acts, torch.zeros_like(acts)
@@ -222,9 +217,13 @@ class MatchingPursuitTrainingSAE(TrainingSAE[MatchingPursuitTrainingSAEConfig]):
     def training_forward_pass(self, step_input: TrainStepInput) -> TrainStepOutput:
         output = super().training_forward_pass(step_input)
         l0 = output.feature_acts.bool().float().sum(-1).to_dense()
+        residual_norm = (step_input.sae_in - output.sae_out).norm(dim=-1)
         output.metrics["max_l0"] = l0.max()
         output.metrics["min_l0"] = l0.min()
-
+        output.metrics["residual_norm"] = residual_norm.mean()
+        output.metrics["residual_threshold_converged_portion"] = (
+            (residual_norm < self.cfg.residual_threshold).float().mean()
+        )
         return output
 
     @override
@@ -285,7 +284,6 @@ def _encode_matching_pursuit(
     W_dec: torch.Tensor,
     residual_threshold: float,
     max_iterations: int | None = None,
-    use_gram: bool = False,
 ) -> torch.Tensor:
     """
     Matching pursuit encoding.
@@ -295,9 +293,6 @@ def _encode_matching_pursuit(
         W_dec: Decoder weight matrix. Shape [d_sae, d_in].
         residual_threshold: Stop when residual norm falls below this.
         max_iterations: Maximum iterations (default: d_in). Prevents infinite loops.
-        use_gram: If True, compute the Gram matrix (W_dec @ W_dec.T) and use incremental
-            correlation updates. This is faster per-iteration but uses O(d_sae^2) memory.
-            Only recommended for small d_sae (e.g., during training with small SAEs).
     """
     residual = sae_in_centered.clone()
 
@@ -316,24 +311,12 @@ def _encode_matching_pursuit(
     prev_support = torch.zeros(batch_size, d_sae, dtype=torch.bool, device=W_dec.device)
     done = torch.zeros(batch_size, dtype=torch.bool, device=W_dec.device)
 
-    # Optionally use Gram matrix for incremental correlation updates
-    W_dec_gram: torch.Tensor | None = None
-    correlations: torch.Tensor | None = None
-    if use_gram:
-        W_dec_gram = W_dec @ W_dec.T
-        correlations = residual @ W_dec.T
-
     for _ in range(max_iterations):
-        if use_gram and correlations is not None:
-            with torch.no_grad():
-                indices = correlations.relu().max(dim=1, keepdim=True).indices
-                indices_flat = indices.squeeze(1)
-        else:
-            # Find indices without gradients - the full [batch, d_sae] matmul result
-            # doesn't need to be saved for backward since max indices don't need gradients
-            with torch.no_grad():
-                indices = (residual @ W_dec.T).relu().max(dim=1, keepdim=True).indices
-                indices_flat = indices.squeeze(1)  # [batch_size]
+        # Find indices without gradients - the full [batch, d_sae] matmul result
+        # doesn't need to be saved for backward since max indices don't need gradients
+        with torch.no_grad():
+            indices = (residual @ W_dec.T).relu().max(dim=1, keepdim=True).indices
+            indices_flat = indices.squeeze(1)  # [batch_size]
 
         # Compute values with gradients using only the selected decoder rows.
         # This stores [batch, d_in] for backward instead of [batch, d_sae].
@@ -348,12 +331,6 @@ def _encode_matching_pursuit(
 
         # Update residual
         residual = residual - masked_values * selected_dec
-
-        # Incremental correlation update using Gram matrix
-        if use_gram and W_dec_gram is not None and correlations is not None:
-            with torch.no_grad():
-                gram_rows = W_dec_gram[indices_flat]
-            correlations = correlations - masked_values * gram_rows
 
         with torch.no_grad():
             support = acts != 0
