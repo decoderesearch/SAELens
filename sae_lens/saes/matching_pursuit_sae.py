@@ -1,5 +1,6 @@
 """Inference-only TopKSAE variant, similar in spirit to StandardSAE but using a TopK-based activation."""
 
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
@@ -147,6 +148,15 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
     @classmethod
     def architecture(cls) -> str:
         return "matching_pursuit"
+
+    @override
+    def __post_init__(self):
+        super().__post_init__()
+        if self.decoder_init_norm != 1.0:
+            self.decoder_init_norm = 1.0
+            warnings.warn(
+                "decoder_init_norm must be set to 1.0 for MatchingPursuitTrainingSAE, setting to 1.0"
+            )
 
 
 class MatchingPursuitTrainingSAE(TrainingSAE[MatchingPursuitTrainingSAEConfig]):

@@ -1,8 +1,10 @@
+import pytest
 from transformer_lens.hook_points import torch
 
 from sae_lens.saes.matching_pursuit_sae import (
     MatchingPursuitSAE,
     MatchingPursuitTrainingSAE,
+    MatchingPursuitTrainingSAEConfig,
     _encode_matching_pursuit,
 )
 from tests.helpers import (
@@ -60,6 +62,14 @@ def test_MatchingPursuitTrainingSAE_handles_3d_inputs():
     assert feats_3d.shape == (32, 10, 10)
     assert feats_2d.shape == (320, 10)
     assert_close(feats_3d.view(320, 10), feats_2d)
+
+
+def test_MatchingPursuitTrainingSAEConfig_raises_warning_if_decoder_init_norm_is_not_1_0():
+    with pytest.warns(UserWarning):
+        cfg = MatchingPursuitTrainingSAEConfig(
+            d_in=10, d_sae=10, residual_threshold=1e-8, decoder_init_norm=0.3
+        )
+        assert cfg.decoder_init_norm == 1.0
 
 
 def _encode_matching_pursuit_reference_implementation(
