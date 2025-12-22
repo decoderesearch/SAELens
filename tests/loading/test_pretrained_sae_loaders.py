@@ -381,6 +381,9 @@ def test_load_sae_config_from_huggingface_matches_from_pretrained():
         sae_id="blocks.0.hook_resid_pre",
         device="cpu",
     )
+    # Normalize dtype format - both "float32" and "torch.float32" are equivalent
+    if direct_sae_cfg.get("dtype") == "torch.float32":
+        direct_sae_cfg["dtype"] = "float32"
     assert direct_sae_cfg == from_pretrained_cfg_dict
 
 
@@ -1332,17 +1335,22 @@ def test_get_mntss_clt_layer_huggingface_loader(
             return str(decoder_path)
         raise ValueError(f"Unexpected filename: {filename}")
 
-    # Mock load_file to return the expected nested structure
-    def mock_load_file(file_path: str, device: str = "cpu") -> dict[str, torch.Tensor]:  # noqa: ARG001
-        if f"W_enc_{folder_name}.safetensors" in file_path:
+    # Mock load_safetensors_weights to return the expected nested structure
+    def mock_load_safetensors_weights(
+        path: str | Path,  # noqa: ARG001
+        device: str = "cpu",  # noqa: ARG001
+        dtype: torch.dtype | str | None = None,  # noqa: ARG001
+    ) -> dict[str, torch.Tensor]:
+        path_str = str(path)
+        if f"W_enc_{folder_name}.safetensors" in path_str:
             return {
                 f"W_enc_{folder_name}": W_enc_tensor,
                 f"b_enc_{folder_name}": b_enc_tensor,
                 f"b_dec_{folder_name}": b_dec_tensor,
             }
-        if f"W_dec_{folder_name}.safetensors" in file_path:
+        if f"W_dec_{folder_name}.safetensors" in path_str:
             return {f"W_dec_{folder_name}": W_dec_tensor}
-        raise ValueError(f"Unexpected file path: {file_path}")
+        raise ValueError(f"Unexpected file path: {path_str}")
 
     # Mock get_safetensors_tensor_shapes to return expected tensor shapes
     def mock_get_safetensors_tensor_shapes(
@@ -1360,7 +1368,8 @@ def test_get_mntss_clt_layer_huggingface_loader(
         "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
     )
     monkeypatch.setattr(
-        "sae_lens.loading.pretrained_sae_loaders.load_file", mock_load_file
+        "sae_lens.loading.pretrained_sae_loaders.load_safetensors_weights",
+        mock_load_safetensors_weights,
     )
     monkeypatch.setattr(
         "sae_lens.loading.pretrained_sae_loaders.get_safetensors_tensor_shapes",
