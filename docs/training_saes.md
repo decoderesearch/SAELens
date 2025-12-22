@@ -204,7 +204,6 @@ sparse_autoencoder = LanguageModelSAETrainingRunner(cfg).run()
 The classic SAE architecture is the Standard L1 SAE, which uses a L1 loss term with ReLU activation. To train a Standard L1 SAE, provide a `StandardTrainingSAEConfig` instance to the `sae` field. The Standard L1 SAE uses the `l1_coefficient` parameter to control the sparsity of the SAE.
 
 ```python
-
 cfg = LanguageModelSAERunnerConfig( # Full config would be defined here
     # ... other LanguageModelSAERunnerConfig parameters ...
     sae=StandardTrainingSAEConfig(
@@ -269,6 +268,57 @@ cfg = LanguageModelSAERunnerConfig( # Full config would be defined here
 sparse_autoencoder = LanguageModelSAETrainingRunner(cfg).run()
 ```
 
+### Training Matching Pursuit SAEs
+
+<!-- prettier-ignore-start -->
+!!! warning "Warning: research architecture"
+    Matching Pursuit SAEs are mainly interesting for researchers studying novel SAE architectures. If you are looking for a standard, state-of-the-art SAE for most use-cases, we recommend using BatchTopK or JumpReLU SAEs.
+<!-- prettier-ignore-end -->
+
+[Matching Pursuit SAEs](https://arxiv.org/abs/2506.03093) (MP-SAEs) use the [matching pursuit algorithm](https://en.wikipedia.org/wiki/Matching_pursuit) to encode the activations in serial. This works by selecting a single latent at a time, removing its projection from the residual, and then repeating until either:
+
+- the residual is below a given threshold
+- the same latent gets selected a second time
+- the maximum number of iterations is reached.
+
+You can think of this as like a TopK SAE, except where the top K latents are selected one after the other rather than in parallel, and where the K is dynamic.
+
+By selecting latents iteratively, this makes the encoder highly non-linear, and thus more expressive than a traditional SAE encoder. However, selecting latents in serial is **very slow**, so this SAE architecture can easily be 10-100x slower than a traditional SAE both in training and inference. MP-SAEs can sometimes achieve better variance explained per L0 compared to traditional SAEs, but this does not necessarily mean a better SAE.
+
+Regardless, MP-SAEs represent a fundamentally different way of encoding SAE activations, and is likely interesting as a comparison point for researchers studying novel SAE architectures. We do not recommend training an MP-SAE if your goal is just to use an SAE for a downstream task. Or at least, it should not be your first choice to try.
+
+You can train an MP-SAE by providing a `MatchingPursuitTrainingSAEConfig` instance to the `sae` field. The primary parameters for MP-SAEs are:
+
+- `residual_threshold`: The residual threshold for convergence.
+- `max_iterations`: The maximum number of iterations. If not set, it defaults to the input dimension.
+
+```python
+from sae_lens import (
+    LanguageModelSAERunnerConfig,
+    LanguageModelSAETrainingRunner,
+    MatchingPursuitTrainingSAEConfig,
+)
+
+cfg = LanguageModelSAERunnerConfig( # Full config would be defined here
+    # ... other LanguageModelSAERunnerConfig parameters ...
+    sae=MatchingPursuitTrainingSAEConfig(
+        residual_threshold=0.1, # Residual threshold for convergence
+        max_iterations=500, # Maximum number of iterations
+        decoder_init_norm=1.0, # decoder_init_norm must be 1.0 for MP-SAEs
+        d_in=1024, # Must match your hook point
+        d_sae=16 * 1024,
+        # ... other common SAE parameters from SAEConfig ...
+    ),
+    # ...
+)
+sparse_autoencoder = LanguageModelSAETrainingRunner(cfg).run()
+```
+
+**Practical tips for training Matching Pursuit SAEs**
+
+- We recommend setting `max_iterations`, as this will greatly speed up training. MP-SAEs encode serially, so the more iterations needed in the encoding process, the slower the training will be. MP-SAEs can easily take 100x longer to train than a traditional SAE if this parameter is not set. `max_iterations` is not a parameter from the original MP-SAE paper, but we find training MP-SAEs without setting max iterations can be very slow.
+- The `residual_threshold` parameter is used to control the convergence of the encoding process. This parameter is not scaled relative to the input norm, so it is up to you to determine a reasonable threshold, and a good threshold may likely be larger than 1.0. We recommend checking the `residual_norm` and `residual_threshold_converged_portion` metrics during training to see if activations are converging due to reaching the convergence threshold, and increasing `residual_threshold` if `residual_threshold_converged_portion` is very low or 0. Depending on the LLM / layer, you may need to set this to a higher value like 10 or even 50.
+
 ### Training Gated SAEs
 
 <!-- prettier-ignore-start -->
@@ -276,10 +326,14 @@ sparse_autoencoder = LanguageModelSAETrainingRunner(cfg).run()
     Gated SAEs are no longer considered state-of-the-art, and are not recommended for most use cases. We recommend using BatchTopK or JumpReLU SAEs for best performance.
 <!-- prettier-ignore-end -->
 
-[Gated SAEs](https://arxiv.org/abs/2404.16014) are another architecture option. To train a Gated SAE, provide a `GatedTrainingSAEConfig` to the `sae` field. Gated SAEs use the `l1_coefficient` parameter to control the sparsity of the SAE, similar to standard SAEs.
+[Gated SAEs](https://arxiv.org/abs/2404.16014) are a legacy architecture designed to reduce shrinkage compared to standard L1 SAEs. To train a Gated SAE, provide a `GatedTrainingSAEConfig` to the `sae` field. Gated SAEs use the `l1_coefficient` parameter to control the sparsity of the SAE, similar to standard SAEs.
 
 ```python
-from sae_lens import LanguageModelSAERunnerConfig, LanguageModelSAETrainingRunner, GatedTrainingSAEConfig
+from sae_lens import (
+    LanguageModelSAERunnerConfig,
+    LanguageModelSAETrainingRunner,
+    GatedTrainingSAEConfig,
+)
 
 cfg = LanguageModelSAERunnerConfig( # Full config would be defined here
     # ... other LanguageModelSAERunnerConfig parameters ...
