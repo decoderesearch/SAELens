@@ -319,6 +319,12 @@ sparse_autoencoder = LanguageModelSAETrainingRunner(cfg).run()
 - We recommend setting `max_iterations`, as this will greatly speed up training. MP-SAEs encode serially, so the more iterations needed in the encoding process, the slower the training will be. MP-SAEs can easily take 100x longer to train than a traditional SAE if this parameter is not set. `max_iterations` is not a parameter from the original MP-SAE paper, but we find training MP-SAEs without setting max iterations can be very slow.
 - The `residual_threshold` parameter is used to control the convergence of the encoding process. This parameter is not scaled relative to the input norm, so it is up to you to determine a reasonable threshold, and a good threshold may likely be larger than 1.0. We recommend checking the `residual_norm` and `residual_threshold_converged_portion` metrics during training to see if activations are converging due to reaching the convergence threshold, and increasing `residual_threshold` if `residual_threshold_converged_portion` is very low or 0. Depending on the LLM / layer, you may need to set this to a higher value like 10 or even 50.
 
+**Differences between MP-SAEs paper and SAELens implementation**
+
+- The original MP-SAEs paper does not use a decoder bias. Our implementation does use a decoder bias as we feel feel centering the SAE inputs is a good idea, but this can be disabled by setting `apply_b_dec_to_input=False` in the config.
+- The MP-SAEs paper does not have a `max_iterations` parameter. However, we find that training without setting a max number of iterations is very slow. If you do not set this parameter, it will default to the input dimension. If you want to match the original paper, set this to `d_sae`.
+- We have optimized the forward pass of the MP-SAE beyond what was in the original paper, but we have not yet succeeded in getting it to be as fast as a traditional SAE. Further optimization of this architecture would be welcome in a pull request!
+
 ### Training Gated SAEs
 
 <!-- prettier-ignore-start -->
