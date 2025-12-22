@@ -19,7 +19,7 @@ from tests.helpers import (
 )
 
 
-def test_MatchingPursuitSAE_selects_correct_latents_with_orthognal_dictionary():
+def test_MatchingPursuitSAE_selects_correct_latents_with_orthogonal_dictionary():
     sae = MatchingPursuitSAE(
         build_matching_pursuit_sae_cfg(d_in=10, d_sae=10, residual_threshold=1e-8)
     )
@@ -34,7 +34,7 @@ def test_MatchingPursuitSAE_selects_correct_latents_with_orthognal_dictionary():
     assert torch.allclose(sae.decode(feats), sae_in, rtol=1e-4, atol=1e-6)
 
 
-def test_MatchingPursuitTrainingSAE_selects_correct_latents_with_orthognal_dictionary():
+def test_MatchingPursuitTrainingSAE_selects_correct_latents_with_orthogonal_dictionary():
     sae = MatchingPursuitTrainingSAE(
         build_matching_pursuit_sae_training_cfg(
             d_in=10, d_sae=10, residual_threshold=1e-8
@@ -49,6 +49,40 @@ def test_MatchingPursuitTrainingSAE_selects_correct_latents_with_orthognal_dicti
     feats = sae.encode(sae_in)
     assert torch.allclose(feats, true_feats, rtol=1e-4, atol=1e-6)
     assert torch.allclose(sae.decode(feats), sae_in, rtol=1e-4, atol=1e-6)
+
+
+def test_MatchingPursuitSAE_max_iterations_is_respected():
+    sae = MatchingPursuitSAE(
+        build_matching_pursuit_sae_cfg(
+            d_in=10, d_sae=10, residual_threshold=1e-8, max_iterations=2
+        )
+    )
+    batch_size = 32
+    torch.nn.init.orthogonal(sae.W_dec)
+    sae.b_dec.data = torch.randn_like(sae.b_dec)
+
+    true_feats = (torch.randn(batch_size, 10) - 0.25).relu()
+    sae_in = torch.einsum("fi,bf->bi", sae.W_dec, true_feats) + sae.b_dec
+    feats = sae.encode(sae_in)
+    assert (feats > 0).sum(dim=-1).max() == 2
+    assert torch.allclose(feats[feats > 0], true_feats[feats > 0], rtol=1e-4, atol=1e-6)
+
+
+def test_MatchingPursuitTrainingSAE_max_iterations_is_respected():
+    sae = MatchingPursuitTrainingSAE(
+        build_matching_pursuit_sae_training_cfg(
+            d_in=10, d_sae=10, residual_threshold=1e-8, max_iterations=2
+        )
+    )
+    batch_size = 32
+    torch.nn.init.orthogonal(sae.W_dec)
+    sae.b_dec.data = torch.randn_like(sae.b_dec)
+
+    true_feats = (torch.randn(batch_size, 10) - 0.25).relu()
+    sae_in = torch.einsum("fi,bf->bi", sae.W_dec, true_feats) + sae.b_dec
+    feats = sae.encode(sae_in)
+    assert (feats > 0).sum(dim=-1).max() == 2
+    assert torch.allclose(feats[feats > 0], true_feats[feats > 0], rtol=1e-4, atol=1e-6)
 
 
 def test_MatchingPursuitTrainingSAE_handles_3d_inputs():
@@ -139,10 +173,11 @@ def test_encode_matching_pursuit_matches_reference_implementation():
 
 def test_MatchingPursuitTrainingSAE_save_and_load_inference_sae(tmp_path: Path) -> None:
     cfg = build_matching_pursuit_sae_training_cfg(
-        d_in=10, d_sae=20, residual_threshold=1e-4, device="cpu"
+        d_in=20, d_sae=100, residual_threshold=1e-4, max_iterations=1, device="cpu"
     )
     training_sae = MatchingPursuitTrainingSAE(cfg)
     random_params(training_sae)
+    training_sae.b_dec.data = torch.zeros_like(training_sae.b_dec)
 
     original_W_dec = training_sae.W_dec.data.clone()
     original_b_dec = training_sae.b_dec.data.clone()
@@ -160,8 +195,9 @@ def test_MatchingPursuitTrainingSAE_save_and_load_inference_sae(tmp_path: Path) 
     assert_close(inference_sae.b_dec, original_b_dec)
 
     assert inference_sae.cfg.residual_threshold == cfg.residual_threshold
+    assert inference_sae.cfg.max_iterations == cfg.max_iterations
 
-    sae_in = torch.randn(10, cfg.d_in, device="cpu")
+    sae_in = torch.randn(5, cfg.d_in, device="cpu")
 
     training_feature_acts, _ = training_sae.encode_with_hidden_pre(sae_in)
     training_sae_out = training_sae.decode(training_feature_acts)

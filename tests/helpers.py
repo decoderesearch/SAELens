@@ -134,6 +134,7 @@ class TrainingSAEConfigDict(TypedDict, total=False):
     rescale_acts_by_decoder_norm: bool  # For TopK
     matryoshka_widths: list[int]  # For MatryoshkaBatchTopK
     residual_threshold: float  # for MatchingPursuitSAE
+    max_iterations: int | None  # for MatchingPursuitSAE
 
 
 class SAEConfigDict(TypedDict, total=False):

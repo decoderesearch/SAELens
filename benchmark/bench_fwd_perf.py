@@ -4,7 +4,7 @@ from typing import Any, Callable
 
 import torch
 import torch._inductor.config
-import triton
+import triton  # type: ignore
 from tabulate import tabulate
 
 from sae_lens.saes.sae import TrainStepInput

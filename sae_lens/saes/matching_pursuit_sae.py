@@ -1,4 +1,4 @@
-"""Inference-only TopKSAE variant, similar in spirit to StandardSAE but using a TopK-based activation."""
+"""Matching Pursuit SAE"""
 
 import warnings
 from dataclasses import dataclass
@@ -82,7 +82,12 @@ class MatchingPursuitSAE(SAE[MatchingPursuitSAEConfig]):
         Converts input x into feature activations.
         """
         sae_in = self.process_sae_in(x)
-        return _encode_matching_pursuit(sae_in, self.W_dec, self.cfg.residual_threshold)
+        return _encode_matching_pursuit(
+            sae_in,
+            self.W_dec,
+            self.cfg.residual_threshold,
+            max_iterations=self.cfg.max_iterations,
+        )
 
     @override
     @torch.no_grad()
@@ -112,7 +117,7 @@ class MatchingPursuitSAE(SAE[MatchingPursuitSAEConfig]):
 @dataclass
 class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
     """
-    Configuration class for training a MatchingPursitTrainingSAE.
+    Configuration class for training a MatchingPursuitTrainingSAE.
 
     Args:
         residual_threshold (float): residual error at which to stop selecting latents. Default 1e-2.
