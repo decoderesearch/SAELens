@@ -1,5 +1,8 @@
+import os
+from pathlib import Path
+
 import pytest
-from transformer_lens.hook_points import torch
+import torch
 
 from sae_lens.saes.matching_pursuit_sae import (
     MatchingPursuitSAE,
@@ -7,10 +10,12 @@ from sae_lens.saes.matching_pursuit_sae import (
     MatchingPursuitTrainingSAEConfig,
     _encode_matching_pursuit,
 )
+from sae_lens.saes.sae import SAE
 from tests.helpers import (
     assert_close,
     build_matching_pursuit_sae_cfg,
     build_matching_pursuit_sae_training_cfg,
+    random_params,
 )
 
 
@@ -130,3 +135,43 @@ def test_encode_matching_pursuit_matches_reference_implementation():
     # computes values differently (via indexing + dot product instead of full matmul),
     # leading to small numerical differences in floating-point accumulation
     assert_close(W_dec.grad, W_dec_ref.grad, atol=1e-4, rtol=1e-4)
+
+
+def test_MatchingPursuitTrainingSAE_save_and_load_inference_sae(tmp_path: Path) -> None:
+    cfg = build_matching_pursuit_sae_training_cfg(
+        d_in=10, d_sae=20, residual_threshold=1e-4, device="cpu"
+    )
+    training_sae = MatchingPursuitTrainingSAE(cfg)
+    random_params(training_sae)
+
+    original_W_dec = training_sae.W_dec.data.clone()
+    original_b_dec = training_sae.b_dec.data.clone()
+
+    model_path = str(tmp_path)
+    training_sae.save_inference_model(model_path)
+
+    assert os.path.exists(model_path)
+
+    inference_sae = SAE.load_from_disk(model_path, device="cpu")
+
+    assert isinstance(inference_sae, MatchingPursuitSAE)
+
+    assert_close(inference_sae.W_dec, original_W_dec)
+    assert_close(inference_sae.b_dec, original_b_dec)
+
+    assert inference_sae.cfg.residual_threshold == cfg.residual_threshold
+
+    sae_in = torch.randn(10, cfg.d_in, device="cpu")
+
+    training_feature_acts, _ = training_sae.encode_with_hidden_pre(sae_in)
+    training_sae_out = training_sae.decode(training_feature_acts)
+
+    inference_feature_acts = inference_sae.encode(sae_in)
+    inference_sae_out = inference_sae.decode(inference_feature_acts)
+
+    assert_close(training_feature_acts, inference_feature_acts)
+    assert_close(training_sae_out, inference_sae_out)
+
+    training_full_out = training_sae(sae_in)
+    inference_full_out = inference_sae(sae_in)
+    assert_close(training_full_out, inference_full_out)
