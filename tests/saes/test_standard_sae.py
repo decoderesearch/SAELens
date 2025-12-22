@@ -139,7 +139,7 @@ def test_sae_to_device_and_dtype():
     assert sae_moved.device == torch.device("meta")
     assert sae_moved.dtype == torch.float16
     assert sae_moved.cfg.device == "meta"
-    assert sae_moved.cfg.dtype == "torch.float16"
+    assert sae_moved.cfg.dtype == "float16"
     assert sae_moved.W_enc.device == torch.device("meta")
     assert sae_moved.W_enc.dtype == torch.float16
     assert sae_moved.W_dec.device == torch.device("meta")

@@ -1,6 +1,9 @@
 import copy
 import pickle
+import tracemalloc
 from pathlib import Path
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -266,3 +269,168 @@ def test_TrainingSAE_save_and_load_from_checkpoint_all_architectures(
 
     for param1, param2 in zip(sae.parameters(), loaded_sae.parameters()):
         assert_close(param1, param2, atol=1e-6, rtol=1e-4)
+
+
+def test_SAE_load_from_disk_uses_meta_device_optimization(tmp_path: Path):
+    cfg = build_sae_training_cfg_for_arch("standard", d_in=512, d_sae=2048)
+    sae = TrainingSAE.from_dict(cfg.to_dict())
+    random_params(sae)
+    sae.save_model(tmp_path)
+
+    # Patch load_state_dict to verify meta device is used before loading
+    original_load_state_dict = SAE.load_state_dict
+    meta_device_verified = False
+
+    def patched_load_state_dict(
+        self: SAE[Any], state_dict: dict[str, Any], assign: bool = False
+    ):
+        nonlocal meta_device_verified
+        # Verify that parameters are on meta device before loading
+        for _, param in self.named_parameters():
+            if param.device.type == "meta":
+                meta_device_verified = True
+                break
+        return original_load_state_dict(self, state_dict, assign=assign)
+
+    with patch.object(SAE, "load_state_dict", patched_load_state_dict):
+        loaded_sae = SAE.load_from_disk(tmp_path, device="cpu")
+
+    assert meta_device_verified, "SAE should use meta device before load_state_dict"
+    assert loaded_sae.W_enc.device.type == "cpu"
+
+
+def test_SAE_load_from_disk_does_not_peak_at_double_memory(tmp_path: Path):
+    d_in = 512
+    d_sae = 4096
+    cfg = build_sae_training_cfg_for_arch("standard", d_in=d_in, d_sae=d_sae)
+    sae = TrainingSAE.from_dict(cfg.to_dict())
+    random_params(sae)
+    sae.save_model(tmp_path)
+
+    # Calculate expected memory for a single SAE's parameters (approximate)
+    # W_enc: d_in x d_sae, W_dec: d_sae x d_in, b_enc: d_sae, b_dec: d_in
+    expected_param_bytes = (d_in * d_sae + d_sae * d_in + d_sae + d_in) * 4  # float32
+    # Allow some overhead for Python objects, but should be well under 2x
+    max_allowed_bytes = expected_param_bytes * 1.5
+
+    tracemalloc.start()
+    tracemalloc.reset_peak()
+
+    loaded_sae = SAE.load_from_disk(tmp_path, device="cpu")
+
+    _, peak_memory = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    # Verify peak memory is reasonable (not 2x the parameter size)
+    assert peak_memory < max_allowed_bytes, (
+        f"Peak memory {peak_memory / 1e6:.2f}MB exceeds allowed "
+        f"{max_allowed_bytes / 1e6:.2f}MB (1.5x param size). "
+        f"Expected param size: {expected_param_bytes / 1e6:.2f}MB"
+    )
+    assert loaded_sae is not None
+
+
+@pytest.mark.parametrize("architecture", ["standard", "gated", "topk", "jumprelu"])
+def test_SAE_load_from_disk_memory_efficient_all_architectures(
+    architecture: str, tmp_path: Path
+):
+    cfg = build_sae_training_cfg_for_arch(architecture, d_in=256, d_sae=1024)
+    sae = TrainingSAE.from_dict(cfg.to_dict())
+    random_params(sae)
+    sae.save_model(tmp_path)
+
+    # Verify meta device optimization is used
+    original_load_state_dict = SAE.load_state_dict
+    used_assign_true = False
+
+    def patched_load_state_dict(
+        self: SAE[Any], state_dict: dict[str, Any], assign: bool = False
+    ):
+        nonlocal used_assign_true
+        if assign:
+            used_assign_true = True
+        return original_load_state_dict(self, state_dict, assign=assign)
+
+    with patch.object(SAE, "load_state_dict", patched_load_state_dict):
+        loaded_sae = SAE.load_from_disk(tmp_path, device="cpu")
+
+    assert used_assign_true, "load_state_dict should be called with assign=True"
+    assert loaded_sae is not None
+
+
+def test_SAE_from_pretrained_uses_meta_device_optimization(tmp_path: Path):
+    cfg = build_sae_training_cfg_for_arch("standard", d_in=256, d_sae=512)
+    sae = TrainingSAE.from_dict(cfg.to_dict())
+    random_params(sae)
+    sae.save_model(tmp_path)
+
+    # Create a mock loader that returns our saved SAE's config and state dict
+    from sae_lens.loading.pretrained_sae_loaders import sae_lens_disk_loader
+
+    cfg_dict, state_dict = sae_lens_disk_loader(tmp_path, device="cpu")
+
+    def mock_loader(
+        repo_id: str,  # noqa: ARG001
+        folder_name: str,  # noqa: ARG001
+        device: str = "cpu",  # noqa: ARG001
+        force_download: bool = False,  # noqa: ARG001
+        cfg_overrides: dict[str, Any] | None = None,  # noqa: ARG001
+    ):
+        return cfg_dict, state_dict, None
+
+    # Verify meta device optimization is used
+    original_load_state_dict = SAE.load_state_dict
+    meta_device_verified = False
+    used_assign_true = False
+
+    def patched_load_state_dict(
+        self: SAE[Any], state_dict: dict[str, Any], assign: bool = False
+    ):
+        nonlocal meta_device_verified, used_assign_true
+        for _, param in self.named_parameters():
+            if param.device.type == "meta":
+                meta_device_verified = True
+                break
+        if assign:
+            used_assign_true = True
+        return original_load_state_dict(self, state_dict, assign=assign)
+
+    # Mock the pretrained SAEs directory to include our mock release
+    mock_sae_info = type(
+        "MockSAEInfo", (), {"conversion_func": None, "saes_map": {"mock-sae-id": {}}}
+    )()
+
+    with (
+        patch.object(SAE, "load_state_dict", patched_load_state_dict),
+        patch(
+            "sae_lens.saes.sae.NAMED_PRETRAINED_SAE_LOADERS",
+            {"sae_lens": mock_loader},
+        ),
+        patch(
+            "sae_lens.saes.sae.get_pretrained_saes_directory",
+            return_value={"mock-release": mock_sae_info},
+        ),
+        patch(
+            "sae_lens.saes.sae.get_conversion_loader_name",
+            return_value="sae_lens",
+        ),
+        patch(
+            "sae_lens.saes.sae.get_repo_id_and_folder_name",
+            return_value=("mock/repo", "mock_folder"),
+        ),
+        patch(
+            "sae_lens.saes.sae.get_config_overrides",
+            return_value={},
+        ),
+        patch(
+            "sae_lens.saes.sae.get_norm_scaling_factor",
+            return_value=None,
+        ),
+    ):
+        loaded_sae = SAE.from_pretrained(
+            "mock-release", "mock-sae-id", device="cpu", dtype="float32"
+        )
+
+    assert meta_device_verified, "SAE should use meta device before load_state_dict"
+    assert used_assign_true, "load_state_dict should be called with assign=True"
+    assert loaded_sae.W_enc.device.type == "cpu"
