@@ -28,6 +28,7 @@ from typing_extensions import deprecated, overload, override
 from sae_lens import __version__
 from sae_lens.constants import (
     DTYPE_MAP,
+    DTYPE_TO_STR,
     SAE_CFG_FILENAME,
     SAE_WEIGHTS_FILENAME,
 )
@@ -437,8 +438,8 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         # Update dtype in config if provided
         if dtype_arg is not None:
-            # Update the cfg.dtype
-            self.cfg.dtype = str(dtype_arg)
+            # Update the cfg.dtype (use canonical short form like "float32")
+            self.cfg.dtype = DTYPE_TO_STR[dtype_arg]
 
             # Update the dtype property
             self.dtype = dtype_arg
