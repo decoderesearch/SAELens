@@ -27,12 +27,10 @@ from typing_extensions import deprecated, overload, override
 
 from sae_lens import __version__
 from sae_lens.constants import (
-    DTYPE_MAP,
-    DTYPE_TO_STR,
     SAE_CFG_FILENAME,
     SAE_WEIGHTS_FILENAME,
 )
-from sae_lens.util import filter_valid_dataclass_fields
+from sae_lens.util import dtype_to_str, filter_valid_dataclass_fields, str_to_dtype
 
 if TYPE_CHECKING:
     from sae_lens.config import LanguageModelSAERunnerConfig
@@ -254,7 +252,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
                 stacklevel=1,
             )
 
-        self.dtype = DTYPE_MAP[cfg.dtype]
+        self.dtype = str_to_dtype(cfg.dtype)
         self.device = torch.device(cfg.device)
         self.use_error_term = use_error_term
 
@@ -439,7 +437,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         # Update dtype in config if provided
         if dtype_arg is not None:
             # Update the cfg.dtype (use canonical short form like "float32")
-            self.cfg.dtype = DTYPE_TO_STR[dtype_arg]
+            self.cfg.dtype = dtype_to_str(dtype_arg)
 
             # Update the dtype property
             self.dtype = dtype_arg
@@ -543,7 +541,6 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         )
         sae_cfg = sae_config_cls.from_dict(cfg_dict)
         sae_cls = cls.get_sae_class_for_architecture(sae_cfg.architecture())
-        sae = sae_cls(sae_cfg)
         # hack to avoid using double memory when loading the SAE.
         # first put the SAE on the meta device, then load the weights.
         device = sae_cfg.device
@@ -554,7 +551,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         sae.load_state_dict(state_dict, assign=True)
         # the loaders should already handle the dtype / device conversion
         # but this is a fallback to guarantee the SAE is on the correct device and dtype
-        return sae.to(dtype=DTYPE_MAP[sae_cfg.dtype], device=device)
+        return sae.to(dtype=str_to_dtype(sae_cfg.dtype), device=device)
 
     @classmethod
     def from_pretrained(
@@ -690,7 +687,11 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         # the loaders should already handle the dtype / device conversion
         # but this is a fallback to guarantee the SAE is on the correct device and dtype
-        return sae.to(dtype=DTYPE_MAP[dtype], device=device), cfg_dict, log_sparsities
+        return (
+            sae.to(dtype=str_to_dtype(dtype), device=device),
+            cfg_dict,
+            log_sparsities,
+        )
 
     @classmethod
     def from_dict(cls: type[T_SAE], config_dict: dict[str, Any]) -> T_SAE:

@@ -1,12 +1,15 @@
 from pathlib import Path
 
 import pytest
+import torch
 from transformer_lens import HookedTransformer
 
 from sae_lens.util import (
+    dtype_to_str,
     extract_stop_at_layer_from_tlens_hook_name,
     get_special_token_ids,
     path_or_tmp_dir,
+    str_to_dtype,
 )
 
 
@@ -108,3 +111,63 @@ def test_get_special_token_ids():
 def test_get_special_token_ids_works_with_real_models(ts_model: HookedTransformer):
     special_tokens = get_special_token_ids(ts_model.tokenizer)  # type: ignore
     assert special_tokens == [50256]
+
+
+@pytest.mark.parametrize(
+    "dtype_str,expected_dtype",
+    [
+        ("float32", torch.float32),
+        ("float64", torch.float64),
+        ("float16", torch.float16),
+        ("bfloat16", torch.bfloat16),
+        ("torch.float32", torch.float32),
+        ("torch.float64", torch.float64),
+        ("torch.float16", torch.float16),
+        ("torch.bfloat16", torch.bfloat16),
+    ],
+)
+def test_str_to_dtype_valid(dtype_str: str, expected_dtype: torch.dtype):
+    assert str_to_dtype(dtype_str) == expected_dtype
+
+
+@pytest.mark.parametrize(
+    "invalid_dtype",
+    [
+        "invalid",
+        "float33",
+        "int32",
+        "torch.int32",
+        "",
+        "FLOAT32",  # case-sensitive
+    ],
+)
+def test_str_to_dtype_invalid_raises_error(invalid_dtype: str):
+    with pytest.raises(ValueError, match="Invalid dtype"):
+        str_to_dtype(invalid_dtype)
+
+
+@pytest.mark.parametrize(
+    "dtype,expected_str",
+    [
+        (torch.float32, "float32"),
+        (torch.float64, "float64"),
+        (torch.float16, "float16"),
+        (torch.bfloat16, "bfloat16"),
+    ],
+)
+def test_dtype_to_str_valid(dtype: torch.dtype, expected_str: str):
+    assert dtype_to_str(dtype) == expected_str
+
+
+@pytest.mark.parametrize(
+    "invalid_dtype",
+    [
+        torch.int32,
+        torch.int64,
+        torch.complex64,
+        torch.bool,
+    ],
+)
+def test_dtype_to_str_invalid_raises_error(invalid_dtype: torch.dtype):
+    with pytest.raises(ValueError, match="Invalid dtype"):
+        dtype_to_str(invalid_dtype)

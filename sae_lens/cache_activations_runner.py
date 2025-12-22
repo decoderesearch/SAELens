@@ -14,9 +14,9 @@ from transformer_lens.HookedTransformer import HookedRootModule
 
 from sae_lens import logger
 from sae_lens.config import CacheActivationsRunnerConfig
-from sae_lens.constants import DTYPE_MAP
 from sae_lens.load_model import load_model
 from sae_lens.training.activations_store import ActivationsStore
+from sae_lens.util import str_to_dtype
 
 
 def _mk_activations_store(
@@ -97,7 +97,7 @@ class CacheActivationsRunner:
         bytes_per_token = (
             self.cfg.d_in * self.cfg.dtype.itemsize
             if isinstance(self.cfg.dtype, torch.dtype)
-            else DTYPE_MAP[self.cfg.dtype].itemsize
+            else str_to_dtype(self.cfg.dtype).itemsize
         )
         total_training_tokens = self.cfg.n_seq_in_dataset * self.context_size
         total_disk_space_gb = total_training_tokens * bytes_per_token / 10**9

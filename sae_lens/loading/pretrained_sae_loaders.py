@@ -15,7 +15,6 @@ from safetensors import safe_open
 
 from sae_lens import logger
 from sae_lens.constants import (
-    DTYPE_MAP,
     SAE_CFG_FILENAME,
     SAE_WEIGHTS_FILENAME,
     SPARSIFY_WEIGHTS_FILENAME,
@@ -27,7 +26,7 @@ from sae_lens.loading.pretrained_saes_directory import (
     get_repo_id_and_folder_name,
 )
 from sae_lens.registry import get_sae_class
-from sae_lens.util import filter_valid_dataclass_fields
+from sae_lens.util import filter_valid_dataclass_fields, str_to_dtype
 
 LLM_METADATA_KEYS = {
     "model_name",
@@ -55,7 +54,7 @@ def load_safetensors_weights(
 ) -> dict[str, torch.Tensor]:
     """Load safetensors weights and optionally convert to a different dtype"""
     loaded_weights = {}
-    dtype = DTYPE_MAP[dtype] if isinstance(dtype, str) else dtype
+    dtype = str_to_dtype(dtype) if isinstance(dtype, str) else dtype
     with safe_open(path, framework="pt", device=device) as f:
         for k in f.keys():  # noqa: SIM118
             weight = f.get_tensor(k)
@@ -355,7 +354,7 @@ def read_sae_components_from_disk(
     Given a loaded dictionary and a path to a weight file, load the weights and return the state_dict.
     """
     if dtype is None:
-        dtype = DTYPE_MAP[cfg_dict["dtype"]]
+        dtype = str_to_dtype(cfg_dict["dtype"])
 
     state_dict = {}
     with safe_open(weight_path, framework="pt", device=device) as f:  # type: ignore
@@ -798,7 +797,7 @@ def get_goodfire_huggingface_loader(
     )
     raw_state_dict = torch.load(sae_path, map_location=device)
 
-    target_dtype = DTYPE_MAP[cfg_dict.get("dtype", "float32")]
+    target_dtype = str_to_dtype(cfg_dict.get("dtype", "float32"))
 
     state_dict = {
         "W_enc": raw_state_dict["encoder_linear.weight"].T.to(dtype=target_dtype),
@@ -919,7 +918,7 @@ def llama_scope_sae_huggingface_loader(
         "b_dec": state_dict_loaded["decoder.bias"],
         "threshold": torch.ones(
             cfg_dict["d_sae"],
-            dtype=DTYPE_MAP[cfg_dict["dtype"]],
+            dtype=str_to_dtype(cfg_dict["dtype"]),
             device=cfg_dict["device"],
         )
         * cfg_dict["jump_relu_threshold"],

@@ -5,7 +5,8 @@ import sys
 import torch
 import yaml
 
-from sae_lens.config import DTYPE_MAP, LanguageModelSAERunnerConfig
+from sae_lens.config import LanguageModelSAERunnerConfig
+from sae_lens.constants import DTYPE_MAP
 from sae_lens.llm_sae_training_runner import LanguageModelSAETrainingRunner
 
 # sys.path.append("..")
