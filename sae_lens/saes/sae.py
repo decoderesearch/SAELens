@@ -533,6 +533,15 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         dtype: str | None = None,
         converter: PretrainedSaeDiskLoader = sae_lens_disk_loader,
     ) -> T_SAE:
+        """
+        Load a SAE from disk.
+
+        Args:
+            path: The path to the SAE weights and config.
+            device: The device to load the SAE on, defaults to "cpu".
+            dtype: The dtype to load the SAE on, defaults to None. If None, the dtype will be inferred from the SAE config.
+            converter: The converter to use to load the SAE, defaults to sae_lens_disk_loader.
+        """
         overrides = {"dtype": dtype} if dtype is not None else None
         cfg_dict, state_dict = converter(path, device, cfg_overrides=overrides)
         cfg_dict = handle_config_defaulting(cfg_dict)
@@ -569,7 +578,10 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         Args:
             release: The release name. This will be mapped to a huggingface repo id based on the pretrained_saes.yaml file.
             id: The id of the SAE to load. This will be mapped to a path in the huggingface repo.
-            device: The device to load the SAE on.
+            device: The device to load the SAE on, defaults to "cpu".
+            dtype: The dtype to load the SAE on, defaults to "float32".
+            force_download: Whether to force download the SAE weights and config, defaults to False.
+            converter: The converter to use to load the SAE, defaults to None. If None, the converter will be inferred from the release.
         """
         return cls.from_pretrained_with_cfg_and_sparsity(
             release,
@@ -597,7 +609,10 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         Args:
             release: The release name. This will be mapped to a huggingface repo id based on the pretrained_saes.yaml file.
             id: The id of the SAE to load. This will be mapped to a path in the huggingface repo.
-            device: The device to load the SAE on.
+            device: The device to load the SAE on, defaults to "cpu".
+            dtype: The dtype to load the SAE on, defaults to "float32".
+            force_download: Whether to force download the SAE weights and config, defaults to False.
+            converter: The converter to use to load the SAE, defaults to None. If None, the converter will be inferred from the release.
         """
 
         # get sae directory
