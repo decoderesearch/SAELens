@@ -17,7 +17,12 @@ from datasets import (
 )
 
 from sae_lens import __version__, logger
-from sae_lens.constants import DTYPE_MAP
+
+# keeping this unused import since some SAELens deps import DTYPE_MAP from config
+from sae_lens.constants import (
+    DTYPE_MAP,  # noqa: F401  # pyright: ignore[reportUnusedImport]
+)
+
 from sae_lens.registry import get_sae_training_class
 from sae_lens.saes.sae import TrainingSAEConfig
 
