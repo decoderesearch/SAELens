@@ -291,7 +291,7 @@ You can train an MP-SAE by providing a `MatchingPursuitTrainingSAEConfig` instan
 
 - `residual_threshold`: The residual threshold for convergence.
 - `max_iterations`: The maximum number of iterations. If not set, it defaults to the input dimension.
-- `stop_on_dupliclate_support`: Whether to stop selecting latents if the support set has not changed from the previous iteration. Defaults to True.
+- `stop_on_duplicate_support`: Whether to stop selecting latents if the support set has not changed from the previous iteration. Defaults to True.
 
 ```python
 from sae_lens import (
@@ -319,7 +319,7 @@ sparse_autoencoder = LanguageModelSAETrainingRunner(cfg).run()
 
 - We recommend setting `max_iterations`, as this will greatly speed up training. MP-SAEs encode serially, so the more iterations needed in the encoding process, the slower the training will be. MP-SAEs can easily take 100x longer to train than a traditional SAE if this parameter is not set. `max_iterations` is not a parameter from the original MP-SAE paper, but we find training MP-SAEs without setting max iterations can be very slow.
 - The `residual_threshold` parameter is used to control the convergence of the encoding process. This parameter is not scaled relative to the input norm, so it is up to you to determine a reasonable threshold, and a good threshold may likely be larger than 1.0. We recommend checking the `residual_norm` and `residual_threshold_converged_portion` metrics during training to see if activations are converging due to reaching the convergence threshold, and increasing `residual_threshold` if `residual_threshold_converged_portion` is very low or 0. Depending on the LLM / layer, you may need to set this to a higher value like 10 or even 50.
-- If you want the MP-SAE to behave more like a true "serial TopK" SAE, set `residual_threshold` to 0, set `stop_on_dupliclate_support` to False, and set the `max_iterations` to the desired L0 of the SAE. It is still possible for the resulting L0 to be lower than `max_iterations` if the SAE selectes the same latent multiple times.This is equivalent to the MP-SAE implementation from the [Overcomplete library](https://github.com/KempnerInstitute/overcomplete).
+- If you want the MP-SAE to behave more like a true "serial TopK" SAE, set `residual_threshold` to `0`, set `stop_on_duplicate_support` to `True`, and set the `max_iterations` to the desired L0 of the SAE. It is still possible for the resulting L0 to be lower than `max_iterations` if the SAE selectes the same latent multiple times.This is equivalent to the MP-SAE implementation from the [Overcomplete library](https://github.com/KempnerInstitute/overcomplete).
 
 **Differences between MP-SAEs paper and SAELens implementation**
 

@@ -162,7 +162,7 @@ def test_encode_matching_pursuit_matches_reference_implementation():
         W_dec,
         residual_threshold,
         max_iterations=10,
-        stop_on_dupliclate_support=True,
+        stop_on_duplicate_support=True,
     )
 
     (sae_in_centered - z_ref).norm(dim=1).mean().backward()
@@ -234,7 +234,7 @@ def test_encode_matching_pursuit_stop_on_duplicate_support_false_runs():
         W_dec,
         residual_threshold=0,
         max_iterations=max_iterations,
-        stop_on_dupliclate_support=False,
+        stop_on_duplicate_support=False,
     )
 
     l0_without_stop = (acts_without_stop > 0).sum(dim=-1)
