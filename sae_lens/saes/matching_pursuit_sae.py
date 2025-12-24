@@ -29,6 +29,7 @@ class MatchingPursuitSAEConfig(SAEConfig):
         residual_threshold (float): residual error at which to stop selecting latents. Default 1e-2.
         max_iterations (int | None): Maximum iterations (default: d_in if set to None).
             Defaults to None.
+        stop_on_dupliclate_support (bool): Whether to stop selecting latents if the support set has not changed from the previous iteration. Defaults to True.
         d_in (int): Input dimension (dimensionality of the activations being encoded).
             Inherited from SAEConfig.
         d_sae (int): SAE latent dimension (number of features in the SAE).
@@ -51,6 +52,7 @@ class MatchingPursuitSAEConfig(SAEConfig):
 
     residual_threshold: float = 1e-2
     max_iterations: int | None = None
+    stop_on_dupliclate_support: bool = True
 
     @override
     @classmethod
@@ -87,6 +89,7 @@ class MatchingPursuitSAE(SAE[MatchingPursuitSAEConfig]):
             self.W_dec,
             self.cfg.residual_threshold,
             max_iterations=self.cfg.max_iterations,
+            stop_on_dupliclate_support=self.cfg.stop_on_dupliclate_support,
         )
 
     @override
@@ -123,6 +126,7 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
         residual_threshold (float): residual error at which to stop selecting latents. Default 1e-2.
         max_iterations (int | None): Maximum iterations (default: d_in if set to None).
             Defaults to None.
+        stop_on_dupliclate_support (bool): Whether to stop selecting latents if the support set has not changed from the previous iteration. Defaults to True.
         decoder_init_norm (float | None): Norm to initialize decoder weights to.
             0.1 corresponds to the "heuristic" initialization from Anthropic's April update.
             Use None to disable. Inherited from TrainingSAEConfig. Defaults to 0.1.
@@ -148,6 +152,7 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
 
     residual_threshold: float = 1e-2
     max_iterations: int | None = None
+    stop_on_dupliclate_support: bool = True
 
     @override
     @classmethod
@@ -193,6 +198,7 @@ class MatchingPursuitTrainingSAE(TrainingSAE[MatchingPursuitTrainingSAEConfig]):
             self.W_dec,
             self.cfg.residual_threshold,
             max_iterations=self.cfg.max_iterations,
+            stop_on_dupliclate_support=self.cfg.stop_on_dupliclate_support,
         )
         return acts, torch.zeros_like(acts)
 
@@ -252,7 +258,8 @@ def _encode_matching_pursuit(
     sae_in_centered: torch.Tensor,
     W_dec: torch.Tensor,
     residual_threshold: float,
-    max_iterations: int | None = None,
+    max_iterations: int | None,
+    stop_on_dupliclate_support: bool,
 ) -> torch.Tensor:
     """
     Matching pursuit encoding.
@@ -264,6 +271,8 @@ def _encode_matching_pursuit(
         max_iterations: Maximum iterations (default: d_in). Prevents infinite loops.
     """
     residual = sae_in_centered.clone()
+
+    stop_on_residual_threshold = residual_threshold > 0
 
     # Handle multi-dimensional inputs by flattening all but the last dimension
     original_shape = residual.shape
@@ -301,20 +310,21 @@ def _encode_matching_pursuit(
         # Update residual
         residual = residual - masked_values * selected_dec
 
-        with torch.no_grad():
-            support = acts != 0
+        if stop_on_dupliclate_support or stop_on_residual_threshold:
+            with torch.no_grad():
+                support = acts != 0
 
-            # A sample is considered converged if:
-            # (1) the support set hasn't changed from the previous iteration (stability), or
-            # (2) the residual norm is below a given threshold (good enough reconstruction)
-            converged = (support == prev_support).all(dim=1) | (
-                residual.norm(dim=-1) < residual_threshold
-            )
-            done = done | converged
-            prev_support = support
+                # A sample is considered converged if:
+                # (1) the support set hasn't changed from the previous iteration (stability), or
+                # (2) the residual norm is below a given threshold (good enough reconstruction)
+                if stop_on_dupliclate_support:
+                    done = done | (support == prev_support).all(dim=1)
+                    prev_support = support
+                if stop_on_residual_threshold:
+                    done = done | (residual.norm(dim=-1) < residual_threshold)
 
-            if done.all():
-                break
+                if done.all():
+                    break
 
     # Reshape acts back to original shape (replacing last dimension with d_sae)
     if len(original_shape) > 2:

@@ -157,7 +157,13 @@ def test_encode_matching_pursuit_matches_reference_implementation():
     z_ref = _encode_matching_pursuit_reference_implementation(
         sae_in_centered, W_dec_ref, residual_threshold
     )
-    z = _encode_matching_pursuit(sae_in_centered, W_dec, residual_threshold)
+    z = _encode_matching_pursuit(
+        sae_in_centered,
+        W_dec,
+        residual_threshold,
+        max_iterations=10,
+        stop_on_dupliclate_support=True,
+    )
 
     (sae_in_centered - z_ref).norm(dim=1).mean().backward()
     (sae_in_centered - z).norm(dim=1).mean().backward()
@@ -211,3 +217,28 @@ def test_MatchingPursuitTrainingSAE_save_and_load_inference_sae(tmp_path: Path) 
     training_full_out = training_sae(sae_in)
     inference_full_out = inference_sae(sae_in)
     assert_close(training_full_out, inference_full_out)
+
+
+def test_encode_matching_pursuit_stop_on_duplicate_support_false_runs():
+    d_in = 10
+    d_sae = 20
+    batch_size = 8
+    max_iterations = 5
+
+    W_dec = torch.randn(d_sae, d_in)
+    W_dec = W_dec / W_dec.norm(dim=1, keepdim=True)
+    sae_in = torch.randn(batch_size, d_in)
+
+    acts_without_stop = _encode_matching_pursuit(
+        sae_in,
+        W_dec,
+        residual_threshold=0,
+        max_iterations=max_iterations,
+        stop_on_dupliclate_support=False,
+    )
+
+    l0_without_stop = (acts_without_stop > 0).sum(dim=-1)
+    assert l0_without_stop.max() <= max_iterations
+
+    recon_without_stop = acts_without_stop @ W_dec
+    assert recon_without_stop.shape == sae_in.shape
