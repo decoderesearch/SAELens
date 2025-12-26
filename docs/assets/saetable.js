@@ -42,14 +42,12 @@ sae = SAE.from_pretrained(release, sae_id)`;
   },
 };
 
-// Close modal when clicking the X
-document
-  .querySelector(".saetable-close")
-  .addEventListener("click", function () {
-    document.getElementById("codeModal").style.display = "none";
-  });
-
+// Close modal when clicking the X or clicking outside the modal
 window.addEventListener("click", function (event) {
+  if (event.target.classList.contains("saetable-close")) {
+    document.getElementById("codeModal").style.display = "none";
+    return;
+  }
   const modal = document.getElementById("codeModal");
   if (event.target == modal) {
     modal.style.display = "none";

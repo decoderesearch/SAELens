@@ -9,6 +9,7 @@ from textwrap import dedent
 
 import pandas as pd
 import yaml
+from bs4 import BeautifulSoup
 from tqdm.auto import tqdm
 
 from sae_lens import SAEConfig
@@ -89,6 +90,30 @@ def on_pre_build(config):  # noqa: ARG001
     print("Generating SAE table...")
     generate_sae_table()
     print("SAE table generation complete.")
+
+
+# hacky fix until 1password fixes its chrome plugin:
+# https://www.1password.community/discussions/developers/1password-chrome-extension-is-incorrectly-manipulating--blocks/165639
+def on_page_content(html, page, config, files):  # noqa: ARG001
+    """Strip 'language-*' classes from divs to prevent 1Password's Prism.js from
+    overriding Pygments syntax highlighting.
+
+    See: https://www.linkedin.com/posts/rinehart_if-youre-highlighting-code-in-html-pages-activity-7407447059852582912-4LaY/
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    for div in soup.find_all("div"):
+        if div.get("class"):
+            # Build a new class list without any "language-*" classes
+            updated_classes = [
+                cls for cls in div["class"] if not cls.startswith("language")
+            ]
+            if updated_classes:
+                div["class"] = updated_classes
+            else:
+                del div["class"]
+
+    return str(soup)
 
 
 def generate_release_content(
