@@ -1,5 +1,49 @@
 # CHANGELOG
 
+## v6.25.1 (2025-12-23)
+
+### Performance
+
+* perf: improve memory usage when loading SAEs from pretrained (#603)
+
+* perf: improve memory usage when loading SAEs from pretrained
+
+* fixing tests
+
+* adding more tests
+
+* changes from CR
+
+* more test fixes
+
+* more tests
+
+* updating docstrings ([`25a7ad0`](https://github.com/decoderesearch/SAELens/commit/25a7ad0c56e1f325ce154e1be5cf2521da5dace1))
+
+## v6.25.0 (2025-12-22)
+
+### Feature
+
+* feat: adds some neuronpedia entries for 27b-it (#602) ([`895a90d`](https://github.com/decoderesearch/SAELens/commit/895a90d83986fe3eeeda10f66e0902fcfb53514a))
+
+## v6.24.2 (2025-12-21)
+
+### Chore
+
+* chore: expand user dir when caching saes in docs build (#599) ([`7dcacaa`](https://github.com/decoderesearch/SAELens/commit/7dcacaaf8606504d87a0e4cc5384b1498d89c695))
+
+* chore: improve docs caching in CI (#598) ([`728cb2b`](https://github.com/decoderesearch/SAELens/commit/728cb2b4875b2266c4f2157d3c024427caf5131c))
+
+* chore: cache saes config info when building docs in CI (#597)
+
+* chore: cache saes config info when building docs in CI
+
+* reduce max workers ([`a44e1b1`](https://github.com/decoderesearch/SAELens/commit/a44e1b127cd4144e151fcaac9ba71e0b6385d7bd))
+
+### Fix
+
+* fix: gemma 3 270m workaround is no longer needed (#600) ([`c090df3`](https://github.com/decoderesearch/SAELens/commit/c090df38ce13c20374da3522ea3782d2789e4938))
+
 ## v6.24.1 (2025-12-20)
 
 ### Fix

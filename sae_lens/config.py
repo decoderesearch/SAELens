@@ -22,9 +22,9 @@ from sae_lens import __version__, logger
 from sae_lens.constants import (
     DTYPE_MAP,  # noqa: F401  # pyright: ignore[reportUnusedImport]
 )
-
 from sae_lens.registry import get_sae_training_class
 from sae_lens.saes.sae import TrainingSAEConfig
+from sae_lens.util import str_to_dtype
 
 if TYPE_CHECKING:
     pass
@@ -568,7 +568,7 @@ class CacheActivationsRunnerConfig:
 
     @property
     def bytes_per_token(self) -> int:
-        return self.d_in * DTYPE_MAP[self.dtype].itemsize
+        return self.d_in * str_to_dtype(self.dtype).itemsize
 
     @property
     def n_tokens_in_buffer(self) -> int:

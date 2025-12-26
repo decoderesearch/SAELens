@@ -17,6 +17,7 @@ from sae_lens.saes.standard_sae import (
     StandardTrainingSAE,
     StandardTrainingSAEConfig,
 )
+from sae_lens.util import dtype_to_str
 from tests.helpers import (
     ALL_ARCHITECTURES,
     ALL_FOLDABLE_ARCHITECTURES,
@@ -123,7 +124,7 @@ def test_StandardSAE_to_dtype():
     # Test changing dtype
     sae_moved = sae.to(torch.float16)
     assert sae_moved.dtype == torch.float16
-    assert sae_moved.cfg.dtype == "torch.float16"
+    assert sae_moved.cfg.dtype == "float16"
     assert sae_moved.W_enc.dtype == torch.float16
     assert sae_moved.W_dec.dtype == torch.float16
     assert sae_moved.b_enc.dtype == torch.float16
@@ -139,7 +140,7 @@ def test_sae_to_device_and_dtype():
     assert sae_moved.device == torch.device("meta")
     assert sae_moved.dtype == torch.float16
     assert sae_moved.cfg.device == "meta"
-    assert sae_moved.cfg.dtype == "torch.float16"
+    assert sae_moved.cfg.dtype == "float16"
     assert sae_moved.W_enc.device == torch.device("meta")
     assert sae_moved.W_enc.dtype == torch.float16
     assert sae_moved.W_dec.device == torch.device("meta")
@@ -160,7 +161,7 @@ def test_StandardSAE_to_tensor():
     assert sae_moved.device == reference_tensor.device
     assert sae_moved.dtype == reference_tensor.dtype
     assert sae_moved.cfg.device == str(reference_tensor.device)
-    assert sae_moved.cfg.dtype == str(reference_tensor.dtype)
+    assert sae_moved.cfg.dtype == dtype_to_str(reference_tensor.dtype)
     assert sae_moved.W_enc.device == reference_tensor.device
     assert sae_moved.W_enc.dtype == reference_tensor.dtype
     assert sae_moved.W_dec.device == reference_tensor.device
@@ -176,7 +177,7 @@ def test_StandardSAE_to_kwargs_only():
     assert sae_moved.device == torch.device("meta")
     assert sae_moved.dtype == torch.float16
     assert sae_moved.cfg.device == "meta"
-    assert sae_moved.cfg.dtype == "torch.float16"
+    assert sae_moved.cfg.dtype == "float16"
 
 
 def test_StandardSAE_to_positional_args():
@@ -188,7 +189,7 @@ def test_StandardSAE_to_positional_args():
     assert sae_moved.device == torch.device("meta")
     assert sae_moved.dtype == torch.float16
     assert sae_moved.cfg.device == "meta"
-    assert sae_moved.cfg.dtype == "torch.float16"
+    assert sae_moved.cfg.dtype == "float16"
 
 
 def test_StandardSAE_to_device_only_positional():
@@ -211,7 +212,7 @@ def test_StandardSAE_to_dtype_only_positional():
     # Test using only dtype as positional arg
     sae_moved = sae.to(torch.float16)
     assert sae_moved.dtype == torch.float16
-    assert sae_moved.cfg.dtype == "torch.float16"
+    assert sae_moved.cfg.dtype == "float16"
     # device should remain unchanged
     assert sae_moved.device == torch.device("cpu")
     assert sae_moved.cfg.device == "cpu"

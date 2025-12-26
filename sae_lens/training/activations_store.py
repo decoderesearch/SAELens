@@ -24,7 +24,7 @@ from sae_lens.config import (
     HfDataset,
     LanguageModelSAERunnerConfig,
 )
-from sae_lens.constants import ACTIVATIONS_STORE_STATE_FILENAME, DTYPE_MAP
+from sae_lens.constants import ACTIVATIONS_STORE_STATE_FILENAME
 from sae_lens.pretokenize_runner import get_special_token_from_cfg
 from sae_lens.saes.sae import SAE, T_SAE_CONFIG, T_TRAINING_SAE_CONFIG
 from sae_lens.tokenization_and_batching import concat_and_batch_sequences
@@ -32,6 +32,7 @@ from sae_lens.training.mixing_buffer import mixing_buffer
 from sae_lens.util import (
     extract_stop_at_layer_from_tlens_hook_name,
     get_special_token_ids,
+    str_to_dtype,
 )
 
 
@@ -258,7 +259,7 @@ class ActivationsStore:
         self.prepend_bos = prepend_bos
         self.normalize_activations = normalize_activations
         self.device = torch.device(device)
-        self.dtype = DTYPE_MAP[dtype]
+        self.dtype = str_to_dtype(dtype)
         self.cached_activations_path = cached_activations_path
         self.autocast_lm = autocast_lm
         self.seqpos_slice = seqpos_slice

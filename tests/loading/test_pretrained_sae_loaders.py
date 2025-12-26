@@ -1,10 +1,12 @@
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 import torch
 import yaml
 from huggingface_hub import hf_hub_download as real_hf_hub_download
+from huggingface_hub.utils import EntryNotFoundError
 from safetensors.torch import save_file
 from sparsify import SparseCoder, SparseCoderConfig
 
@@ -12,6 +14,8 @@ from sae_lens import StandardSAE, StandardSAEConfig
 from sae_lens.loading.pretrained_sae_loaders import (
     _infer_gemma_3_raw_cfg_dict,
     dictionary_learning_sae_huggingface_loader_1,
+    gemma_2_transcoder_huggingface_loader,
+    gemma_3_sae_huggingface_loader,
     get_deepseek_r1_config_from_hf,
     get_gemma_2_transcoder_config_from_hf,
     get_gemma_3_config_from_hf,
@@ -309,6 +313,114 @@ def test_infer_gemma_3_raw_cfg_dict_unknown_hook_type():
         )
 
 
+def test_gemma_3_sae_huggingface_loader_with_mocked_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    repo_id = "google/gemma-scope-2-1b-pt"
+    folder_name = "resid_post_all/layer_10_width_262k_l0_small"
+    device = "cpu"
+
+    # These dimensions match the real SAE
+    d_in = 1152
+    d_sae = 262144
+
+    # Create mock weights matching the expected safetensors format
+    W_enc = torch.randn(d_in, d_sae, dtype=torch.float32)
+    W_dec = torch.randn(d_sae, d_in, dtype=torch.float32)
+    b_enc = torch.randn(d_sae, dtype=torch.float32)
+    b_dec = torch.randn(d_in, dtype=torch.float32)
+    threshold = torch.randn(d_sae, dtype=torch.float32)
+
+    raw_state_dict = {
+        "w_enc": W_enc,
+        "w_dec": W_dec,
+        "b_enc": b_enc,
+        "b_dec": b_dec,
+        "threshold": threshold,
+    }
+
+    # Save mock weights as safetensors file
+    safetensors_path = tmp_path / "params.safetensors"
+    save_file(raw_state_dict, safetensors_path)
+
+    def mock_hf_hub_download(
+        repo_id: str,  # noqa: ARG001
+        filename: str,
+        subfolder: str | None = None,  # noqa: ARG001
+        force_download: bool = False,  # noqa: ARG001
+        revision: str | None = None,  # noqa: ARG001
+    ) -> str:
+        # config.json doesn't exist for this SAE, causing fallback to _infer_gemma_3_raw_cfg_dict
+        if filename.endswith("config.json"):
+            raise EntryNotFoundError("config.json not found")
+        return str(safetensors_path)
+
+    def mock_get_safetensors_tensor_shapes(
+        repo_id: str,  # noqa: ARG001
+        filename: str,  # noqa: ARG001
+    ) -> dict[str, list[int]]:
+        return {
+            "w_enc": [d_in, d_sae],
+            "w_dec": [d_sae, d_in],
+            "b_enc": [d_sae],
+            "b_dec": [d_in],
+            "threshold": [d_sae],
+        }
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.get_safetensors_tensor_shapes",
+        mock_get_safetensors_tensor_shapes,
+    )
+
+    cfg_dict, state_dict, log_sparsity = gemma_3_sae_huggingface_loader(
+        repo_id=repo_id,
+        folder_name=folder_name,
+        device=device,
+        force_download=False,
+        cfg_overrides=None,
+    )
+
+    # Verify config matches expected values from real SAE
+    expected_cfg = {
+        "architecture": "jumprelu",
+        "d_in": d_in,
+        "d_sae": d_sae,
+        "dtype": "float32",
+        "model_name": "google/gemma-3-1b-pt",
+        "hook_name": "blocks.10.hook_resid_post",
+        "hook_head_index": None,
+        "finetuning_scaling_factor": False,
+        "sae_lens_training_version": None,
+        "prepend_bos": True,
+        "dataset_path": "monology/pile-uncopyrighted",
+        "context_size": 1024,
+        "apply_b_dec_to_input": False,
+        "normalize_activations": None,
+        "hf_hook_name": "model.layers.10.output",
+        "device": "cpu",
+    }
+    assert cfg_dict == expected_cfg
+    assert log_sparsity is None
+
+    # Verify state dict structure and shapes
+    assert set(state_dict.keys()) == {"W_enc", "W_dec", "b_enc", "b_dec", "threshold"}
+    assert state_dict["W_enc"].shape == (d_in, d_sae)
+    assert state_dict["W_dec"].shape == (d_sae, d_in)
+    assert state_dict["b_enc"].shape == (d_sae,)
+    assert state_dict["b_dec"].shape == (d_in,)
+    assert state_dict["threshold"].shape == (d_sae,)
+
+    # Verify values match input
+    torch.testing.assert_close(state_dict["W_enc"], W_enc)
+    torch.testing.assert_close(state_dict["W_dec"], W_dec)
+    torch.testing.assert_close(state_dict["b_enc"], b_enc)
+    torch.testing.assert_close(state_dict["b_dec"], b_dec)
+    torch.testing.assert_close(state_dict["threshold"], threshold)
+
+
 def test_load_sae_config_from_huggingface_gemma_2_hook_z_saes():
     cfg_dict = load_sae_config_from_huggingface(
         "gemma-scope-2b-pt-att",
@@ -381,6 +493,9 @@ def test_load_sae_config_from_huggingface_matches_from_pretrained():
         sae_id="blocks.0.hook_resid_pre",
         device="cpu",
     )
+    # Normalize dtype format - both "float32" and "torch.float32" are equivalent
+    if direct_sae_cfg.get("dtype") == "torch.float32":
+        direct_sae_cfg["dtype"] = "float32"
     assert direct_sae_cfg == from_pretrained_cfg_dict
 
 
@@ -412,6 +527,104 @@ def test_get_gemma_2_transcoder_config_from_hf():
     }
 
     assert cfg == expected_cfg
+
+
+def test_gemma_2_transcoder_huggingface_loader_with_mocked_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    repo_id = "google/gemma-scope-2b-pt-transcoders"
+    folder_name = "layer_3/width_16k/average_l0_54"
+    device = "cpu"
+
+    # These dimensions match the real config from get_gemma_2_transcoder_config_from_hf
+    d_in = 2304
+    d_sae = 16384
+
+    # Create mock weights matching the expected npz format
+    W_enc = np.random.randn(d_in, d_sae).astype(np.float32)
+    W_dec = np.random.randn(d_sae, d_in).astype(np.float32)
+    b_enc = np.random.randn(d_sae).astype(np.float32)
+    b_dec = np.random.randn(d_in).astype(np.float32)
+    threshold = np.random.randn(d_sae).astype(np.float32)
+
+    # Save mock weights as npz file
+    npz_file_path = tmp_path / "params.npz"
+    np.savez(
+        npz_file_path,
+        w_enc=W_enc,
+        w_dec=W_dec,
+        b_enc=b_enc,
+        b_dec=b_dec,
+        threshold=threshold,
+    )
+
+    def mock_hf_hub_download(
+        repo_id: str,  # noqa: ARG001
+        filename: str,  # noqa: ARG001
+        force_download: bool = False,  # noqa: ARG001
+        revision: str | None = None,  # noqa: ARG001
+    ) -> str:
+        return str(npz_file_path)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+    cfg_dict, state_dict, log_sparsity = gemma_2_transcoder_huggingface_loader(
+        repo_id=repo_id,
+        folder_name=folder_name,
+        device=device,
+        force_download=False,
+        cfg_overrides=None,
+    )
+
+    # Verify config matches the real config from get_gemma_2_transcoder_config_from_hf
+    expected_cfg = {
+        "architecture": "jumprelu_transcoder",
+        "d_in": 2304,
+        "d_out": 2304,
+        "d_sae": 16384,
+        "dtype": "float32",
+        "device": "cpu",
+        "activation_fn": "relu",
+        "normalize_activations": "none",
+        "model_name": "gemma-2-2b",
+        "hook_name": "blocks.3.ln2.hook_normalized",
+        "hook_name_out": "blocks.3.hook_mlp_out",
+        "hook_head_index": None,
+        "hook_head_index_out": None,
+        "prepend_bos": True,
+        "dataset_path": "monology/pile-uncopyrighted",
+        "context_size": 1024,
+        "apply_b_dec_to_input": False,
+    }
+    assert cfg_dict == expected_cfg
+    assert log_sparsity is None
+
+    # Verify state dict structure and shapes
+    assert set(state_dict.keys()) == {"W_enc", "W_dec", "b_enc", "b_dec", "threshold"}
+    assert state_dict["W_enc"].shape == (d_in, d_sae)
+    assert state_dict["W_dec"].shape == (d_sae, d_in)
+    assert state_dict["b_enc"].shape == (d_sae,)
+    assert state_dict["b_dec"].shape == (d_in,)
+    assert state_dict["threshold"].shape == (d_sae,)
+
+    # Verify values match input (converted to torch tensors)
+    torch.testing.assert_close(
+        state_dict["W_enc"], torch.tensor(W_enc, dtype=torch.float32)
+    )
+    torch.testing.assert_close(
+        state_dict["W_dec"], torch.tensor(W_dec, dtype=torch.float32)
+    )
+    torch.testing.assert_close(
+        state_dict["b_enc"], torch.tensor(b_enc, dtype=torch.float32)
+    )
+    torch.testing.assert_close(
+        state_dict["b_dec"], torch.tensor(b_dec, dtype=torch.float32)
+    )
+    torch.testing.assert_close(
+        state_dict["threshold"], torch.tensor(threshold, dtype=torch.float32)
+    )
 
 
 def test_get_mntss_clt_layer_config_from_hf():
@@ -1332,17 +1545,22 @@ def test_get_mntss_clt_layer_huggingface_loader(
             return str(decoder_path)
         raise ValueError(f"Unexpected filename: {filename}")
 
-    # Mock load_file to return the expected nested structure
-    def mock_load_file(file_path: str, device: str = "cpu") -> dict[str, torch.Tensor]:  # noqa: ARG001
-        if f"W_enc_{folder_name}.safetensors" in file_path:
+    # Mock load_safetensors_weights to return the expected nested structure
+    def mock_load_safetensors_weights(
+        path: str | Path,  # noqa: ARG001
+        device: str = "cpu",  # noqa: ARG001
+        dtype: torch.dtype | str | None = None,  # noqa: ARG001
+    ) -> dict[str, torch.Tensor]:
+        path_str = str(path)
+        if f"W_enc_{folder_name}.safetensors" in path_str:
             return {
                 f"W_enc_{folder_name}": W_enc_tensor,
                 f"b_enc_{folder_name}": b_enc_tensor,
                 f"b_dec_{folder_name}": b_dec_tensor,
             }
-        if f"W_dec_{folder_name}.safetensors" in file_path:
+        if f"W_dec_{folder_name}.safetensors" in path_str:
             return {f"W_dec_{folder_name}": W_dec_tensor}
-        raise ValueError(f"Unexpected file path: {file_path}")
+        raise ValueError(f"Unexpected file path: {path_str}")
 
     # Mock get_safetensors_tensor_shapes to return expected tensor shapes
     def mock_get_safetensors_tensor_shapes(
@@ -1360,7 +1578,8 @@ def test_get_mntss_clt_layer_huggingface_loader(
         "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
     )
     monkeypatch.setattr(
-        "sae_lens.loading.pretrained_sae_loaders.load_file", mock_load_file
+        "sae_lens.loading.pretrained_sae_loaders.load_safetensors_weights",
+        mock_load_safetensors_weights,
     )
     monkeypatch.setattr(
         "sae_lens.loading.pretrained_sae_loaders.get_safetensors_tensor_shapes",

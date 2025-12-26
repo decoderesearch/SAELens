@@ -12,11 +12,9 @@ from huggingface_hub import hf_hub_download, hf_hub_url
 from huggingface_hub.utils import EntryNotFoundError, build_hf_headers
 from packaging.version import Version
 from safetensors import safe_open
-from safetensors.torch import load_file
 
 from sae_lens import logger
 from sae_lens.constants import (
-    DTYPE_MAP,
     SAE_CFG_FILENAME,
     SAE_WEIGHTS_FILENAME,
     SPARSIFY_WEIGHTS_FILENAME,
@@ -28,7 +26,7 @@ from sae_lens.loading.pretrained_saes_directory import (
     get_repo_id_and_folder_name,
 )
 from sae_lens.registry import get_sae_class
-from sae_lens.util import filter_valid_dataclass_fields
+from sae_lens.util import filter_valid_dataclass_fields, str_to_dtype
 
 LLM_METADATA_KEYS = {
     "model_name",
@@ -49,6 +47,21 @@ LLM_METADATA_KEYS = {
     "hf_hook_name",
     "hf_hook_name_out",
 }
+
+
+def load_safetensors_weights(
+    path: str | Path, device: str = "cpu", dtype: torch.dtype | str | None = None
+) -> dict[str, torch.Tensor]:
+    """Load safetensors weights and optionally convert to a different dtype"""
+    loaded_weights = {}
+    dtype = str_to_dtype(dtype) if isinstance(dtype, str) else dtype
+    with safe_open(path, framework="pt", device=device) as f:
+        for k in f.keys():  # noqa: SIM118
+            weight = f.get_tensor(k)
+            if dtype is not None:
+                weight = weight.to(dtype=dtype)
+            loaded_weights[k] = weight
+    return loaded_weights
 
 
 # loaders take in a release, sae_id, device, and whether to force download, and returns a tuple of config, state_dict, and log sparsity
@@ -341,7 +354,7 @@ def read_sae_components_from_disk(
     Given a loaded dictionary and a path to a weight file, load the weights and return the state_dict.
     """
     if dtype is None:
-        dtype = DTYPE_MAP[cfg_dict["dtype"]]
+        dtype = str_to_dtype(cfg_dict["dtype"])
 
     state_dict = {}
     with safe_open(weight_path, framework="pt", device=device) as f:  # type: ignore
@@ -682,15 +695,6 @@ def gemma_3_sae_huggingface_loader(
         cfg_overrides,
     )
 
-    # replace folder name of 65k with 64k
-    # TODO: remove this workaround once weights are fixed
-    if "270m-pt" in repo_id:
-        if "65k" in folder_name:
-            folder_name = folder_name.replace("65k", "64k")
-        # replace folder name of 262k with 250k
-        if "262k" in folder_name:
-            folder_name = folder_name.replace("262k", "250k")
-
     params_file = "params.safetensors"
     if "clt" in folder_name:
         params_file = folder_name.split("/")[-1] + ".safetensors"
@@ -704,7 +708,9 @@ def gemma_3_sae_huggingface_loader(
         force_download=force_download,
     )
 
-    raw_state_dict = load_file(sae_path, device=device)
+    raw_state_dict = load_safetensors_weights(
+        sae_path, device=device, dtype=cfg_dict.get("dtype")
+    )
 
     with torch.no_grad():
         w_dec = raw_state_dict["w_dec"]
@@ -791,11 +797,13 @@ def get_goodfire_huggingface_loader(
     )
     raw_state_dict = torch.load(sae_path, map_location=device)
 
+    target_dtype = str_to_dtype(cfg_dict.get("dtype", "float32"))
+
     state_dict = {
-        "W_enc": raw_state_dict["encoder_linear.weight"].T,
-        "W_dec": raw_state_dict["decoder_linear.weight"].T,
-        "b_enc": raw_state_dict["encoder_linear.bias"],
-        "b_dec": raw_state_dict["decoder_linear.bias"],
+        "W_enc": raw_state_dict["encoder_linear.weight"].T.to(dtype=target_dtype),
+        "W_dec": raw_state_dict["decoder_linear.weight"].T.to(dtype=target_dtype),
+        "b_enc": raw_state_dict["encoder_linear.bias"].to(dtype=target_dtype),
+        "b_dec": raw_state_dict["decoder_linear.bias"].to(dtype=target_dtype),
     }
 
     return cfg_dict, state_dict, None
@@ -898,26 +906,19 @@ def llama_scope_sae_huggingface_loader(
         force_download=force_download,
     )
 
-    # Load the weights using load_file instead of safe_open
-    state_dict_loaded = load_file(sae_path, device=device)
+    state_dict_loaded = load_safetensors_weights(
+        sae_path, device=device, dtype=cfg_dict.get("dtype")
+    )
 
     # Convert and organize the weights
     state_dict = {
-        "W_enc": state_dict_loaded["encoder.weight"]
-        .to(dtype=DTYPE_MAP[cfg_dict["dtype"]])
-        .T,
-        "W_dec": state_dict_loaded["decoder.weight"]
-        .to(dtype=DTYPE_MAP[cfg_dict["dtype"]])
-        .T,
-        "b_enc": state_dict_loaded["encoder.bias"].to(
-            dtype=DTYPE_MAP[cfg_dict["dtype"]]
-        ),
-        "b_dec": state_dict_loaded["decoder.bias"].to(
-            dtype=DTYPE_MAP[cfg_dict["dtype"]]
-        ),
+        "W_enc": state_dict_loaded["encoder.weight"].T,
+        "W_dec": state_dict_loaded["decoder.weight"].T,
+        "b_enc": state_dict_loaded["encoder.bias"],
+        "b_dec": state_dict_loaded["decoder.bias"],
         "threshold": torch.ones(
             cfg_dict["d_sae"],
-            dtype=DTYPE_MAP[cfg_dict["dtype"]],
+            dtype=str_to_dtype(cfg_dict["dtype"]),
             device=cfg_dict["device"],
         )
         * cfg_dict["jump_relu_threshold"],
@@ -1228,26 +1229,17 @@ def llama_scope_r1_distill_sae_huggingface_loader(
         force_download=force_download,
     )
 
-    # Load the weights using load_file instead of safe_open
-    state_dict_loaded = load_file(sae_path, device=device)
+    state_dict_loaded = load_safetensors_weights(
+        sae_path, device=device, dtype=cfg_dict.get("dtype")
+    )
 
     # Convert and organize the weights
     state_dict = {
-        "W_enc": state_dict_loaded["encoder.weight"]
-        .to(dtype=DTYPE_MAP[cfg_dict["dtype"]])
-        .T,
-        "W_dec": state_dict_loaded["decoder.weight"]
-        .to(dtype=DTYPE_MAP[cfg_dict["dtype"]])
-        .T,
-        "b_enc": state_dict_loaded["encoder.bias"].to(
-            dtype=DTYPE_MAP[cfg_dict["dtype"]]
-        ),
-        "b_dec": state_dict_loaded["decoder.bias"].to(
-            dtype=DTYPE_MAP[cfg_dict["dtype"]]
-        ),
-        "threshold": state_dict_loaded["log_jumprelu_threshold"]
-        .to(dtype=DTYPE_MAP[cfg_dict["dtype"]])
-        .exp(),
+        "W_enc": state_dict_loaded["encoder.weight"].T,
+        "W_dec": state_dict_loaded["decoder.weight"].T,
+        "b_enc": state_dict_loaded["encoder.bias"],
+        "b_dec": state_dict_loaded["decoder.bias"],
+        "threshold": state_dict_loaded["log_jumprelu_threshold"].exp(),
     }
 
     # No sparsity tensor for Llama Scope SAEs
@@ -1367,34 +1359,34 @@ def sparsify_disk_loader(
     cfg_dict = get_sparsify_config_from_disk(path, device, cfg_overrides)
 
     weight_path = Path(path) / SPARSIFY_WEIGHTS_FILENAME
-    state_dict_loaded = load_file(weight_path, device=device)
-
-    dtype = DTYPE_MAP[cfg_dict["dtype"]]
+    state_dict_loaded = load_safetensors_weights(
+        weight_path, device=device, dtype=cfg_dict.get("dtype")
+    )
 
     W_enc = (
         state_dict_loaded["W_enc"]
         if "W_enc" in state_dict_loaded
         else state_dict_loaded["encoder.weight"].T
-    ).to(dtype)
+    )
 
     if "W_dec" in state_dict_loaded:
-        W_dec = state_dict_loaded["W_dec"].T.to(dtype)
+        W_dec = state_dict_loaded["W_dec"].T
     else:
-        W_dec = state_dict_loaded["decoder.weight"].T.to(dtype)
+        W_dec = state_dict_loaded["decoder.weight"].T
 
     if "b_enc" in state_dict_loaded:
-        b_enc = state_dict_loaded["b_enc"].to(dtype)
+        b_enc = state_dict_loaded["b_enc"]
     elif "encoder.bias" in state_dict_loaded:
-        b_enc = state_dict_loaded["encoder.bias"].to(dtype)
+        b_enc = state_dict_loaded["encoder.bias"]
     else:
-        b_enc = torch.zeros(cfg_dict["d_sae"], dtype=dtype, device=device)
+        b_enc = torch.zeros(cfg_dict["d_sae"], dtype=W_dec.dtype, device=device)
 
     if "b_dec" in state_dict_loaded:
-        b_dec = state_dict_loaded["b_dec"].to(dtype)
+        b_dec = state_dict_loaded["b_dec"]
     elif "decoder.bias" in state_dict_loaded:
-        b_dec = state_dict_loaded["decoder.bias"].to(dtype)
+        b_dec = state_dict_loaded["decoder.bias"]
     else:
-        b_dec = torch.zeros(cfg_dict["d_in"], dtype=dtype, device=device)
+        b_dec = torch.zeros(cfg_dict["d_in"], dtype=W_dec.dtype, device=device)
 
     state_dict = {"W_enc": W_enc, "b_enc": b_enc, "W_dec": W_dec, "b_dec": b_dec}
     return cfg_dict, state_dict
@@ -1625,7 +1617,9 @@ def mwhanna_transcoder_huggingface_loader(
     )
 
     # Load weights from safetensors
-    state_dict = load_file(file_path, device=device)
+    state_dict = load_safetensors_weights(
+        file_path, device=device, dtype=cfg_dict.get("dtype")
+    )
     state_dict["W_enc"] = state_dict["W_enc"].T
 
     return cfg_dict, state_dict, None
@@ -1709,8 +1703,12 @@ def mntss_clt_layer_huggingface_loader(
         force_download=force_download,
     )
 
-    encoder_state_dict = load_file(encoder_path, device=device)
-    decoder_state_dict = load_file(decoder_path, device=device)
+    encoder_state_dict = load_safetensors_weights(
+        encoder_path, device=device, dtype=cfg_dict.get("dtype")
+    )
+    decoder_state_dict = load_safetensors_weights(
+        decoder_path, device=device, dtype=cfg_dict.get("dtype")
+    )
 
     with torch.no_grad():
         state_dict = {
@@ -1853,7 +1851,9 @@ def temporal_sae_huggingface_loader(
     )
 
     # Load checkpoint from safetensors
-    state_dict_raw = load_file(ckpt_path, device=device)
+    state_dict_raw = load_safetensors_weights(
+        ckpt_path, device=device, dtype=cfg_dict.get("dtype")
+    )
 
     # Convert to SAELens naming convention
     # TemporalSAE uses: D (decoder), E (encoder), b (bias), attn_layers.*

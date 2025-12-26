@@ -27,11 +27,10 @@ from typing_extensions import deprecated, overload, override
 
 from sae_lens import __version__
 from sae_lens.constants import (
-    DTYPE_MAP,
     SAE_CFG_FILENAME,
     SAE_WEIGHTS_FILENAME,
 )
-from sae_lens.util import filter_valid_dataclass_fields
+from sae_lens.util import dtype_to_str, filter_valid_dataclass_fields, str_to_dtype
 
 if TYPE_CHECKING:
     from sae_lens.config import LanguageModelSAERunnerConfig
@@ -253,7 +252,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
                 stacklevel=1,
             )
 
-        self.dtype = DTYPE_MAP[cfg.dtype]
+        self.dtype = str_to_dtype(cfg.dtype)
         self.device = torch.device(cfg.device)
         self.use_error_term = use_error_term
 
@@ -437,8 +436,8 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         # Update dtype in config if provided
         if dtype_arg is not None:
-            # Update the cfg.dtype
-            self.cfg.dtype = str(dtype_arg)
+            # Update the cfg.dtype (use canonical short form like "float32")
+            self.cfg.dtype = dtype_to_str(dtype_arg)
 
             # Update the dtype property
             self.dtype = dtype_arg
@@ -534,6 +533,15 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         dtype: str | None = None,
         converter: PretrainedSaeDiskLoader = sae_lens_disk_loader,
     ) -> T_SAE:
+        """
+        Load a SAE from disk.
+
+        Args:
+            path: The path to the SAE weights and config.
+            device: The device to load the SAE on, defaults to "cpu".
+            dtype: The dtype to load the SAE on, defaults to None. If None, the dtype will be inferred from the SAE config.
+            converter: The converter to use to load the SAE, defaults to sae_lens_disk_loader.
+        """
         overrides = {"dtype": dtype} if dtype is not None else None
         cfg_dict, state_dict = converter(path, device, cfg_overrides=overrides)
         cfg_dict = handle_config_defaulting(cfg_dict)
@@ -542,10 +550,17 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         )
         sae_cfg = sae_config_cls.from_dict(cfg_dict)
         sae_cls = cls.get_sae_class_for_architecture(sae_cfg.architecture())
+        # hack to avoid using double memory when loading the SAE.
+        # first put the SAE on the meta device, then load the weights.
+        device = sae_cfg.device
+        sae_cfg.device = "meta"
         sae = sae_cls(sae_cfg)
+        sae.cfg.device = device
         sae.process_state_dict_for_loading(state_dict)
-        sae.load_state_dict(state_dict)
-        return sae
+        sae.load_state_dict(state_dict, assign=True)
+        # the loaders should already handle the dtype / device conversion
+        # but this is a fallback to guarantee the SAE is on the correct device and dtype
+        return sae.to(dtype=str_to_dtype(sae_cfg.dtype), device=device)
 
     @classmethod
     def from_pretrained(
@@ -553,6 +568,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         release: str,
         sae_id: str,
         device: str = "cpu",
+        dtype: str = "float32",
         force_download: bool = False,
         converter: PretrainedSaeHuggingfaceLoader | None = None,
     ) -> T_SAE:
@@ -562,10 +578,18 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         Args:
             release: The release name. This will be mapped to a huggingface repo id based on the pretrained_saes.yaml file.
             id: The id of the SAE to load. This will be mapped to a path in the huggingface repo.
-            device: The device to load the SAE on.
+            device: The device to load the SAE on, defaults to "cpu".
+            dtype: The dtype to load the SAE on, defaults to "float32".
+            force_download: Whether to force download the SAE weights and config, defaults to False.
+            converter: The converter to use to load the SAE, defaults to None. If None, the converter will be inferred from the release.
         """
         return cls.from_pretrained_with_cfg_and_sparsity(
-            release, sae_id, device, force_download, converter=converter
+            release,
+            sae_id,
+            device,
+            force_download=force_download,
+            dtype=dtype,
+            converter=converter,
         )[0]
 
     @classmethod
@@ -574,6 +598,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         release: str,
         sae_id: str,
         device: str = "cpu",
+        dtype: str = "float32",
         force_download: bool = False,
         converter: PretrainedSaeHuggingfaceLoader | None = None,
     ) -> tuple[T_SAE, dict[str, Any], torch.Tensor | None]:
@@ -584,7 +609,10 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         Args:
             release: The release name. This will be mapped to a huggingface repo id based on the pretrained_saes.yaml file.
             id: The id of the SAE to load. This will be mapped to a path in the huggingface repo.
-            device: The device to load the SAE on.
+            device: The device to load the SAE on, defaults to "cpu".
+            dtype: The dtype to load the SAE on, defaults to "float32".
+            force_download: Whether to force download the SAE weights and config, defaults to False.
+            converter: The converter to use to load the SAE, defaults to None. If None, the converter will be inferred from the release.
         """
 
         # get sae directory
@@ -634,6 +662,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         repo_id, folder_name = get_repo_id_and_folder_name(release, sae_id)
         config_overrides = get_config_overrides(release, sae_id)
         config_overrides["device"] = device
+        config_overrides["dtype"] = dtype
 
         # Load config and weights
         cfg_dict, state_dict, log_sparsities = conversion_loader(
@@ -651,9 +680,14 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         )
         sae_cfg = sae_config_cls.from_dict(cfg_dict)
         sae_cls = cls.get_sae_class_for_architecture(sae_cfg.architecture())
+        # hack to avoid using double memory when loading the SAE.
+        # first put the SAE on the meta device, then load the weights.
+        device = sae_cfg.device
+        sae_cfg.device = "meta"
         sae = sae_cls(sae_cfg)
+        sae.cfg.device = device
         sae.process_state_dict_for_loading(state_dict)
-        sae.load_state_dict(state_dict)
+        sae.load_state_dict(state_dict, assign=True)
 
         # Apply normalization if needed
         if cfg_dict.get("normalize_activations") == "expected_average_only_in":
@@ -666,7 +700,13 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
                     f"norm_scaling_factor not found for {release} and {sae_id}, but normalize_activations is 'expected_average_only_in'. Skipping normalization folding."
                 )
 
-        return sae, cfg_dict, log_sparsities
+        # the loaders should already handle the dtype / device conversion
+        # but this is a fallback to guarantee the SAE is on the correct device and dtype
+        return (
+            sae.to(dtype=str_to_dtype(dtype), device=device),
+            cfg_dict,
+            log_sparsities,
+        )
 
     @classmethod
     def from_dict(cls: type[T_SAE], config_dict: dict[str, Any]) -> T_SAE:

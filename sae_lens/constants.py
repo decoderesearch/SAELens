@@ -11,6 +11,14 @@ DTYPE_MAP = {
     "torch.bfloat16": torch.bfloat16,
 }
 
+# Reverse mapping from torch.dtype to canonical string format
+DTYPE_TO_STR = {
+    torch.float32: "float32",
+    torch.float64: "float64",
+    torch.float16: "float16",
+    torch.bfloat16: "bfloat16",
+}
+
 
 SPARSITY_FILENAME = "sparsity.safetensors"
 SAE_WEIGHTS_FILENAME = "sae_weights.safetensors"

@@ -5,7 +5,10 @@ from dataclasses import asdict, fields, is_dataclass
 from pathlib import Path
 from typing import Sequence, TypeVar
 
+import torch
 from transformers import PreTrainedTokenizerBase
+
+from sae_lens.constants import DTYPE_MAP, DTYPE_TO_STR
 
 K = TypeVar("K")
 V = TypeVar("V")
@@ -90,3 +93,21 @@ def get_special_token_ids(tokenizer: PreTrainedTokenizerBase) -> list[int]:
                     special_tokens.add(token_id)
 
     return list(special_tokens)
+
+
+def str_to_dtype(dtype: str) -> torch.dtype:
+    """Convert a string to a torch.dtype."""
+    if dtype not in DTYPE_MAP:
+        raise ValueError(
+            f"Invalid dtype: {dtype}. Must be one of {list(DTYPE_MAP.keys())}"
+        )
+    return DTYPE_MAP[dtype]
+
+
+def dtype_to_str(dtype: torch.dtype) -> str:
+    """Convert a torch.dtype to a string."""
+    if dtype not in DTYPE_TO_STR:
+        raise ValueError(
+            f"Invalid dtype: {dtype}. Must be one of {list(DTYPE_TO_STR.keys())}"
+        )
+    return DTYPE_TO_STR[dtype]
