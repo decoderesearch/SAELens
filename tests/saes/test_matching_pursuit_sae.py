@@ -179,7 +179,12 @@ def test_encode_matching_pursuit_matches_reference_implementation():
 
 def test_MatchingPursuitTrainingSAE_save_and_load_inference_sae(tmp_path: Path) -> None:
     cfg = build_matching_pursuit_sae_training_cfg(
-        d_in=20, d_sae=100, residual_threshold=1e-4, max_iterations=1, device="cpu"
+        d_in=20,
+        d_sae=100,
+        residual_threshold=1e-4,
+        max_iterations=2,
+        stop_on_duplicate_support=False,
+        device="cpu",
     )
     training_sae = MatchingPursuitTrainingSAE(cfg)
     random_params(training_sae)
@@ -200,8 +205,9 @@ def test_MatchingPursuitTrainingSAE_save_and_load_inference_sae(tmp_path: Path) 
     assert_close(inference_sae.W_dec, original_W_dec)
     assert_close(inference_sae.b_dec, original_b_dec)
 
-    assert inference_sae.cfg.residual_threshold == cfg.residual_threshold
-    assert inference_sae.cfg.max_iterations == cfg.max_iterations
+    assert inference_sae.cfg.residual_threshold == 1e-4
+    assert inference_sae.cfg.max_iterations == 2
+    assert inference_sae.cfg.stop_on_duplicate_support is False
 
     sae_in = torch.randn(5, cfg.d_in, device="cpu")
 

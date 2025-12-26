@@ -134,6 +134,7 @@ class TrainingSAEConfigDict(TypedDict, total=False):
     matryoshka_widths: list[int]  # For MatryoshkaBatchTopK
     residual_threshold: float  # for MatchingPursuitSAE
     max_iterations: int | None  # for MatchingPursuitSAE
+    stop_on_duplicate_support: bool  # for MatchingPursuitSAE
 
 
 class SAEConfigDict(TypedDict, total=False):
@@ -145,6 +146,8 @@ class SAEConfigDict(TypedDict, total=False):
     apply_b_dec_to_input: bool
     k: int  # For TopK
     residual_threshold: float  # for matching pursuit
+    max_iterations: int | None  # for MatchingPursuitSAE
+    stop_on_duplicate_support: bool  # for MatchingPursuitSAE
 
 
 # Helper to create the base runner config (reused by specific builders)
