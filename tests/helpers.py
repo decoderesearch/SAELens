@@ -458,7 +458,7 @@ def build_topk_sae_training_cfg(**kwargs: Any) -> TopKTrainingSAEConfig:
 def build_matching_pursuit_runner_cfg(
     **kwargs: Any,
 ) -> LanguageModelSAERunnerConfig[MatchingPursuitTrainingSAEConfig]:
-    """Helper to create a mock instance for TopK SAE."""
+    """Helper to create a mock instance for Matching Pursuit SAE."""
     default_sae_config: TrainingSAEConfigDict = {
         "d_in": 64,
         "d_sae": 256,

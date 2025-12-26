@@ -269,6 +269,7 @@ def _encode_matching_pursuit(
         W_dec: Decoder weight matrix. Shape [d_sae, d_in].
         residual_threshold: Stop when residual norm falls below this.
         max_iterations: Maximum iterations (default: d_in). Prevents infinite loops.
+        stop_on_duplicate_support: Whether to stop selecting latents if the support set has not changed from the previous iteration.
     """
     residual = sae_in_centered.clone()
 
