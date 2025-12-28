@@ -9072,150 +9072,150 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_5_width_262k_l0_small_affine
     path: transcoder_all/layer_5_width_262k_l0_small_affine
     l0: 12
-  # - id: layer_60_width_16k_l0_big
-  #   path: transcoder_all/layer_60_width_16k_l0_big
-  #   l0: 120
-  # - id: layer_60_width_16k_l0_big_affine
-  #   path: transcoder_all/layer_60_width_16k_l0_big_affine
-  #   l0: 120
-  # - id: layer_60_width_16k_l0_small
-  #   path: transcoder_all/layer_60_width_16k_l0_small
-  #   l0: 20
-  # - id: layer_60_width_16k_l0_small_affine
-  #   path: transcoder_all/layer_60_width_16k_l0_small_affine
-  #   l0: 20
-  # - id: layer_60_width_262k_l0_big
-  #   path: transcoder_all/layer_60_width_262k_l0_big
-  #   l0: 120
-  # - id: layer_60_width_262k_l0_big_affine
-  #   path: transcoder_all/layer_60_width_262k_l0_big_affine
-  #   l0: 120
-  # - id: layer_60_width_262k_l0_small
-  #   path: transcoder_all/layer_60_width_262k_l0_small
-  #   l0: 20
-  # - id: layer_60_width_262k_l0_small_affine
-  #   path: transcoder_all/layer_60_width_262k_l0_small_affine
-  #   l0: 20
-  # - id: layer_61_width_16k_l0_big
-  #   path: transcoder_all/layer_61_width_16k_l0_big
-  #   l0: 120
-  # - id: layer_61_width_16k_l0_big_affine
-  #   path: transcoder_all/layer_61_width_16k_l0_big_affine
-  #   l0: 120
-  # - id: layer_61_width_16k_l0_small
-  #   path: transcoder_all/layer_61_width_16k_l0_small
-  #   l0: 20
-  # - id: layer_61_width_16k_l0_small_affine
-  #   path: transcoder_all/layer_61_width_16k_l0_small_affine
-  #   l0: 20
-  # - id: layer_61_width_262k_l0_big
-  #   path: transcoder_all/layer_61_width_262k_l0_big
-  #   l0: 120
-  # - id: layer_61_width_262k_l0_big_affine
-  #   path: transcoder_all/layer_61_width_262k_l0_big_affine
-  #   l0: 120
-  # - id: layer_61_width_262k_l0_small
-  #   path: transcoder_all/layer_61_width_262k_l0_small
-  #   l0: 20
-  # - id: layer_61_width_262k_l0_small_affine
-  #   path: transcoder_all/layer_61_width_262k_l0_small_affine
-  #   l0: 20
-  # - id: layer_6_width_16k_l0_big
-  #   path: transcoder_all/layer_6_width_16k_l0_big
-  #   l0: 77
-  # - id: layer_6_width_16k_l0_big_affine
-  #   path: transcoder_all/layer_6_width_16k_l0_big_affine
-  #   l0: 77
-  # - id: layer_6_width_16k_l0_small
-  #   path: transcoder_all/layer_6_width_16k_l0_small
-  #   l0: 12
-  # - id: layer_6_width_16k_l0_small_affine
-  #   path: transcoder_all/layer_6_width_16k_l0_small_affine
-  #   l0: 12
-  # - id: layer_6_width_262k_l0_big
-  #   path: transcoder_all/layer_6_width_262k_l0_big
-  #   l0: 77
-  # - id: layer_6_width_262k_l0_big_affine
-  #   path: transcoder_all/layer_6_width_262k_l0_big_affine
-  #   l0: 77
-  # - id: layer_6_width_262k_l0_small
-  #   path: transcoder_all/layer_6_width_262k_l0_small
-  #   l0: 12
-  # - id: layer_6_width_262k_l0_small_affine
-  #   path: transcoder_all/layer_6_width_262k_l0_small_affine
-  #   l0: 12
-  # - id: layer_7_width_16k_l0_big
-  #   path: transcoder_all/layer_7_width_16k_l0_big
-  #   l0: 80
-  # - id: layer_7_width_16k_l0_big_affine
-  #   path: transcoder_all/layer_7_width_16k_l0_big_affine
-  #   l0: 80
-  # - id: layer_7_width_16k_l0_small
-  #   path: transcoder_all/layer_7_width_16k_l0_small
-  #   l0: 13
-  # - id: layer_7_width_16k_l0_small_affine
-  #   path: transcoder_all/layer_7_width_16k_l0_small_affine
-  #   l0: 13
-  # - id: layer_7_width_262k_l0_big
-  #   path: transcoder_all/layer_7_width_262k_l0_big
-  #   l0: 80
-  # - id: layer_7_width_262k_l0_big_affine
-  #   path: transcoder_all/layer_7_width_262k_l0_big_affine
-  #   l0: 80
-  # - id: layer_7_width_262k_l0_small
-  #   path: transcoder_all/layer_7_width_262k_l0_small
-  #   l0: 13
-  # - id: layer_7_width_262k_l0_small_affine
-  #   path: transcoder_all/layer_7_width_262k_l0_small_affine
-  #   l0: 13
-  # - id: layer_8_width_16k_l0_big
-  #   path: transcoder_all/layer_8_width_16k_l0_big
-  #   l0: 83
-  # - id: layer_8_width_16k_l0_big_affine
-  #   path: transcoder_all/layer_8_width_16k_l0_big_affine
-  #   l0: 83
-  # - id: layer_8_width_16k_l0_small
-  #   path: transcoder_all/layer_8_width_16k_l0_small
-  #   l0: 13
-  # - id: layer_8_width_16k_l0_small_affine
-  #   path: transcoder_all/layer_8_width_16k_l0_small_affine
-  #   l0: 13
-  # - id: layer_8_width_262k_l0_big
-  #   path: transcoder_all/layer_8_width_262k_l0_big
-  #   l0: 83
-  # - id: layer_8_width_262k_l0_big_affine
-  #   path: transcoder_all/layer_8_width_262k_l0_big_affine
-  #   l0: 83
-  # - id: layer_8_width_262k_l0_small
-  #   path: transcoder_all/layer_8_width_262k_l0_small
-  #   l0: 13
-  # - id: layer_8_width_262k_l0_small_affine
-  #   path: transcoder_all/layer_8_width_262k_l0_small_affine
-  #   l0: 13
-  # - id: layer_9_width_16k_l0_big
-  #   path: transcoder_all/layer_9_width_16k_l0_big
-  #   l0: 86
-  # - id: layer_9_width_16k_l0_big_affine
-  #   path: transcoder_all/layer_9_width_16k_l0_big_affine
-  #   l0: 86
-  # - id: layer_9_width_16k_l0_small
-  #   path: transcoder_all/layer_9_width_16k_l0_small
-  #   l0: 14
-  # - id: layer_9_width_16k_l0_small_affine
-  #   path: transcoder_all/layer_9_width_16k_l0_small_affine
-  #   l0: 14
-  # - id: layer_9_width_262k_l0_big
-  #   path: transcoder_all/layer_9_width_262k_l0_big
-  #   l0: 86
-  # - id: layer_9_width_262k_l0_big_affine
-  #   path: transcoder_all/layer_9_width_262k_l0_big_affine
-  #   l0: 86
-  # - id: layer_9_width_262k_l0_small
-  #   path: transcoder_all/layer_9_width_262k_l0_small
-  #   l0: 14
-  # - id: layer_9_width_262k_l0_small_affine
-  #   path: transcoder_all/layer_9_width_262k_l0_small_affine
-  #   l0: 14
+  - id: layer_60_width_16k_l0_big
+    path: transcoder_all/layer_60_width_16k_l0_big
+    l0: 120
+  - id: layer_60_width_16k_l0_big_affine
+    path: transcoder_all/layer_60_width_16k_l0_big_affine
+    l0: 120
+  - id: layer_60_width_16k_l0_small
+    path: transcoder_all/layer_60_width_16k_l0_small
+    l0: 20
+  - id: layer_60_width_16k_l0_small_affine
+    path: transcoder_all/layer_60_width_16k_l0_small_affine
+    l0: 20
+  - id: layer_60_width_262k_l0_big
+    path: transcoder_all/layer_60_width_262k_l0_big
+    l0: 120
+  - id: layer_60_width_262k_l0_big_affine
+    path: transcoder_all/layer_60_width_262k_l0_big_affine
+    l0: 120
+  - id: layer_60_width_262k_l0_small
+    path: transcoder_all/layer_60_width_262k_l0_small
+    l0: 20
+  - id: layer_60_width_262k_l0_small_affine
+    path: transcoder_all/layer_60_width_262k_l0_small_affine
+    l0: 20
+  - id: layer_61_width_16k_l0_big
+    path: transcoder_all/layer_61_width_16k_l0_big
+    l0: 120
+  - id: layer_61_width_16k_l0_big_affine
+    path: transcoder_all/layer_61_width_16k_l0_big_affine
+    l0: 120
+  - id: layer_61_width_16k_l0_small
+    path: transcoder_all/layer_61_width_16k_l0_small
+    l0: 20
+  - id: layer_61_width_16k_l0_small_affine
+    path: transcoder_all/layer_61_width_16k_l0_small_affine
+    l0: 20
+  - id: layer_61_width_262k_l0_big
+    path: transcoder_all/layer_61_width_262k_l0_big
+    l0: 120
+  - id: layer_61_width_262k_l0_big_affine
+    path: transcoder_all/layer_61_width_262k_l0_big_affine
+    l0: 120
+  - id: layer_61_width_262k_l0_small
+    path: transcoder_all/layer_61_width_262k_l0_small
+    l0: 20
+  - id: layer_61_width_262k_l0_small_affine
+    path: transcoder_all/layer_61_width_262k_l0_small_affine
+    l0: 20
+  - id: layer_6_width_16k_l0_big
+    path: transcoder_all/layer_6_width_16k_l0_big
+    l0: 77
+  - id: layer_6_width_16k_l0_big_affine
+    path: transcoder_all/layer_6_width_16k_l0_big_affine
+    l0: 77
+  - id: layer_6_width_16k_l0_small
+    path: transcoder_all/layer_6_width_16k_l0_small
+    l0: 12
+  - id: layer_6_width_16k_l0_small_affine
+    path: transcoder_all/layer_6_width_16k_l0_small_affine
+    l0: 12
+  - id: layer_6_width_262k_l0_big
+    path: transcoder_all/layer_6_width_262k_l0_big
+    l0: 77
+  - id: layer_6_width_262k_l0_big_affine
+    path: transcoder_all/layer_6_width_262k_l0_big_affine
+    l0: 77
+  - id: layer_6_width_262k_l0_small
+    path: transcoder_all/layer_6_width_262k_l0_small
+    l0: 12
+  - id: layer_6_width_262k_l0_small_affine
+    path: transcoder_all/layer_6_width_262k_l0_small_affine
+    l0: 12
+  - id: layer_7_width_16k_l0_big
+    path: transcoder_all/layer_7_width_16k_l0_big
+    l0: 80
+  - id: layer_7_width_16k_l0_big_affine
+    path: transcoder_all/layer_7_width_16k_l0_big_affine
+    l0: 80
+  - id: layer_7_width_16k_l0_small
+    path: transcoder_all/layer_7_width_16k_l0_small
+    l0: 13
+  - id: layer_7_width_16k_l0_small_affine
+    path: transcoder_all/layer_7_width_16k_l0_small_affine
+    l0: 13
+  - id: layer_7_width_262k_l0_big
+    path: transcoder_all/layer_7_width_262k_l0_big
+    l0: 80
+  - id: layer_7_width_262k_l0_big_affine
+    path: transcoder_all/layer_7_width_262k_l0_big_affine
+    l0: 80
+  - id: layer_7_width_262k_l0_small
+    path: transcoder_all/layer_7_width_262k_l0_small
+    l0: 13
+  - id: layer_7_width_262k_l0_small_affine
+    path: transcoder_all/layer_7_width_262k_l0_small_affine
+    l0: 13
+  - id: layer_8_width_16k_l0_big
+    path: transcoder_all/layer_8_width_16k_l0_big
+    l0: 83
+  - id: layer_8_width_16k_l0_big_affine
+    path: transcoder_all/layer_8_width_16k_l0_big_affine
+    l0: 83
+  - id: layer_8_width_16k_l0_small
+    path: transcoder_all/layer_8_width_16k_l0_small
+    l0: 13
+  - id: layer_8_width_16k_l0_small_affine
+    path: transcoder_all/layer_8_width_16k_l0_small_affine
+    l0: 13
+  - id: layer_8_width_262k_l0_big
+    path: transcoder_all/layer_8_width_262k_l0_big
+    l0: 83
+  - id: layer_8_width_262k_l0_big_affine
+    path: transcoder_all/layer_8_width_262k_l0_big_affine
+    l0: 83
+  - id: layer_8_width_262k_l0_small
+    path: transcoder_all/layer_8_width_262k_l0_small
+    l0: 13
+  - id: layer_8_width_262k_l0_small_affine
+    path: transcoder_all/layer_8_width_262k_l0_small_affine
+    l0: 13
+  - id: layer_9_width_16k_l0_big
+    path: transcoder_all/layer_9_width_16k_l0_big
+    l0: 86
+  - id: layer_9_width_16k_l0_big_affine
+    path: transcoder_all/layer_9_width_16k_l0_big_affine
+    l0: 86
+  - id: layer_9_width_16k_l0_small
+    path: transcoder_all/layer_9_width_16k_l0_small
+    l0: 14
+  - id: layer_9_width_16k_l0_small_affine
+    path: transcoder_all/layer_9_width_16k_l0_small_affine
+    l0: 14
+  - id: layer_9_width_262k_l0_big
+    path: transcoder_all/layer_9_width_262k_l0_big
+    l0: 86
+  - id: layer_9_width_262k_l0_big_affine
+    path: transcoder_all/layer_9_width_262k_l0_big_affine
+    l0: 86
+  - id: layer_9_width_262k_l0_small
+    path: transcoder_all/layer_9_width_262k_l0_small
+    l0: 14
+  - id: layer_9_width_262k_l0_small_affine
+    path: transcoder_all/layer_9_width_262k_l0_small_affine
+    l0: 14
 gemma-scope-2-27b-it-transcoders:
   conversion_func: gemma_3
   model: google/gemma-3-27b-it
