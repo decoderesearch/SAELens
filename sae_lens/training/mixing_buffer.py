@@ -20,6 +20,7 @@ def mixing_buffer(
         activations_loader: Iterator providing new activations
         mix_fraction: Fraction of buffer to keep for mixing (default 0.5).
                       Higher values mean more temporal mixing but slower throughput.
+                      If 0, no shuffling occurs (passthrough mode).
 
     Yields:
         Batches of activations of shape (batch_size, *activation_dims)
@@ -40,8 +41,8 @@ def mixing_buffer(
         )
 
         if storage_buffer.shape[0] >= buffer_size:
-            # Shuffle
-            storage_buffer = storage_buffer[torch.randperm(storage_buffer.shape[0])]
+            if mix_fraction > 0:
+                storage_buffer = storage_buffer[torch.randperm(storage_buffer.shape[0])]
 
             num_serving_batches = max(
                 1, int(storage_buffer.shape[0] * (1 - mix_fraction)) // batch_size

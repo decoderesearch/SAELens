@@ -134,3 +134,57 @@ def test_mixing_buffer_mix_fraction_preserves_total_batches():
 
     # Both should yield same total batches (200 activations / 10 = 20 batches)
     assert len(batches_low_mix) == len(batches_high_mix) == 20
+
+
+def test_mixing_buffer_zero_mix_fraction_no_shuffle():
+    buffer_size = 100
+    batch_size = 10
+    activations = [torch.arange(100)]
+
+    batches = list(
+        mixing_buffer(
+            buffer_size=buffer_size,
+            batch_size=batch_size,
+            activations_loader=iter(activations),
+            mix_fraction=0,
+        )
+    )
+
+    # With mix_fraction=0, order should be preserved (no shuffle)
+    all_values = torch.cat(batches)
+    assert torch.equal(all_values, torch.arange(100))
+
+
+def test_mixing_buffer_mix_fraction_matches_observed_mix_fraction():
+    max_seen_act = 0
+    target_mix_frac = 0.7
+    buffer_size = 10_000
+
+    def input_activations():
+        nonlocal max_seen_act
+        for i in range(1_000_000):
+            yield torch.tensor([i])
+            max_seen_act = i
+
+    buffer = mixing_buffer(
+        buffer_size=buffer_size,
+        batch_size=1000,
+        activations_loader=input_activations(),
+        mix_fraction=target_mix_frac,
+    )
+
+    observed_mix_fractions = []
+
+    prev_max_seen_act = max_seen_act
+    for i, batch in enumerate(buffer):
+        max_act = batch.max().item()
+        if i > 100:
+            # it should refill after depleting (1 - target_mix_frac) of the buffer
+            old_indices = max_act - (1 - target_mix_frac) * buffer_size
+            mix_frac = (batch < old_indices).sum() / len(batch)
+            observed_mix_fractions.append(mix_frac)
+        if prev_max_seen_act != max_seen_act:
+            prev_max_seen_act = max_seen_act
+
+    mean_mix_fraction = sum(observed_mix_fractions) / len(observed_mix_fractions)
+    assert mean_mix_fraction == pytest.approx(target_mix_frac, abs=0.05)
