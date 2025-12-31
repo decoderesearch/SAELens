@@ -69,7 +69,7 @@ class TopKMatryoshkaTrainingSAE(TopKTrainingSAE):
         super().__init__(cfg, use_error_term)
 
     @override
-    def def training_forward_pass(
+    def training_forward_pass(
         self,
         step_input: TrainStepInput,
     ) -> TrainStepOutput:
