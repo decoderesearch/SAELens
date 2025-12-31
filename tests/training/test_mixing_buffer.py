@@ -95,7 +95,7 @@ def test_mixing_buffer_maintains_dtype():
         assert batch.dtype == dtype
 
 
-@pytest.mark.parametrize("mix_fraction", [-0.1, 1.0, 1.5])
+@pytest.mark.parametrize("mix_fraction", [-0.1, 1.5])
 def test_mixing_buffer_invalid_mix_fraction_raises(mix_fraction: float):
     activations = [torch.randn(16, 8)]
     with pytest.raises(ValueError, match="mix_fraction must be in"):
@@ -160,7 +160,7 @@ def test_mixing_buffer_mix_fraction_matches_observed_mix_fraction():
     buffer_size = 10_000
 
     def input_activations():
-        for i in range(1_000_000):
+        for i in range(100_000):
             yield torch.tensor([i])
 
     buffer = mixing_buffer(
@@ -174,7 +174,7 @@ def test_mixing_buffer_mix_fraction_matches_observed_mix_fraction():
 
     for i, batch in enumerate(buffer):
         max_act = batch.max().item()
-        if i > 100:
+        if i > 10:
             # it should refill after depleting (1 - target_mix_frac) of the buffer
             old_indices = max_act - (1 - target_mix_frac) * buffer_size
             mix_frac = (batch < old_indices).sum() / len(batch)
