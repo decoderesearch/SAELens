@@ -28,8 +28,8 @@ def mixing_buffer(
 
     if buffer_size < batch_size:
         raise ValueError("Buffer size must be greater than or equal to batch size")
-    if not 0 <= mix_fraction < 1:
-        raise ValueError("mix_fraction must be in [0, 1)")
+    if not 0 <= mix_fraction <= 1:
+        raise ValueError("mix_fraction must be in [0, 1]")
 
     storage_buffer: torch.Tensor | None = None
 
