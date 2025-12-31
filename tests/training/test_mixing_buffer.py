@@ -93,3 +93,44 @@ def test_mixing_buffer_maintains_dtype():
 
     for batch in batches:
         assert batch.dtype == dtype
+
+
+@pytest.mark.parametrize("mix_fraction", [-0.1, 1.0, 1.5])
+def test_mixing_buffer_invalid_mix_fraction_raises(mix_fraction: float):
+    activations = [torch.randn(16, 8)]
+    with pytest.raises(ValueError, match="mix_fraction must be in"):
+        buffer = mixing_buffer(
+            buffer_size=16,
+            batch_size=4,
+            activations_loader=iter(activations),
+            mix_fraction=mix_fraction,
+        )
+        next(buffer)
+
+
+def test_mixing_buffer_mix_fraction_preserves_total_batches():
+    buffer_size = 100
+    batch_size = 10
+    activations_low = [torch.randn(buffer_size, 8), torch.randn(buffer_size, 8)]
+    activations_high = [torch.randn(buffer_size, 8), torch.randn(buffer_size, 8)]
+
+    batches_low_mix = list(
+        mixing_buffer(
+            buffer_size=buffer_size,
+            batch_size=batch_size,
+            activations_loader=iter(activations_low),
+            mix_fraction=0.2,
+        )
+    )
+
+    batches_high_mix = list(
+        mixing_buffer(
+            buffer_size=buffer_size,
+            batch_size=batch_size,
+            activations_loader=iter(activations_high),
+            mix_fraction=0.7,
+        )
+    )
+
+    # Both should yield same total batches (200 activations / 10 = 20 batches)
+    assert len(batches_low_mix) == len(batches_high_mix) == 20

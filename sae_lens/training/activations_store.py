@@ -148,6 +148,7 @@ class ActivationsStore:
             exclude_special_tokens=exclude_special_tokens,
             disable_concat_sequences=cfg.disable_concat_sequences,
             sequence_separator_token=cfg.sequence_separator_token,
+            activations_mixing_fraction=cfg.activations_mixing_fraction,
         )
 
     @classmethod
@@ -222,6 +223,7 @@ class ActivationsStore:
         exclude_special_tokens: torch.Tensor | None = None,
         disable_concat_sequences: bool = False,
         sequence_separator_token: int | Literal["bos", "eos", "sep"] | None = "bos",
+        activations_mixing_fraction: float = 0.5,
     ):
         self.model = model
         if model_kwargs is None:
@@ -269,6 +271,7 @@ class ActivationsStore:
         self.sequence_separator_token: int | Literal["bos", "eos", "sep"] | None = (
             sequence_separator_token
         )
+        self.activations_mixing_fraction = activations_mixing_fraction
 
         self.n_dataset_processed = 0
 
@@ -708,6 +711,7 @@ class ActivationsStore:
             buffer_size=self.n_batches_in_buffer * self.training_context_size,
             batch_size=self.train_batch_size_tokens,
             activations_loader=self._iterate_filtered_activations(),
+            mix_fraction=self.activations_mixing_fraction,
         )
 
     def next_batch(self) -> torch.Tensor:

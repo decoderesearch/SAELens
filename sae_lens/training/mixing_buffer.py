@@ -8,15 +8,18 @@ def mixing_buffer(
     buffer_size: int,
     batch_size: int,
     activations_loader: Iterator[torch.Tensor],
+    mix_fraction: float = 0.5,
 ) -> Iterator[torch.Tensor]:
     """
     A generator that maintains a mix of old and new activations for better training.
-    It stores half of the activations and mixes them with new ones to create batches.
+    It keeps a portion of activations and mixes them with new ones to create batches.
 
     Args:
-        buffer_size: Total size of the buffer (will store buffer_size/2 activations)
+        buffer_size: Total size of the buffer
         batch_size: Size of batches to return
         activations_loader: Iterator providing new activations
+        mix_fraction: Fraction of buffer to keep for mixing (default 0.5).
+                      Higher values mean more temporal mixing but slower throughput.
 
     Yields:
         Batches of activations of shape (batch_size, *activation_dims)
@@ -24,6 +27,8 @@ def mixing_buffer(
 
     if buffer_size < batch_size:
         raise ValueError("Buffer size must be greater than or equal to batch size")
+    if not 0 <= mix_fraction < 1:
+        raise ValueError("mix_fraction must be in [0, 1)")
 
     storage_buffer: torch.Tensor | None = None
 
@@ -38,7 +43,9 @@ def mixing_buffer(
             # Shuffle
             storage_buffer = storage_buffer[torch.randperm(storage_buffer.shape[0])]
 
-            num_serving_batches = max(1, storage_buffer.shape[0] // (2 * batch_size))
+            num_serving_batches = max(
+                1, int(storage_buffer.shape[0] * (1 - mix_fraction)) // batch_size
+            )
             serving_cutoff = num_serving_batches * batch_size
             serving_buffer = storage_buffer[:serving_cutoff]
             storage_buffer = storage_buffer[serving_cutoff:]
