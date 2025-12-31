@@ -79,18 +79,18 @@ trained_sae.save_inference_model("path/to/sae")
 
 The `SAETrainerConfig` contains all training hyperparameters. Key fields include:
 
-| Field | Description |
-|-------|-------------|
-| `total_training_samples` | Total number of activation samples to train on |
-| `train_batch_size_samples` | Batch size (number of activation vectors per step) |
-| `device` | Device to train on (`"cuda"`, `"cpu"`, etc.) |
-| `lr`, `lr_end` | Learning rate and final learning rate for schedulers |
-| `lr_scheduler_name` | Scheduler type: `"constant"`, `"cosineannealing"`, `"cosineannealingwarmrestarts"` |
-| `lr_warm_up_steps` | Number of warmup steps for learning rate |
-| `autocast` | Whether to use mixed precision training |
-| `dead_feature_window` | Window for detecting dead features |
-| `n_checkpoints` | Number of checkpoints to save during training |
-| `logger` | `LoggingConfig` for W&B logging |
+| Field                      | Description                                                                        |
+| -------------------------- | ---------------------------------------------------------------------------------- |
+| `total_training_samples`   | Total number of activation samples to train on                                     |
+| `train_batch_size_samples` | Batch size (number of activation vectors per step)                                 |
+| `device`                   | Device to train on (`"cuda"`, `"cpu"`, etc.)                                       |
+| `lr`, `lr_end`             | Learning rate and final learning rate for schedulers                               |
+| `lr_scheduler_name`        | Scheduler type: `"constant"`, `"cosineannealing"`, `"cosineannealingwarmrestarts"` |
+| `lr_warm_up_steps`         | Number of warmup steps for learning rate                                           |
+| `autocast`                 | Whether to use mixed precision training                                            |
+| `dead_feature_window`      | Window for detecting dead features                                                 |
+| `n_checkpoints`            | Number of checkpoints to save during training                                      |
+| `logger`                   | `LoggingConfig` for W&B logging                                                    |
 
 ### DataProvider
 
@@ -127,37 +127,40 @@ class MyCustomRunnerConfig:
     # Model settings
     model_name: str
     hook_layer: int
-    
+
     # Training settings
     training_samples: int
     batch_size: int
     lr: float
     device: str = "cuda"
-    
+
     # SAE settings
     d_in: int = 768
     d_sae: int = 768 * 8
 
+    # Output
+    output_path: str | None = None
+
 
 class MyCustomRunner:
     """Custom runner for training SAEs on your model type."""
-    
+
     def __init__(self, cfg: MyCustomRunnerConfig):
         self.cfg = cfg
-        
+
         # Load your model
         self.model = self._load_model()
-        
+
         # Create the SAE
         self.sae = self._create_sae()
-        
+
     def _load_model(self) -> torch.nn.Module:
         """Load your model here."""
         # Example: load a custom model
         from transformers import AutoModel
         model = AutoModel.from_pretrained(self.cfg.model_name)
         return model.to(self.cfg.device)
-    
+
     def _create_sae(self) -> TrainingSAE[Any]:
         """Create the SAE to train."""
         from sae_lens import StandardTrainingSAEConfig
@@ -167,29 +170,29 @@ class MyCustomRunner:
         )
         sae = TrainingSAE.from_dict(sae_cfg.to_dict())
         return sae.to(self.cfg.device)
-    
+
     def _get_activations(self, inputs: Any) -> torch.Tensor:
         """Extract activations from your model."""
         activations = []
-        
+
         def hook_fn(module: Any, input: Any, output: Any) -> None:
             activations.append(output.detach())
-        
+
         # Register hook on desired layer
         target_layer = self._get_target_layer()
         handle = target_layer.register_forward_hook(hook_fn)
-        
+
         with torch.no_grad():
             self.model(inputs)
-        
+
         handle.remove()
         return activations[0]
-    
+
     def _get_target_layer(self) -> torch.nn.Module:
         """Get the layer to hook for activations."""
         # Implement based on your model architecture
         raise NotImplementedError
-    
+
     def _create_data_provider(self) -> DataProvider:
         """Create an iterator that yields activation batches."""
         def activation_generator() -> Iterator[torch.Tensor]:
@@ -197,26 +200,26 @@ class MyCustomRunner:
             while True:
                 # Get a batch of inputs for your model
                 inputs = self._get_next_batch()
-                
+
                 # Extract activations
                 activations = self._get_activations(inputs)
-                
+
                 # Flatten to (batch_size * seq_len, d_in) if needed
                 if activations.dim() == 3:
                     activations = activations.view(-1, activations.size(-1))
-                
+
                 yield activations
-        
+
         return activation_generator()
-    
+
     def _get_next_batch(self) -> Any:
         """Get the next batch of inputs for your model."""
         raise NotImplementedError
-    
+
     def _create_evaluator(self) -> Evaluator[TrainingSAE[Any]] | None:
         """Optionally create an evaluator for periodic evaluation."""
         return None
-    
+
     def run(self) -> TrainingSAE[Any]:
         """Run training and return the trained SAE."""
         trainer_cfg = SAETrainerConfig(
@@ -239,15 +242,21 @@ class MyCustomRunner:
             save_final_checkpoint=False,
             logger=LoggingConfig(log_to_wandb=True),
         )
-        
+
         trainer = SAETrainer(
             cfg=trainer_cfg,
             sae=self.sae,
             data_provider=self._create_data_provider(),
             evaluator=self._create_evaluator(),
         )
-        
-        return trainer.fit()
+
+        trained_sae = trainer.fit()
+
+        # Save the trained SAE
+        if self.cfg.output_path is not None:
+            trained_sae.save_inference_model(self.cfg.output_path)
+
+        return trained_sae
 ```
 
 ## Example: GPT2 Sequence Classifier
@@ -278,7 +287,7 @@ class ClassifierSAERunnerConfig:
     model_name: str = "gpt2"
     dataset_path: str = "imdb"
     hook_layer: int = 6  # Which transformer block to hook
-    
+
     # Training
     training_tokens: int = 1_000_000
     batch_size_prompts: int = 8
@@ -286,38 +295,41 @@ class ClassifierSAERunnerConfig:
     context_size: int = 256
     lr: float = 3e-4
     device: str = "cuda"
-    
+
     # SAE
     expansion_factor: int = 8
     l1_coefficient: float = 5.0
-    
+
     # Buffer for activation shuffling
     n_batches_in_buffer: int = 16
+
+    # Output
+    output_path: str | None = None
 
 
 class ClassifierSAERunner:
     """Runner for training SAEs on GPT2ForSequenceClassification."""
-    
+
     def __init__(self, cfg: ClassifierSAERunnerConfig):
         self.cfg = cfg
-        
+
         # Load tokenizer and model
         self.tokenizer = GPT2Tokenizer.from_pretrained(cfg.model_name)
         self.tokenizer.pad_token = self.tokenizer.eos_token
-        
+
         self.model = GPT2ForSequenceClassification.from_pretrained(
             cfg.model_name,
             num_labels=2,  # Binary classification
         ).to(cfg.device)
         self.model.config.pad_token_id = self.tokenizer.pad_token_id
         self.model.eval()
-        
+
         # Get hidden size from model config
         self.d_in = self.model.config.hidden_size
-        
+
         # Load dataset
         self.dataset = load_dataset(cfg.dataset_path, split="train")
-        
+
         # Create SAE
         sae_cfg = StandardTrainingSAEConfig(
             d_in=self.d_in,
@@ -325,28 +337,28 @@ class ClassifierSAERunner:
             l1_coefficient=cfg.l1_coefficient,
         )
         self.sae = TrainingSAE.from_dict(sae_cfg.to_dict()).to(cfg.device)
-    
+
     def _get_activations(self, input_ids: torch.Tensor) -> torch.Tensor:
         """Extract activations from the target layer."""
         activations: list[torch.Tensor] = []
-        
+
         def hook_fn(module: Any, input: Any, output: Any) -> None:
             # output is (hidden_states, ...) tuple
             hidden = output[0] if isinstance(output, tuple) else output
             activations.append(hidden.detach())
-        
+
         # Hook into the transformer block's output
         target_block = self.model.transformer.h[self.cfg.hook_layer]
         handle = target_block.register_forward_hook(hook_fn)
-        
+
         try:
             with torch.no_grad():
                 self.model(input_ids)
         finally:
             handle.remove()
-        
+
         return activations[0]  # (batch, seq_len, hidden_size)
-    
+
     def _iterate_raw_activations(self) -> Iterator[torch.Tensor]:
         """Iterate over batches of activations from the model."""
         dataloader = DataLoader(
@@ -354,7 +366,7 @@ class ClassifierSAERunner:
             batch_size=self.cfg.batch_size_prompts,
             shuffle=True,
         )
-        
+
         while True:
             for batch in dataloader:
                 # Tokenize
@@ -366,34 +378,34 @@ class ClassifierSAERunner:
                     return_tensors="pt",
                 )
                 input_ids = encoded["input_ids"].to(self.cfg.device)
-                
+
                 # Get activations: (batch, seq_len, hidden_size)
                 activations = self._get_activations(input_ids)
-                
+
                 # Flatten to (batch * seq_len, hidden_size)
                 flat_activations = activations.view(-1, self.d_in)
-                
+
                 yield flat_activations
-    
+
     def _create_data_provider(self) -> DataProvider:
         """Create a data provider with activation shuffling."""
         buffer_size = (
-            self.cfg.n_batches_in_buffer 
-            * self.cfg.batch_size_prompts 
+            self.cfg.n_batches_in_buffer
+            * self.cfg.batch_size_prompts
             * self.cfg.context_size
         )
-        
+
         return mixing_buffer(
             buffer_size=buffer_size,
             batch_size=self.cfg.train_batch_size,
             activations_loader=self._iterate_raw_activations(),
         )
-    
+
     def _create_evaluator(
         self,
     ) -> Evaluator[TrainingSAE[Any]] | None:
         """Create an optional evaluator."""
-        
+
         def simple_evaluator(
             sae: TrainingSAE[Any],
             data_provider: DataProvider,
@@ -402,16 +414,16 @@ class ClassifierSAERunner:
             """Simple evaluation: compute reconstruction error on a batch."""
             sae.eval()
             batch = next(data_provider).to(sae.device)
-            
+
             with torch.no_grad():
                 sae_out = sae.decode(sae.encode(batch))
                 mse = (batch - sae_out).pow(2).mean().item()
-                
+
             sae.train()
             return {"eval/mse": mse}
-        
+
         return simple_evaluator
-    
+
     def run(self) -> TrainingSAE[Any]:
         """Run training."""
         trainer_cfg = SAETrainerConfig(
@@ -437,15 +449,21 @@ class ClassifierSAERunner:
                 wandb_project="classifier-sae",
             ),
         )
-        
+
         trainer = SAETrainer(
             cfg=trainer_cfg,
             sae=self.sae,
             data_provider=self._create_data_provider(),
             evaluator=self._create_evaluator(),
         )
-        
-        return trainer.fit()
+
+        trained_sae = trainer.fit()
+
+        # Save the trained SAE
+        if self.cfg.output_path is not None:
+            trained_sae.save_inference_model(self.cfg.output_path)
+
+        return trained_sae
 
 
 # Usage
@@ -456,11 +474,11 @@ if __name__ == "__main__":
         hook_layer=6,
         training_tokens=500_000,
         device="cuda" if torch.cuda.is_available() else "cpu",
+        output_path="classifier_sae",
     )
-    
+
     runner = ClassifierSAERunner(cfg)
-    trained_sae = runner.run()
-    trained_sae.save_inference_model("classifier_sae")
+    runner.run()
 ```
 
 ## Activation Shuffling with mixing_buffer
@@ -517,32 +535,32 @@ def my_evaluator(
 ) -> dict[str, Any]:
     """Custom evaluation function."""
     sae.eval()
-    
+
     # Collect some evaluation batches
     eval_batches = [next(data_provider) for _ in range(10)]
-    
+
     metrics: dict[str, float] = {}
-    
+
     with torch.no_grad():
         for batch in eval_batches:
             batch = batch.to(sae.device)
             scaled_batch = activation_scaler(batch)
-            
+
             # Forward pass
             encoded = sae.encode(scaled_batch)
             decoded = sae.decode(encoded)
-            
+
             # Compute metrics
             mse = (scaled_batch - decoded).pow(2).mean()
             l0 = (encoded != 0).float().sum(dim=-1).mean()
-            
+
             metrics["mse"] = metrics.get("mse", 0) + mse.item()
             metrics["l0"] = metrics.get("l0", 0) + l0.item()
-    
+
     # Average
     n_batches = len(eval_batches)
     metrics = {f"eval/{k}": v / n_batches for k, v in metrics.items()}
-    
+
     sae.train()
     return metrics
 ```
@@ -577,31 +595,32 @@ class VisionSAEConfig:
     batch_size: int = 32
     training_tokens: int = 1_000_000
     device: str = "cuda"
+    output_path: str | None = None
 
 
 class VisionSAERunner:
     def __init__(self, cfg: VisionSAEConfig):
         self.cfg = cfg
-        
+
         # Load vision model (using timm for example)
         import timm
         self.model = timm.create_model(
-            cfg.model_name, 
+            cfg.model_name,
             pretrained=True,
         ).to(cfg.device)
         self.model.eval()
-        
+
         # Get the hidden dimension
         # This depends on your model - ViT base has d=768
         self.d_in = 768
-        
+
         # Create SAE
         sae_cfg = StandardTrainingSAEConfig(
             d_in=self.d_in,
             d_sae=self.d_in * 8,
         )
         self.sae = TrainingSAE.from_dict(sae_cfg.to_dict()).to(cfg.device)
-        
+
         # Setup data loading
         transform = transforms.Compose([
             transforms.Resize(256),
@@ -612,15 +631,15 @@ class VisionSAERunner:
                 std=[0.229, 0.224, 0.225],
             ),
         ])
-        
+
         self.dataset = ImageNet(cfg.dataset_path, split="train", transform=transform)
         self.dataloader = DataLoader(
-            self.dataset, 
+            self.dataset,
             batch_size=cfg.batch_size,
             shuffle=True,
             num_workers=4,
         )
-    
+
     def _get_layer(self, name: str) -> torch.nn.Module:
         """Get a layer by name like 'blocks.6'."""
         parts = name.split(".")
@@ -631,32 +650,32 @@ class VisionSAERunner:
             else:
                 module = getattr(module, part)
         return module
-    
+
     def _iterate_activations(self) -> Iterator[torch.Tensor]:
         """Extract activations from vision model."""
         while True:
             for images, _ in self.dataloader:
                 images = images.to(self.cfg.device)
                 activations: list[torch.Tensor] = []
-                
+
                 def hook_fn(m: Any, i: Any, o: Any) -> None:
                     activations.append(o.detach())
-                
+
                 layer = self._get_layer(self.cfg.layer_name)
                 handle = layer.register_forward_hook(hook_fn)
-                
+
                 try:
                     with torch.no_grad():
                         self.model(images)
                 finally:
                     handle.remove()
-                
+
                 # ViT outputs: (batch, num_patches + 1, hidden_dim)
                 # Flatten patches: (batch * num_patches, hidden_dim)
                 act = activations[0]
                 flat_act = act.view(-1, act.size(-1))
                 yield flat_act
-    
+
     def run(self) -> TrainingSAE[Any]:
         # Use mixing buffer for shuffling patch activations
         data_provider = mixing_buffer(
@@ -664,7 +683,7 @@ class VisionSAERunner:
             batch_size=4096,
             activations_loader=self._iterate_activations(),
         )
-        
+
         trainer_cfg = SAETrainerConfig(
             total_training_samples=self.cfg.training_tokens,
             train_batch_size_samples=4096,
@@ -685,14 +704,20 @@ class VisionSAERunner:
             save_final_checkpoint=False,
             logger=LoggingConfig(log_to_wandb=True),
         )
-        
+
         trainer = SAETrainer(
             cfg=trainer_cfg,
             sae=self.sae,
             data_provider=data_provider,
         )
-        
-        return trainer.fit()
+
+        trained_sae = trainer.fit()
+
+        # Save the trained SAE
+        if self.cfg.output_path is not None:
+            trained_sae.save_inference_model(self.cfg.output_path)
+
+        return trained_sae
 ```
 
 ## Tips for Custom Runners
@@ -705,27 +730,25 @@ class VisionSAERunner:
 
 4. **Monitor dead features**: The trainer tracks feature activation frequency and logs dead feature counts to W&B
 
-5. **Consider memory**: When buffering activations, ensure `buffer_size * d_in * 4` (for float32) fits in memory
-
-6. **For custom SAE architectures**: See the [Custom SAEs](custom_saes.md) guide for creating new SAE types
+5. **For custom SAE architectures**: See the [Custom SAEs](custom_saes.md) guide for creating new SAE types
 
 ## Summary
 
-| Component | Purpose | Required? |
-|-----------|---------|-----------|
-| `SAETrainer` | Core training loop | Yes |
-| `SAETrainerConfig` | Training hyperparameters | Yes |
-| `TrainingSAE` | The SAE to train | Yes |
-| `DataProvider` | Iterator yielding `(batch, d_in)` tensors | Yes |
-| `Evaluator` | Periodic evaluation callback | No |
-| `mixing_buffer` | Shuffle activations | Recommended |
-| `save_checkpoint_fn` | Custom checkpoint logic | No |
+| Component            | Purpose                                   | Required?   |
+| -------------------- | ----------------------------------------- | ----------- |
+| `SAETrainer`         | Core training loop                        | Yes         |
+| `SAETrainerConfig`   | Training hyperparameters                  | Yes         |
+| `TrainingSAE`        | The SAE to train                          | Yes         |
+| `DataProvider`       | Iterator yielding `(batch, d_in)` tensors | Yes         |
+| `Evaluator`          | Periodic evaluation callback              | No          |
+| `mixing_buffer`      | Shuffle activations                       | Recommended |
+| `save_checkpoint_fn` | Custom checkpoint logic                   | No          |
 
 For most custom scenarios, you'll create a runner class that:
 
 1. Loads your model
 2. Creates a `TrainingSAE` with your desired architecture
 3. Implements activation extraction with hooks
-4. Wraps extraction in an iterator (optionally with `mixing_buffer`)
-5. Creates an `SAETrainer` and calls `.fit()`
-
+4. Optionally uses `mixing_buffer` to shuffle activations
+5. Creates an `SAETrainer` and calls `.fit()` to train the SAE
+6. Saves the trained inference SAE
