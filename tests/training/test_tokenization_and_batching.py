@@ -463,3 +463,46 @@ def test_concat_and_batch_sequences_disable_concat_sequences():
         [10, 11, 12, 13, 14],
     ]
     assert batches.tolist() == expected
+
+
+def test_concat_and_batch_sequences_handles_empty_sequences_with_disable_concat():
+    seqs = [
+        torch.tensor([]),  # empty sequence
+        torch.arange(10),  # long enough sequence
+        torch.tensor([]),  # another empty sequence
+        torch.arange(5, 15),  # another long enough sequence
+    ]
+    batches_list = list(
+        concat_and_batch_sequences(
+            tokens_iterator=iter(seqs),
+            context_size=5,
+            begin_batch_token_id=999,
+            disable_concat_sequences=True,
+        )
+    )
+    batches = torch.stack(batches_list)
+    expected = [
+        [999, 0, 1, 2, 3],
+        [999, 5, 6, 7, 8],
+    ]
+    assert batches.tolist() == expected
+
+
+def test_concat_and_batch_sequences_handles_empty_sequences_with_begin_sequence_token():
+    seqs = [
+        torch.tensor([]),  # empty sequence
+        torch.arange(10),  # long enough sequence
+    ]
+    batches_list = list(
+        concat_and_batch_sequences(
+            tokens_iterator=iter(seqs),
+            context_size=5,
+            begin_sequence_token_id=999,
+            disable_concat_sequences=True,
+        )
+    )
+    batches = torch.stack(batches_list)
+    expected = [
+        [999, 0, 1, 2, 3],
+    ]
+    assert batches.tolist() == expected

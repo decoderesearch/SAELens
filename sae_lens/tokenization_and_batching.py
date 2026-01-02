@@ -85,8 +85,8 @@ def concat_and_batch_sequences(
         for sequence in tokens_iterator:
             if (
                 begin_sequence_token_id is not None
-                and sequence[0] != begin_sequence_token_id
                 and len(sequence) >= context_size - 1
+                and sequence[0] != begin_sequence_token_id
             ):
                 begin_sequence_token_id_tensor = torch.tensor(
                     [begin_sequence_token_id],
