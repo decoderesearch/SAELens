@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from sae_lens.toy_model import TreeFeatureGenerator
+from sae_lens.synthetic import TreeFeatureGenerator
 
 
 def test_TreeFeatureGenerator_simple_construction():

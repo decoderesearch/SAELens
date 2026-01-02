@@ -95,8 +95,10 @@ def get_special_token_ids(tokenizer: PreTrainedTokenizerBase) -> list[int]:
     return list(special_tokens)
 
 
-def str_to_dtype(dtype: str) -> torch.dtype:
+def str_to_dtype(dtype: str | torch.dtype) -> torch.dtype:
     """Convert a string to a torch.dtype."""
+    if isinstance(dtype, torch.dtype):
+        return dtype
     if dtype not in DTYPE_MAP:
         raise ValueError(
             f"Invalid dtype: {dtype}. Must be one of {list(DTYPE_MAP.keys())}"
@@ -111,3 +113,19 @@ def dtype_to_str(dtype: torch.dtype) -> str:
             f"Invalid dtype: {dtype}. Must be one of {list(DTYPE_TO_STR.keys())}"
         )
     return DTYPE_TO_STR[dtype]
+
+
+def cosine_similarities(mat1: torch.Tensor, mat2: torch.Tensor) -> torch.Tensor:
+    """
+    Compute cosine similarities between each row of mat1 and each row of mat2.
+
+    Args:
+        mat1: Tensor of shape [n1, d]
+        mat2: Tensor of shape [n2, d]
+
+    Returns:
+        Tensor of shape [n1, n2] with cosine similarities
+    """
+    mat1_normed = mat1 / mat1.norm(dim=1, keepdim=True).clamp(min=1e-8)
+    mat2_normed = mat2 / mat2.norm(dim=1, keepdim=True).clamp(min=1e-8)
+    return mat1_normed @ mat2_normed.T

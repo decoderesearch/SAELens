@@ -9,26 +9,15 @@ This module provides functions for:
 
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
+import plotly.graph_objects as go
 import torch
+from plotly.subplots import make_subplots
 
-from sae_lens.toy_model.feature_dictionary import FeatureDictionary
-
-
-def cosine_similarities(mat1: torch.Tensor, mat2: torch.Tensor) -> torch.Tensor:
-    """
-    Compute cosine similarities between each row of mat1 and each row of mat2.
-
-    Args:
-        mat1: Tensor of shape [n1, d]
-        mat2: Tensor of shape [n2, d]
-
-    Returns:
-        Tensor of shape [n1, n2] with cosine similarities
-    """
-    mat1_normed = mat1 / mat1.norm(dim=1, keepdim=True).clamp(min=1e-8)
-    mat2_normed = mat2 / mat2.norm(dim=1, keepdim=True).clamp(min=1e-8)
-    return mat1_normed @ mat2_normed.T
+from sae_lens.saes import SAE
+from sae_lens.synthetic.feature_dictionary import FeatureDictionary
+from sae_lens.util import cosine_similarities
 
 
 def find_best_feature_ordering(
@@ -112,15 +101,19 @@ def find_best_feature_ordering_across_saes(
 
 
 def plot_sae_feature_similarity(
-    sae: torch.nn.Module,
+    sae: SAE[Any],
     feature_dict: FeatureDictionary,
     title: str | None = None,
     reorder_features: bool | torch.Tensor = False,
     decoder_only: bool = False,
     show_values: bool = False,
-    figsize: tuple[float, float] = (12, 6),
+    height: int = 400,
+    width: int = 800,
     save_path: str | Path | None = None,
-) -> None:
+    show_plot: bool = True,
+    dtick: int | None = 1,
+    scale: float = 1.0,
+) -> go.Figure:
     """
     Plot cosine similarities between SAE features and true features.
 
@@ -135,18 +128,21 @@ def plot_sae_feature_similarity(
             If a tensor, uses that as the ordering.
         decoder_only: If True, only plots the decoder (not encoder and decoder side-by-side)
         show_values: If True, shows numeric values on the heatmap
-        figsize: Figure size as (width, height) in inches
+        height: Height of the figure in pixels
+        width: Width of the figure in pixels
         save_path: If provided, saves the figure to this path
+        show_plot: If True, displays the plot
+        dtick: Tick spacing for axes
+        scale: Scale factor for image resolution when saving
+
+    Returns:
+        The plotly figure object
 
     Example:
         >>> sae = TrainingSAE(cfg)
         >>> # ... train SAE ...
         >>> plot_sae_feature_similarity(sae, feature_dict, reorder_features=True)
     """
-    # Import matplotlib/seaborn here to avoid requiring them for basic usage
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
     # Get cosine similarities
     true_features = feature_dict.feature_vectors.detach()
     dec_cos_sims = cosine_similarities(sae.W_dec.detach(), true_features)  # type: ignore[attr-defined]
@@ -168,138 +164,76 @@ def plot_sae_feature_similarity(
         dec_cos_sims = dec_cos_sims[sorted_indices]
         enc_cos_sims = enc_cos_sims[sorted_indices]
 
-    # Create figure
-    if decoder_only:
-        fig, ax = plt.subplots(1, 1, figsize=(figsize[0] / 2, figsize[1]))
-        axes = [ax]
-        data = [dec_cos_sims]
-        subtitles = ["SAE decoder"]
-    else:
-        fig, axes = plt.subplots(1, 2, figsize=figsize)
-        data = [enc_cos_sims, dec_cos_sims]
-        subtitles = ["SAE encoder", "SAE decoder"]
+    hovertemplate = "True feature: %{x}<br>SAE Latent: %{y}<br>Cosine Similarity: %{z:.3f}<extra></extra>"
 
-    # Plot heatmaps
-    for ax, cos_sim_data, subtitle in zip(axes, data, subtitles):  # type: ignore[arg-type]
-        sns.heatmap(
-            cos_sim_data.cpu().numpy(),
-            ax=ax,
-            vmin=-1,
-            vmax=1,
-            cmap="RdBu",
-            center=0,
-            annot=show_values,
-            fmt=".2f" if show_values else "",
-            cbar_kws={"label": "cos sim", "ticks": [-1, 0, 1]},
+    if decoder_only:
+        fig = make_subplots(rows=1, cols=1)
+
+        decoder_args: dict[str, Any] = {
+            "z": dec_cos_sims.cpu().numpy(),
+            "zmin": -1,
+            "zmax": 1,
+            "colorscale": "RdBu",
+            "colorbar": dict(title="cos sim", x=1.0, dtick=1, tickvals=[-1, 0, 1]),
+            "hovertemplate": hovertemplate,
+        }
+        if show_values:
+            decoder_args["texttemplate"] = "%{z:.2f}"
+            decoder_args["textfont"] = {"size": 10}
+
+        fig.add_trace(go.Heatmap(**decoder_args), row=1, col=1)
+        fig.update_xaxes(title_text="True feature", row=1, col=1, dtick=dtick)
+        fig.update_yaxes(title_text="SAE Latent", row=1, col=1, dtick=dtick)
+    else:
+        fig = make_subplots(
+            rows=1, cols=2, subplot_titles=("SAE encoder", "SAE decoder")
         )
-        ax.set_title(subtitle)
-        ax.set_xlabel("True feature")
-        ax.set_ylabel("SAE latent")
-        ax.invert_yaxis()
+
+        # Encoder heatmap
+        encoder_args: dict[str, Any] = {
+            "z": enc_cos_sims.cpu().numpy(),
+            "zmin": -1,
+            "zmax": 1,
+            "colorscale": "RdBu",
+            "showscale": False,
+            "hovertemplate": hovertemplate,
+        }
+        if show_values:
+            encoder_args["texttemplate"] = "%{z:.2f}"
+            encoder_args["textfont"] = {"size": 10}
+
+        fig.add_trace(go.Heatmap(**encoder_args), row=1, col=1)
+
+        # Decoder heatmap
+        decoder_args = {
+            "z": dec_cos_sims.cpu().numpy(),
+            "zmin": -1,
+            "zmax": 1,
+            "colorscale": "RdBu",
+            "colorbar": dict(title="cos sim", x=1.0, dtick=1, tickvals=[-1, 0, 1]),
+            "hovertemplate": hovertemplate,
+        }
+        if show_values:
+            decoder_args["texttemplate"] = "%{z:.2f}"
+            decoder_args["textfont"] = {"size": 10}
+
+        fig.add_trace(go.Heatmap(**decoder_args), row=1, col=2)
+
+        fig.update_xaxes(title_text="True feature", row=1, col=1, dtick=dtick)
+        fig.update_xaxes(title_text="True feature", row=1, col=2, dtick=dtick)
+        fig.update_yaxes(title_text="SAE Latent", row=1, col=1, dtick=dtick)
+        fig.update_yaxes(title_text="SAE Latent", row=1, col=2, dtick=dtick)
 
     # Set main title
     if title is None:
         title = "Cosine similarity with true features"
-    fig.suptitle(title)
-
-    plt.tight_layout()
+    fig.update_layout(height=height, width=width, title_text=title)
 
     if save_path:
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, bbox_inches="tight")
+        fig.write_image(save_path, scale=scale)
 
-    plt.show()
+    if show_plot:
+        fig.show()
 
-
-def plot_decoder_bias_similarity(
-    sae: torch.nn.Module,
-    feature_dict: FeatureDictionary,
-    title: str | None = None,
-    show_values: bool = False,
-    figsize: tuple[float, float] = (10, 3),
-    save_path: str | Path | None = None,
-) -> None:
-    """
-    Plot cosine similarity between SAE decoder bias and true features.
-
-    Args:
-        sae: The SAE to visualize. Must have b_dec attribute.
-        feature_dict: The feature dictionary containing true features
-        title: Plot title. If None, a default title is used.
-        show_values: If True, shows numeric values on the heatmap
-        figsize: Figure size as (width, height) in inches
-        save_path: If provided, saves the figure to this path
-    """
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
-    true_features = feature_dict.feature_vectors.detach()
-    b_dec = sae.b_dec.detach().unsqueeze(0)  # type: ignore[attr-defined]
-    cos_sims = cosine_similarities(b_dec, true_features)
-
-    _, ax = plt.subplots(1, 1, figsize=figsize)
-
-    sns.heatmap(
-        cos_sims.cpu().numpy(),
-        ax=ax,
-        vmin=-1,
-        vmax=1,
-        cmap="RdBu",
-        center=0,
-        annot=show_values,
-        fmt=".2f" if show_values else "",
-        cbar_kws={"label": "cos sim", "ticks": [-1, 0, 1]},
-    )
-
-    if title is None:
-        title = "Decoder bias cosine similarity with true features"
-    ax.set_title(title)
-    ax.set_xlabel("True feature")
-    ax.set_ylabel("b_dec")
-    ax.set_yticks([])
-
-    plt.tight_layout()
-
-    if save_path:
-        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, bbox_inches="tight")
-
-    plt.show()
-
-
-def plot_latent_similarities(sae: torch.nn.Module, title: str | None = None) -> None:
-    """
-    Plot cosine similarities between SAE latents.
-
-    Useful for checking if the SAE has learned diverse features
-    or if there are redundant latents.
-
-    Args:
-        sae: The SAE to visualize. Must have W_dec attribute.
-        title: Plot title. If None, a default title is used.
-    """
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
-    latent_cos_sims = cosine_similarities(sae.W_dec.detach(), sae.W_dec.detach())  # type: ignore[attr-defined]
-
-    _, ax = plt.subplots(1, 1, figsize=(8, 6))
-
-    sns.heatmap(
-        latent_cos_sims.cpu().numpy(),
-        ax=ax,
-        vmin=-1,
-        vmax=1,
-        cmap="RdBu",
-        center=0,
-        cbar_kws={"label": "cos sim", "ticks": [-1, 0, 1]},
-    )
-
-    if title is None:
-        title = "SAE latent cosine similarities"
-    ax.set_title(title)
-    ax.set_xlabel("SAE latent")
-    ax.set_ylabel("SAE latent")
-
-    plt.tight_layout()
-    plt.show()
+    return fig

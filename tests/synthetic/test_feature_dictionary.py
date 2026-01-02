@@ -1,6 +1,6 @@
 import torch
 
-from sae_lens.toy_model import FeatureDictionary, orthogonalize_vectors
+from sae_lens.synthetic import FeatureDictionary, orthogonalize_vectors
 
 
 def test_orthogonalize_vectors_creates_unit_vectors():

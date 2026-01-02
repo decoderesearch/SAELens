@@ -1,6 +1,6 @@
 import torch
 
-from sae_lens.toy_model import (
+from sae_lens.synthetic import (
     FeatureDictionary,
     SyntheticActivationIterator,
     generate_activations,

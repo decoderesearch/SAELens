@@ -5,6 +5,7 @@ import torch
 from transformer_lens import HookedTransformer
 
 from sae_lens.util import (
+    cosine_similarities,
     dtype_to_str,
     extract_stop_at_layer_from_tlens_hook_name,
     get_special_token_ids,
@@ -171,3 +172,42 @@ def test_dtype_to_str_valid(dtype: torch.dtype, expected_str: str):
 def test_dtype_to_str_invalid_raises_error(invalid_dtype: torch.dtype):
     with pytest.raises(ValueError, match="Invalid dtype"):
         dtype_to_str(invalid_dtype)
+
+
+def test_cosine_similarities_identity_for_same_matrix():
+    mat = torch.randn(5, 10)
+    mat = mat / mat.norm(dim=1, keepdim=True)
+
+    cos_sims = cosine_similarities(mat, mat)
+
+    # Diagonal should be 1
+    torch.testing.assert_close(torch.diag(cos_sims), torch.ones(5), atol=1e-5, rtol=0)
+
+
+def test_cosine_similarities_orthogonal_vectors():
+    mat1 = torch.eye(3)
+    mat2 = torch.eye(3)
+
+    cos_sims = cosine_similarities(mat1, mat2)
+
+    expected = torch.eye(3)
+    torch.testing.assert_close(cos_sims, expected, atol=1e-5, rtol=0)
+
+
+def test_cosine_similarities_shape():
+    mat1 = torch.randn(4, 10)
+    mat2 = torch.randn(6, 10)
+
+    cos_sims = cosine_similarities(mat1, mat2)
+
+    assert cos_sims.shape == (4, 6)
+
+
+def test_cosine_similarities_range():
+    mat1 = torch.randn(5, 10)
+    mat2 = torch.randn(7, 10)
+
+    cos_sims = cosine_similarities(mat1, mat2)
+
+    assert torch.all(cos_sims >= -1.0 - 1e-5)
+    assert torch.all(cos_sims <= 1.0 + 1e-5)

@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from sae_lens.toy_model import (
+from sae_lens.synthetic import (
     absorb_features,
     chain_modifiers,
     create_block_correlation_matrix,

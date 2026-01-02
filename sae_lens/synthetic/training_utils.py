@@ -15,7 +15,7 @@ from typing import Any
 import torch
 
 from sae_lens.saes.sae import TrainingSAE
-from sae_lens.toy_model.feature_dictionary import FeatureDictionary
+from sae_lens.synthetic.feature_dictionary import FeatureDictionary
 
 
 class SyntheticActivationIterator(Iterator[torch.Tensor]):
