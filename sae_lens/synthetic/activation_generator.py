@@ -39,6 +39,7 @@ class ActivationGenerator(nn.Module):
         device: torch.device | str = "cpu",
         dtype: torch.dtype | str = "float32",
     ):
+        super().__init__()
         self.num_features = num_features
         self.firing_probabilities = _to_tensor(
             firing_probabilities, num_features, device, dtype

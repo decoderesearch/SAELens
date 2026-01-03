@@ -52,6 +52,10 @@ from sae_lens.synthetic.correlation import (
     generate_random_correlation_matrix,
     generate_random_correlations,
 )
+from sae_lens.synthetic.evals import (
+    SyntheticDataEvalResult,
+    eval_sae_on_synthetic_data,
+)
 from sae_lens.synthetic.feature_dictionary import (
     FeatureDictionary,
     FeatureDictionaryInitializer,
@@ -59,18 +63,16 @@ from sae_lens.synthetic.feature_dictionary import (
     orthogonalize_embeddings,
     orthogonalize_vectors,
 )
+from sae_lens.synthetic.initialization import init_sae_to_match_feature_dict
 from sae_lens.synthetic.plotting import (
     find_best_feature_ordering,
     find_best_feature_ordering_across_saes,
     find_best_feature_ordering_from_sae,
     plot_sae_feature_similarity,
 )
-from sae_lens.synthetic.training_utils import (
+from sae_lens.synthetic.train_sae_on_synthetic_data import (
     SyntheticActivationIterator,
-    SyntheticEvalResult,
-    eval_sae_on_synthetic,
-    init_sae_from_feature_dict,
-    train_sae_on_synthetic,
+    train_sae_on_synthetic_data,
 )
 from sae_lens.synthetic.tree_feature_generator import TreeFeatureGenerator
 from sae_lens.util import cosine_similarities
@@ -100,10 +102,10 @@ __all__ = [
     "cosine_similarities",
     # Training utilities
     "SyntheticActivationIterator",
-    "SyntheticEvalResult",
-    "train_sae_on_synthetic",
-    "eval_sae_on_synthetic",
-    "init_sae_from_feature_dict",
+    "SyntheticDataEvalResult",
+    "train_sae_on_synthetic_data",
+    "eval_sae_on_synthetic_data",
+    "init_sae_to_match_feature_dict",
     # Plotting utilities
     "find_best_feature_ordering",
     "find_best_feature_ordering_from_sae",

@@ -1,9 +1,9 @@
 import torch
 
 from sae_lens.synthetic import (
+    ActivationGenerator,
     FeatureDictionary,
     SyntheticActivationIterator,
-    generate_activations,
 )
 
 
@@ -11,10 +11,12 @@ def test_SyntheticActivationIterator_generates_correct_shape():
     feature_dict = FeatureDictionary(num_features=10, hidden_dim=8, ortho_num_steps=100)
     probs = torch.ones(10) * 0.1
 
-    def gen_fn(batch_size: int) -> torch.Tensor:
-        return generate_activations(batch_size, probs)
+    activations_gen = ActivationGenerator(
+        num_features=10,
+        firing_probabilities=probs,
+    )
 
-    iterator = SyntheticActivationIterator(feature_dict, gen_fn, batch_size=32)
+    iterator = SyntheticActivationIterator(feature_dict, activations_gen, batch_size=32)
     batch = next(iterator)
 
     assert batch.shape == (32, 8)
@@ -24,10 +26,12 @@ def test_SyntheticActivationIterator_is_iterable():
     feature_dict = FeatureDictionary(num_features=5, hidden_dim=4, ortho_num_steps=100)
     probs = torch.ones(5) * 0.2
 
-    def gen_fn(batch_size: int) -> torch.Tensor:
-        return generate_activations(batch_size, probs)
+    activations_gen = ActivationGenerator(
+        num_features=5,
+        firing_probabilities=probs,
+    )
 
-    iterator = SyntheticActivationIterator(feature_dict, gen_fn, batch_size=16)
+    iterator = SyntheticActivationIterator(feature_dict, activations_gen, batch_size=16)
 
     batches = [next(iterator) for _ in range(3)]
     assert len(batches) == 3
@@ -40,10 +44,12 @@ def test_SyntheticActivationIterator_produces_sparse_activations():
     )
     probs = torch.ones(20) * 0.05
 
-    def gen_fn(batch_size: int) -> torch.Tensor:
-        return generate_activations(batch_size, probs)
+    activations_gen = ActivationGenerator(
+        num_features=20,
+        firing_probabilities=probs,
+    )
 
-    iterator = SyntheticActivationIterator(feature_dict, gen_fn, batch_size=100)
+    iterator = SyntheticActivationIterator(feature_dict, activations_gen, batch_size=100)
     batch = next(iterator)
 
     # Some activations should be zero (sparse input)
