@@ -184,7 +184,8 @@ def test_ActivationScaler_estimates_norm_scaling_factor_from_activations_store(
     scaler.estimate_scaling_factor(cfg.sae.d_in, store, n_batches_for_norm_estimate=10)
     assert isinstance(scaler.scaling_factor, float)
 
-    scaled_norm = (
-        store.get_filtered_buffer(10).norm(dim=-1).mean() * scaler.scaling_factor
-    )
+    # Collect multiple batches to get a more stable norm estimate
+    batches = [store.get_filtered_llm_batch() for _ in range(10)]
+    combined = torch.cat(batches, dim=0)
+    scaled_norm = combined.norm(dim=-1).mean() * scaler.scaling_factor
     assert scaled_norm == pytest.approx(np.sqrt(store.d_in), abs=5)

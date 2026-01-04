@@ -110,16 +110,18 @@ def test_load_cached_activations(tmp_path: Path):
 
     activations_store = ActivationsStore.from_config(model, cfg)
 
-    for _ in range(cfg.n_buffers):
-        buffer = activations_store.get_raw_buffer(
-            cfg.n_batches_in_buffer
-        )  # Adjusted to use n_batches_in_buffer
+    # get_raw_llm_batch returns one batch at a time
+    # Total batches = n_buffers * n_batches_in_buffer
+    for _ in range(cfg.n_buffers * cfg.n_batches_in_buffer):
+        buffer = activations_store.get_raw_llm_batch()
         assert buffer[0].shape == (
-            cfg.n_seq_in_buffer * cfg.context_size,
+            activations_store.store_batch_size_prompts * cfg.context_size,
             cfg.d_in,
         )
         assert buffer[1] is not None
-        assert buffer[1].shape == (cfg.n_seq_in_buffer * cfg.context_size,)
+        assert buffer[1].shape == (
+            activations_store.store_batch_size_prompts * cfg.context_size,
+        )
 
 
 def test_cache_activations_runner_to_string():
