@@ -3,7 +3,6 @@ import json
 import shutil
 from dataclasses import asdict
 from pathlib import Path
-from typing import cast
 
 import einops
 import torch
@@ -273,9 +272,7 @@ class CacheActivationsRunner:
                 token_ids: torch.Tensor | None = None
                 if buffers[0][1] is not None:
                     # All batches have token_ids if the first one does
-                    token_ids = torch.cat(
-                        cast(list[torch.Tensor], [b[1] for b in buffers]), dim=0
-                    )
+                    token_ids = torch.cat([b[1] for b in buffers], dim=0)  # type: ignore[arg-type]
                 shard = self._create_shard((acts, token_ids))
                 shard.save_to_disk(
                     f"{tmp_cached_activation_path}/shard_{i:05d}", num_shards=1
