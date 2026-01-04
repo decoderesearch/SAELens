@@ -113,21 +113,32 @@ def test_hf_dataset_save_vs_safetensors(tmp_path: Path):
     safetensors_path.mkdir()
     hf_path.mkdir()
 
+    def get_concatenated_batches() -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Get n_batches_in_buffer batches concatenated together."""
+        batches = [store.get_raw_llm_batch() for _ in range(cfg.n_batches_in_buffer)]
+        acts = torch.cat([b[0] for b in batches], dim=0)
+        token_ids = (
+            torch.cat([b[1] for b in batches], dim=0)  # type: ignore
+            if batches[0][1] is not None
+            else None
+        )
+        return acts, token_ids
+
     print("Warmup")
 
     for i in trange(niters // 2, leave=False):
-        buffer = store.get_raw_buffer(cfg.n_batches_in_buffer)
+        buffer = get_concatenated_batches()
 
     start_time = time.perf_counter()
     for i in trange(niters, leave=False):
-        buffer = store.get_raw_buffer(cfg.n_batches_in_buffer)
+        buffer = get_concatenated_batches()
     end_time = time.perf_counter()
 
     print(f"No saving took: {end_time - start_time:.4f}")
 
     start_time = time.perf_counter()
     for i in trange(niters, leave=False):
-        buffer = store.get_raw_buffer(cfg.n_batches_in_buffer)
+        buffer = get_concatenated_batches()
         shard = runner._create_shard(buffer)
         shard.save_to_disk(hf_path / str(i), num_shards=1)
     end_time = time.perf_counter()
@@ -139,7 +150,7 @@ def test_hf_dataset_save_vs_safetensors(tmp_path: Path):
 
     start_time = time.perf_counter()
     for i in trange(niters, leave=False):
-        buffer = store.get_raw_buffer(cfg.n_batches_in_buffer)[0]
+        buffer = get_concatenated_batches()[0]
         save_file({"activations": buffer}, safetensors_path / f"{i}.safetensors")
     end_time = time.perf_counter()
 
