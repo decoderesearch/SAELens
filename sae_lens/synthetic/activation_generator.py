@@ -2,7 +2,7 @@
 Functions for generating synthetic feature activations.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import torch
 from scipy.stats import norm
@@ -12,6 +12,7 @@ from torch.distributions import MultivariateNormal
 from sae_lens.util import str_to_dtype
 
 ActivationsModifier = Callable[[torch.Tensor], torch.Tensor]
+ActivationsModifierInput = ActivationsModifier | Sequence[ActivationsModifier] | None
 
 
 class ActivationGenerator(nn.Module):
@@ -34,7 +35,7 @@ class ActivationGenerator(nn.Module):
         firing_probabilities: torch.Tensor | float,
         std_firing_magnitudes: torch.Tensor | float = 0.0,
         mean_firing_magnitudes: torch.Tensor | float = 1.0,
-        modify_activations: ActivationsModifier | None = None,
+        modify_activations: ActivationsModifierInput = None,
         correlation_matrix: torch.Tensor | None = None,
         device: torch.device | str = "cpu",
         dtype: torch.dtype | str = "float32",
@@ -50,7 +51,7 @@ class ActivationGenerator(nn.Module):
         self.mean_firing_magnitudes = _to_tensor(
             mean_firing_magnitudes, num_features, device, dtype
         )
-        self.modify_activations = modify_activations
+        self.modify_activations = _normalize_modifiers(modify_activations)
         self.correlation_matrix = correlation_matrix
 
     def sample(self, batch_size: int) -> torch.Tensor:
@@ -154,6 +155,30 @@ def _to_tensor(
     return value.to(device, dtype)
 
 
+def _normalize_modifiers(
+    modify_activations: ActivationsModifierInput,
+) -> ActivationsModifier | None:
+    """Convert modifier input to a single modifier or None."""
+    if modify_activations is None:
+        return None
+    if callable(modify_activations):
+        return modify_activations
+    # It's a sequence of modifiers - chain them
+    modifiers = list(modify_activations)
+    if len(modifiers) == 0:
+        return None
+    if len(modifiers) == 1:
+        return modifiers[0]
+
+    def chained(activations: torch.Tensor) -> torch.Tensor:
+        result = activations
+        for modifier in modifiers:
+            result = modifier(result)
+        return result
+
+    return chained
+
+
 # Standalone functions for backward compatibility
 
 
@@ -162,7 +187,7 @@ def generate_activations(
     firing_probabilities: torch.Tensor,
     std_firing_magnitudes: torch.Tensor | None = None,
     mean_firing_magnitudes: torch.Tensor | None = None,
-    modify_activations: ActivationsModifier | None = None,
+    modify_activations: ActivationsModifierInput = None,
     correlation_matrix: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """
@@ -177,7 +202,7 @@ def generate_activations(
         firing_probabilities: Per-feature firing probability tensor of shape [num_features]
         std_firing_magnitudes: Standard deviation of firing magnitudes (default: 0)
         mean_firing_magnitudes: Mean firing magnitudes when features fire (default: 1)
-        modify_activations: Optional function to modify activations after generation
+        modify_activations: Optional modifier or list of modifiers to apply after generation
         correlation_matrix: Optional correlation matrix for correlated feature firing
 
     Returns:

@@ -40,6 +40,7 @@ Example:
 from sae_lens.synthetic.activation_generator import (
     ActivationGenerator,
     ActivationsModifier,
+    ActivationsModifierInput,
     absorb_features,
     chain_modifiers,
     generate_activations,
@@ -94,6 +95,7 @@ __all__ = [
     "absorb_features",
     "chain_modifiers",
     "ActivationsModifier",
+    "ActivationsModifierInput",
     # Utilities
     "orthogonalize_vectors",
     "orthogonalize_embeddings",

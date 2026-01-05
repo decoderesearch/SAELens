@@ -196,3 +196,71 @@ def test_create_correlation_matrix_is_valid(
     # Check positive semi-definiteness
     eigenvals = torch.linalg.eigvals(matrix)
     assert torch.all(eigenvals.real >= -1e-6)
+
+
+def test_generate_activations_with_list_of_modifiers():
+    """Test that a list of modifiers is applied in series."""
+    from sae_lens.synthetic import ActivationGenerator
+
+    feats = torch.zeros(3, 4)
+    feats[0, 0] = 1  # Dominant
+    feats[0, 2] = 1  # Child that causes absorption into 1
+    feats[0, 1] = 1  # Will be suppressed
+
+    # Test with list of modifiers - absorption first, then suppression
+    modifier1 = absorb_features([(1, 2)])
+    modifier2 = suppress_features(0, [1])
+
+    generator = ActivationGenerator(
+        num_features=4,
+        firing_probabilities=1.0,
+        modify_activations=[modifier1, modifier2],
+    )
+
+    # Apply to our test tensor manually through the modifier
+    result = generator.modify_activations(feats)
+
+    assert result[0, 0] == 1
+    assert result[0, 1] == 0  # Suppressed after absorption
+    assert result[0, 2] == 1
+
+
+def test_generate_activations_with_empty_list_of_modifiers():
+    """Test that empty list of modifiers works."""
+    from sae_lens.synthetic import ActivationGenerator
+
+    generator = ActivationGenerator(
+        num_features=3,
+        firing_probabilities=0.5,
+        modify_activations=[],
+    )
+
+    assert generator.modify_activations is None
+    samples = generator.sample(batch_size=10)
+    assert samples.shape == (10, 3)
+
+
+def test_generate_activations_with_single_item_list():
+    """Test that single-item list works the same as passing modifier directly."""
+    from sae_lens.synthetic import ActivationGenerator
+
+    modifier = suppress_features(0, [1])
+
+    generator_list = ActivationGenerator(
+        num_features=3,
+        firing_probabilities=1.0,
+        modify_activations=[modifier],
+    )
+
+    generator_single = ActivationGenerator(
+        num_features=3,
+        firing_probabilities=1.0,
+        modify_activations=modifier,
+    )
+
+    # Both should have the same modifier
+    test_input = torch.tensor([[1.0, 1.0, 1.0]])
+    result_list = generator_list.modify_activations(test_input)
+    result_single = generator_single.modify_activations(test_input)
+
+    torch.testing.assert_close(result_list, result_single)
