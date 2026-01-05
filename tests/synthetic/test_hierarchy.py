@@ -1,0 +1,405 @@
+import pytest
+import torch
+
+from sae_lens.synthetic import HierarchyNode
+
+
+def test_HierarchyNode_simple_construction():
+    root = HierarchyNode(feature_index=0)
+    assert root.feature_index == 0
+    assert root.children == []
+    assert not root.mutually_exclusive_children
+
+
+def test_HierarchyNode_with_children():
+    child1 = HierarchyNode(feature_index=1)
+    child2 = HierarchyNode(feature_index=2)
+    root = HierarchyNode(feature_index=0, children=[child1, child2])
+
+    assert root.feature_index == 0
+    assert len(root.children) == 2
+    assert child1.feature_index == 1
+    assert child2.feature_index == 2
+
+
+def test_HierarchyNode_call_returns_correct_shape():
+    child = HierarchyNode(feature_index=1)
+    root = HierarchyNode(feature_index=0, children=[child])
+
+    activations = torch.rand(100, 3)
+    result = root(activations)
+    assert result.shape == (100, 3)
+
+
+def test_HierarchyNode_deactivates_children_when_parent_inactive():
+    child = HierarchyNode(feature_index=1)
+    root = HierarchyNode(feature_index=0, children=[child])
+
+    # Parent inactive in all samples
+    activations = torch.tensor(
+        [
+            [0.0, 1.0, 0.5],
+            [0.0, 0.8, 0.3],
+        ]
+    )
+    result = root(activations)
+
+    # Child should be deactivated when parent is inactive
+    assert torch.all(result[:, 1] == 0)
+
+
+def test_HierarchyNode_keeps_children_when_parent_active():
+    child = HierarchyNode(feature_index=1)
+    root = HierarchyNode(feature_index=0, children=[child])
+
+    # Parent active, child active
+    activations = torch.tensor(
+        [
+            [1.0, 0.5, 0.3],
+            [0.8, 0.3, 0.2],
+        ]
+    )
+    result = root(activations)
+
+    # Child values should be preserved when parent is active
+    assert torch.allclose(result[:, 1], activations[:, 1])
+
+
+def test_HierarchyNode_mixed_parent_states():
+    child = HierarchyNode(feature_index=1)
+    root = HierarchyNode(feature_index=0, children=[child])
+
+    activations = torch.tensor(
+        [
+            [1.0, 0.5, 0.3],  # Parent active
+            [0.0, 0.8, 0.2],  # Parent inactive
+            [0.5, 0.0, 0.1],  # Parent active, child already inactive
+        ]
+    )
+    result = root(activations)
+
+    assert result[0, 1] == 0.5  # Preserved
+    assert result[1, 1] == 0.0  # Deactivated
+    assert result[2, 1] == 0.0  # Already inactive
+
+
+def test_HierarchyNode_mutually_exclusive_children():
+    child1 = HierarchyNode(feature_index=1)
+    child2 = HierarchyNode(feature_index=2)
+    root = HierarchyNode(
+        feature_index=0,
+        children=[child1, child2],
+        mutually_exclusive_children=True,
+    )
+
+    # Parent active, both children active
+    activations = torch.tensor(
+        [
+            [1.0, 0.5, 0.3],
+            [1.0, 0.8, 0.6],
+        ]
+    )
+
+    result = root(activations)
+
+    # Both children should never be active simultaneously
+    both_active = (result[:, 1] > 0) & (result[:, 2] > 0)
+    assert torch.sum(both_active) == 0
+
+    # At least one child should remain active (randomly selected)
+    either_active = (result[:, 1] > 0) | (result[:, 2] > 0)
+    assert torch.all(either_active)
+
+
+def test_HierarchyNode_mutually_exclusive_allows_single_child():
+    child1 = HierarchyNode(feature_index=1)
+    child2 = HierarchyNode(feature_index=2)
+    root = HierarchyNode(
+        feature_index=0,
+        children=[child1, child2],
+        mutually_exclusive_children=True,
+    )
+
+    # Only one child active
+    activations = torch.tensor(
+        [
+            [1.0, 0.5, 0.0],
+            [1.0, 0.0, 0.3],
+        ]
+    )
+
+    result = root(activations)
+
+    # Single active child should remain
+    assert result[0, 1] == 0.5
+    assert result[0, 2] == 0.0
+    assert result[1, 1] == 0.0
+    assert result[1, 2] == 0.3
+
+
+def test_HierarchyNode_non_readout_node():
+    """Test organizational node with no feature_index."""
+    child1 = HierarchyNode(feature_index=0)
+    child2 = HierarchyNode(feature_index=1)
+    root = HierarchyNode(
+        feature_index=None,  # Organizational node
+        children=[child1, child2],
+    )
+
+    # Both children active
+    activations = torch.tensor(
+        [
+            [0.5, 0.3],
+            [0.8, 0.6],
+        ]
+    )
+
+    result = root(activations)
+
+    # Children should be unaffected since organizational root is always "active"
+    assert torch.allclose(result, activations)
+
+
+def test_HierarchyNode_from_dict():
+    tree_dict = {
+        "feature_index": 0,
+        "children": [
+            {"feature_index": 1},
+            {"feature_index": 2, "id": "child2"},
+        ],
+    }
+
+    tree = HierarchyNode.from_dict(tree_dict)
+    assert tree.feature_index == 0
+    assert len(tree.children) == 2
+    assert tree.children[0].feature_index == 1
+    assert tree.children[1].feature_index == 2
+    assert tree.children[1].feature_id == "child2"
+
+
+def test_HierarchyNode_from_dict_mutually_exclusive():
+    tree_dict = {
+        "feature_index": 0,
+        "mutually_exclusive_children": True,
+        "children": [
+            {"feature_index": 1},
+            {"feature_index": 2},
+        ],
+    }
+
+    tree = HierarchyNode.from_dict(tree_dict)
+    assert tree.mutually_exclusive_children
+
+    activations = torch.tensor([[1.0, 0.5, 0.3]])
+    result = tree(activations)
+
+    both_active = (result[:, 1] > 0) & (result[:, 2] > 0)
+    assert torch.sum(both_active) == 0
+
+
+def test_HierarchyNode_deep_hierarchy():
+    grandchild = HierarchyNode(feature_index=2)
+    child = HierarchyNode(feature_index=1, children=[grandchild])
+    root = HierarchyNode(feature_index=0, children=[child])
+
+    # All active
+    activations = torch.tensor([[1.0, 0.5, 0.3]])
+    result = root(activations)
+    assert torch.allclose(result, activations)
+
+    # Root inactive - all descendants should be inactive
+    activations = torch.tensor([[0.0, 0.5, 0.3]])
+    result = root(activations)
+    assert result[0, 0] == 0.0
+    assert result[0, 1] == 0.0
+    assert result[0, 2] == 0.0
+
+    # Root active, child inactive - grandchild should be inactive
+    activations = torch.tensor([[1.0, 0.0, 0.3]])
+    result = root(activations)
+    assert result[0, 0] == 1.0
+    assert result[0, 1] == 0.0
+    assert result[0, 2] == 0.0
+
+
+def test_HierarchyNode_does_not_modify_input():
+    child = HierarchyNode(feature_index=1)
+    root = HierarchyNode(feature_index=0, children=[child])
+
+    activations = torch.tensor([[0.0, 0.5, 0.3]])
+    original = activations.clone()
+
+    _ = root(activations)
+
+    # Original should be unchanged
+    assert torch.allclose(activations, original)
+
+
+def test_HierarchyNode_get_all_feature_indices():
+    grandchild = HierarchyNode(feature_index=3)
+    child1 = HierarchyNode(feature_index=1, children=[grandchild])
+    child2 = HierarchyNode(feature_index=2)
+    root = HierarchyNode(feature_index=0, children=[child1, child2])
+
+    indices = root.get_all_feature_indices()
+    assert sorted(indices) == [0, 1, 2, 3]
+
+
+def test_HierarchyNode_get_all_feature_indices_with_non_readout():
+    child1 = HierarchyNode(feature_index=0)
+    child2 = HierarchyNode(feature_index=1)
+    root = HierarchyNode(feature_index=None, children=[child1, child2])
+
+    indices = root.get_all_feature_indices()
+    assert sorted(indices) == [0, 1]
+
+
+def test_HierarchyNode_repr():
+    child = HierarchyNode(feature_index=1, feature_id="child")
+    root = HierarchyNode(
+        feature_index=0,
+        children=[child],
+        mutually_exclusive_children=False,
+        feature_id="root",
+    )
+
+    repr_str = repr(root)
+    assert "0" in repr_str
+    assert "root" in repr_str
+    assert "1" in repr_str
+    assert "child" in repr_str
+
+
+def test_HierarchyNode_repr_mutually_exclusive():
+    child1 = HierarchyNode(feature_index=1)
+    child2 = HierarchyNode(feature_index=2)
+    root = HierarchyNode(
+        feature_index=0,
+        children=[child1, child2],
+        mutually_exclusive_children=True,
+    )
+
+    repr_str = repr(root)
+    assert "x" in repr_str  # Mutual exclusion marker
+
+
+def test_HierarchyNode_requires_two_children_for_mutual_exclusion():
+    child = HierarchyNode(feature_index=1)
+
+    with pytest.raises(AssertionError, match="Need at least 2 children"):
+        HierarchyNode(
+            feature_index=0,
+            children=[child],
+            mutually_exclusive_children=True,
+        )
+
+
+def test_HierarchyNode_works_with_activation_generator():
+    """Integration test with ActivationGenerator."""
+    from sae_lens.synthetic import ActivationGenerator
+
+    child1 = HierarchyNode(feature_index=1)
+    child2 = HierarchyNode(feature_index=2)
+    root = HierarchyNode(
+        feature_index=0,
+        children=[child1, child2],
+        mutually_exclusive_children=True,
+    )
+
+    generator = ActivationGenerator(
+        num_features=3,
+        firing_probabilities=torch.tensor([0.8, 0.5, 0.5]),
+        modify_activations=root,
+    )
+
+    samples = generator.sample(batch_size=1000)
+
+    # Check hierarchy: children inactive when parent inactive
+    parent_inactive = samples[:, 0] == 0
+    assert torch.all(samples[parent_inactive, 1] == 0)
+    assert torch.all(samples[parent_inactive, 2] == 0)
+
+    # Check mutual exclusion: never both active
+    both_active = (samples[:, 1] > 0) & (samples[:, 2] > 0)
+    assert torch.sum(both_active) == 0
+
+
+def test_HierarchyNode_validate_valid_hierarchy():
+    """Valid hierarchy should pass validation."""
+    grandchild = HierarchyNode(feature_index=2)
+    child1 = HierarchyNode(feature_index=1, children=[grandchild])
+    child2 = HierarchyNode(feature_index=3)
+    root = HierarchyNode(feature_index=0, children=[child1, child2])
+
+    # Should not raise
+    root.validate()
+
+
+def test_HierarchyNode_validate_detects_loop():
+    """Should detect when a node is its own ancestor."""
+    child = HierarchyNode(feature_index=1)
+    root = HierarchyNode(feature_index=0, children=[child])
+
+    # Create a loop by making root a child of child
+    child.children = [root]
+
+    with pytest.raises(ValueError, match="Loop detected"):
+        root.validate()
+
+
+def test_HierarchyNode_validate_detects_self_loop():
+    """Should detect when a node is its own child."""
+    root = HierarchyNode(feature_index=0)
+    root.children = [root]
+
+    with pytest.raises(ValueError, match="Loop detected"):
+        root.validate()
+
+
+def test_HierarchyNode_validate_detects_multiple_parents():
+    """Should detect when a node has multiple parents."""
+    shared_child = HierarchyNode(feature_index=2)
+    child1 = HierarchyNode(feature_index=1, children=[shared_child])
+    child2 = HierarchyNode(feature_index=3, children=[shared_child])  # Same child!
+    root = HierarchyNode(feature_index=0, children=[child1, child2])
+
+    with pytest.raises(ValueError, match="multiple parents"):
+        root.validate()
+
+
+def test_HierarchyNode_validate_detects_node_as_sibling_of_itself():
+    """Should detect when a node appears multiple times in the same children list."""
+    child = HierarchyNode(feature_index=1)
+    root = HierarchyNode(feature_index=0, children=[child, child])
+
+    with pytest.raises(ValueError, match="multiple parents"):
+        root.validate()
+
+
+def test_HierarchyNode_validate_deep_loop():
+    """Should detect loops in deep hierarchies."""
+    node3 = HierarchyNode(feature_index=3)
+    node2 = HierarchyNode(feature_index=2, children=[node3])
+    node1 = HierarchyNode(feature_index=1, children=[node2])
+    root = HierarchyNode(feature_index=0, children=[node1])
+
+    # Create a deep loop: node3 -> root
+    node3.children = [root]
+
+    with pytest.raises(ValueError, match="Loop detected"):
+        root.validate()
+
+
+def test_HierarchyNode_validate_empty_hierarchy():
+    """Single node hierarchy should be valid."""
+    root = HierarchyNode(feature_index=0)
+    root.validate()  # Should not raise
+
+
+def test_HierarchyNode_validate_non_readout_nodes():
+    """Validation should work with non-readout (None feature_index) nodes."""
+    child1 = HierarchyNode(feature_index=0)
+    child2 = HierarchyNode(feature_index=1)
+    organizational = HierarchyNode(feature_index=None, children=[child1, child2])
+
+    organizational.validate()  # Should not raise

@@ -7,7 +7,7 @@ synthetic activations for testing and experimenting with SAEs.
 Main components:
 - FeatureDictionary: Maps sparse feature activations to dense hidden activations
 - generate_activations: Generates batches of synthetic feature activations
-- TreeFeatureGenerator: Generates hierarchical feature activations
+- HierarchyNode: Enforces hierarchical structure on feature activations
 - Training utilities: Helpers for training and evaluating SAEs on synthetic data
 - Plotting utilities: Visualization helpers for understanding SAE behavior
 
@@ -63,6 +63,7 @@ from sae_lens.synthetic.feature_dictionary import (
     orthogonalize_embeddings,
     orthogonalize_vectors,
 )
+from sae_lens.synthetic.hierarchy import HierarchyNode
 from sae_lens.synthetic.initialization import init_sae_to_match_feature_dict
 from sae_lens.synthetic.plotting import (
     find_best_feature_ordering,
@@ -74,13 +75,12 @@ from sae_lens.synthetic.train_sae_on_synthetic_data import (
     SyntheticActivationIterator,
     train_sae_on_synthetic_data,
 )
-from sae_lens.synthetic.tree_feature_generator import TreeFeatureGenerator
 from sae_lens.util import cosine_similarities
 
 __all__ = [
     # Main classes
     "FeatureDictionary",
-    "TreeFeatureGenerator",
+    "HierarchyNode",
     "ActivationGenerator",
     # Activation generation
     "generate_activations",
