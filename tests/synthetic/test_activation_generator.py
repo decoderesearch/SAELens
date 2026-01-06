@@ -218,6 +218,7 @@ def test_generate_activations_with_list_of_modifiers():
     )
 
     # Apply to our test tensor manually through the modifier
+    assert generator.modify_activations is not None
     result = generator.modify_activations(feats)
 
     assert result[0, 0] == 1
@@ -259,6 +260,8 @@ def test_generate_activations_with_single_item_list():
     )
 
     # Both should have the same modifier
+    assert generator_list.modify_activations is not None
+    assert generator_single.modify_activations is not None
     test_input = torch.tensor([[1.0, 1.0, 1.0]])
     result_list = generator_list.modify_activations(test_input)
     result_single = generator_single.modify_activations(test_input)

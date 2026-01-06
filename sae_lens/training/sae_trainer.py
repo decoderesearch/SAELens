@@ -55,7 +55,7 @@ Evaluator = Callable[[T_TRAINING_SAE, DataProvider, ActivationScaler], dict[str,
 
 class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
     """
-    Core SAE class used for inference. For training, see TrainingSAE.
+    Trainer for Sparse Autoencoder (SAE) models.
     """
 
     data_provider: DataProvider

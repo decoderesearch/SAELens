@@ -1,5 +1,6 @@
 from collections.abc import Iterator
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
 import torch
 
@@ -7,7 +8,7 @@ from sae_lens.config import LoggingConfig, SAETrainerConfig
 from sae_lens.saes.sae import TrainingSAE
 from sae_lens.synthetic.activation_generator import ActivationGenerator
 from sae_lens.synthetic.feature_dictionary import FeatureDictionary
-from sae_lens.training.sae_trainer import SAETrainer
+from sae_lens.training.sae_trainer import SAETrainer, SaveCheckpointFn
 
 
 def train_sae_on_synthetic_data(
@@ -20,11 +21,9 @@ def train_sae_on_synthetic_data(
     lr_warm_up_steps: int = 0,
     lr_decay_steps: int = 0,
     device: str | torch.device = "cpu",
-    n_checkpoints: int = 0,
-    checkpoint_path: str | None = None,
-    log_to_wandb: bool = False,
-    wandb_project: str = "sae_synthetic_training",
-) -> TrainingSAE[Any]:
+    n_snapshots: int = 0,
+    snapshot_fn: Callable[[SAETrainer[Any, Any]], None] | None = None,
+) -> None:
     """
     Train an SAE on synthetic activations from a feature dictionary.
 
@@ -33,48 +32,46 @@ def train_sae_on_synthetic_data(
 
     Args:
         sae: The TrainingSAE to train
-        feature_dict: The feature dictionary to generate activations from
-        generate_features_fn: Function that generates feature activations.
-            Takes batch_size as argument, returns tensor of shape [batch_size, num_features]
+        feature_dict: The feature dictionary that maps feature activations to
+            hidden activations
+        activations_generator: Generator that produces feature activations
         training_samples: Total number of training samples
         batch_size: Batch size for training
         lr: Learning rate
         lr_warm_up_steps: Number of warmup steps for learning rate
         lr_decay_steps: Number of steps over which to decay learning rate
         device: Device to train on
-        n_checkpoints: Number of checkpoints to save during training
-        checkpoint_path: Path to save checkpoints (required if n_checkpoints > 0)
-        log_to_wandb: Whether to log to Weights & Biases
-        wandb_project: W&B project name if logging
-
-    Returns:
-        The trained SAE
+        n_snapshots: Number of snapshots to take during training. Snapshots are
+            evenly spaced throughout training.
+        snapshot_fn: Callback function called at each snapshot point. Receives
+            the SAETrainer instance, allowing access to the SAE, training step,
+            and other training state. Required if n_snapshots > 0.
 
     Example:
-        >>> from sae_lens import StandardTrainingSAE
-        >>> from sae_lens.toy_model import (
+        >>> from sae_lens.synthetic import (
+        ...     ActivationGenerator,
         ...     FeatureDictionary,
-        ...     generate_activations,
-        ...     train_sae_on_synthetic,
+        ...     train_sae_on_synthetic_data,
         ... )
+        >>> from sae_lens.saes.sae import TrainingSAE
         >>>
-        >>> # Create feature dictionary
+        >>> # Create feature dictionary and activation generator
         >>> feature_dict = FeatureDictionary(num_features=100, hidden_dim=64)
+        >>> generator = ActivationGenerator(num_features=100, firing_probabilities=0.1)
         >>>
         >>> # Create SAE
-        >>> cfg = StandardTrainingSAEConfig(d_in=64, d_sae=100, ...)
-        >>> sae = StandardTrainingSAE(cfg)
+        >>> sae = TrainingSAE.from_dict({...})
         >>>
-        >>> # Define feature generation
-        >>> probs = torch.ones(100) * 0.1
-        >>> def gen_fn(batch_size):
-        ...     return generate_activations(batch_size, probs)
+        >>> # Train with snapshots
+        >>> snapshots = []
+        >>> def on_snapshot(trainer):
+        ...     snapshots.append(trainer.n_training_steps)
         >>>
-        >>> # Train
-        >>> trained_sae = train_sae_on_synthetic(
-        ...     sae, feature_dict, gen_fn,
-        ...     training_samples=1_000_000,
-        ...     lr=1e-3,
+        >>> train_sae_on_synthetic_data(
+        ...     sae, feature_dict, generator,
+        ...     training_samples=100_000,
+        ...     n_snapshots=5,
+        ...     snapshot_fn=on_snapshot,
         ... )
     """
 
@@ -89,8 +86,8 @@ def train_sae_on_synthetic_data(
 
     # Create trainer config
     trainer_cfg = SAETrainerConfig(
-        n_checkpoints=n_checkpoints,
-        checkpoint_path=checkpoint_path,
+        n_checkpoints=n_snapshots,
+        checkpoint_path=None,
         save_final_checkpoint=False,
         total_training_samples=training_samples,
         device=device_str,
@@ -107,10 +104,21 @@ def train_sae_on_synthetic_data(
         dead_feature_window=1000,
         feature_sampling_window=2000,
         logger=LoggingConfig(
-            log_to_wandb=log_to_wandb,
-            wandb_project=wandb_project,
+            log_to_wandb=False,
+            # hacky way to disable evals, but works for now
+            eval_every_n_wandb_logs=2**31 - 1,
         ),
     )
+
+    def snapshot_wrapper(
+        snapshot_fn: Callable[[SAETrainer[Any, Any]], None] | None,
+    ) -> SaveCheckpointFn:
+        def save_checkpoint(checkpoint_path: Path | None) -> None:  # noqa: ARG001
+            if snapshot_fn is None:
+                raise ValueError("snapshot_fn must be provided to take snapshots")
+            snapshot_fn(trainer)
+
+        return save_checkpoint
 
     # Create trainer and train
     feature_dict.eval()
@@ -118,9 +126,10 @@ def train_sae_on_synthetic_data(
         cfg=trainer_cfg,
         sae=sae,
         data_provider=data_iterator,
+        save_checkpoint_fn=snapshot_wrapper(snapshot_fn),
     )
 
-    return trainer.fit()
+    trainer.fit()
 
 
 class SyntheticActivationIterator(Iterator[torch.Tensor]):

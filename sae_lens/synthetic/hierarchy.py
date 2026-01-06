@@ -237,7 +237,9 @@ class HierarchyNode:
                 node_desc = (
                     f"feature_index={node.feature_index}"
                     if node.feature_index is not None
-                    else f"id={node.feature_id}" if node.feature_id else "unnamed node"
+                    else f"id={node.feature_id}"
+                    if node.feature_id
+                    else "unnamed node"
                 )
                 raise ValueError(
                     f"Node ({node_desc}) has multiple parents. "
@@ -257,11 +259,11 @@ class HierarchyNode:
             node_desc = (
                 f"feature_index={self.feature_index}"
                 if self.feature_index is not None
-                else f"id={self.feature_id}" if self.feature_id else "unnamed node"
+                else f"id={self.feature_id}"
+                if self.feature_id
+                else "unnamed node"
             )
-            raise ValueError(
-                f"Loop detected: node ({node_desc}) is its own ancestor."
-            )
+            raise ValueError(f"Loop detected: node ({node_desc}) is its own ancestor.")
 
         # Add to ancestors for children traversal
         new_ancestors = ancestors | {node_id}

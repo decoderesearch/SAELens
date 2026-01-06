@@ -8,11 +8,11 @@ This module provides helpers for:
 - Initializing SAEs to match feature dictionaries
 """
 
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
 
+from sae_lens.synthetic.activation_generator import ActivationGenerator
 from sae_lens.synthetic.feature_dictionary import FeatureDictionary
 
 
@@ -37,7 +37,7 @@ class SyntheticDataEvalResult:
 def eval_sae_on_synthetic_data(
     sae: torch.nn.Module,
     feature_dict: FeatureDictionary,
-    generate_features_fn: Callable[[int], torch.Tensor],
+    activations_generator: ActivationGenerator,
     num_samples: int = 100_000,
 ) -> SyntheticDataEvalResult:
     """
@@ -55,7 +55,7 @@ def eval_sae_on_synthetic_data(
     sae.eval()
 
     # Generate samples
-    feature_acts = generate_features_fn(num_samples)
+    feature_acts = activations_generator.sample(num_samples)
     true_l0 = (feature_acts > 0).float().sum(dim=-1).mean().item()
     hidden_acts = feature_dict(feature_acts)
 

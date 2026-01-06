@@ -64,6 +64,11 @@ from sae_lens.synthetic.feature_dictionary import (
     orthogonalize_embeddings,
     orthogonalize_vectors,
 )
+from sae_lens.synthetic.firing_probabilities import (
+    linear_firing_probabilities,
+    random_firing_probabilities,
+    zipfian_firing_probabilities,
+)
 from sae_lens.synthetic.hierarchy import HierarchyNode
 from sae_lens.synthetic.initialization import init_sae_to_match_feature_dict
 from sae_lens.synthetic.plotting import (
@@ -85,6 +90,9 @@ __all__ = [
     "ActivationGenerator",
     # Activation generation
     "generate_activations",
+    "zipfian_firing_probabilities",
+    "linear_firing_probabilities",
+    "random_firing_probabilities",
     "create_correlation_matrix",
     "create_correlation_matrix_from_correlations",
     "create_block_correlation_matrix",

@@ -24,7 +24,7 @@ def test_orthogonalize_vectors_respects_target_cos_sim():
         num_vectors=5, vector_dim=20, target_cos_sim=target_cos_sim, num_steps=500
     )
     dot_products = vectors @ vectors.T
-    off_diagonal = dot_products[~torch.eye(5, dtype=bool)]
+    off_diagonal = dot_products[~torch.eye(5, dtype=torch.bool)]
     assert torch.allclose(off_diagonal, torch.tensor(target_cos_sim), atol=0.05)
 
 
