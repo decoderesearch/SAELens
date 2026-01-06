@@ -56,6 +56,7 @@ from sae_lens.synthetic.correlation import (
 from sae_lens.synthetic.evals import (
     SyntheticDataEvalResult,
     eval_sae_on_synthetic_data,
+    mean_correlation_coefficient,
 )
 from sae_lens.synthetic.feature_dictionary import (
     FeatureDictionary,
@@ -115,6 +116,7 @@ __all__ = [
     "SyntheticDataEvalResult",
     "train_sae_on_synthetic_data",
     "eval_sae_on_synthetic_data",
+    "mean_correlation_coefficient",
     "init_sae_to_match_feature_dict",
     # Plotting utilities
     "find_best_feature_ordering",

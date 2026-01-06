@@ -11,9 +11,54 @@ This module provides helpers for:
 from dataclasses import dataclass
 
 import torch
+from scipy.optimize import linear_sum_assignment
 
 from sae_lens.synthetic.activation_generator import ActivationGenerator
 from sae_lens.synthetic.feature_dictionary import FeatureDictionary
+
+
+def mean_correlation_coefficient(
+    features_a: torch.Tensor,
+    features_b: torch.Tensor,
+) -> float:
+    """
+    Compute Mean Correlation Coefficient (MCC) between two sets of feature vectors.
+
+    MCC measures how well learned features align with ground truth features by finding
+    an optimal one-to-one matching using the Hungarian algorithm and computing the
+    mean absolute cosine similarity of matched pairs.
+
+    Reference: O'Neill et al. "Compute Optimal Inference and Provable Amortisation
+    Gap in Sparse Autoencoders" (arXiv:2411.13117)
+
+    Args:
+        features_a: Feature vectors of shape [num_features_a, hidden_dim]
+        features_b: Feature vectors of shape [num_features_b, hidden_dim]
+
+    Returns:
+        MCC score in range [0, 1], where 1 indicates perfect alignment
+
+    Example:
+        >>> sae_features = sae.W_dec  # [num_sae_features, hidden_dim]
+        >>> gt_features = feature_dict.feature_vectors  # [num_gt_features, hidden_dim]
+        >>> mcc = mean_correlation_coefficient(sae_features, gt_features)
+    """
+    # Normalize to unit vectors
+    a_norm = features_a / features_a.norm(dim=1, keepdim=True).clamp(min=1e-8)
+    b_norm = features_b / features_b.norm(dim=1, keepdim=True).clamp(min=1e-8)
+
+    # Compute absolute cosine similarity matrix
+    cos_sim = torch.abs(a_norm @ b_norm.T)
+
+    # Convert to cost matrix for Hungarian algorithm (which minimizes)
+    cost_matrix = 1 - cos_sim.cpu().numpy()
+
+    # Find optimal matching
+    row_ind, col_ind = linear_sum_assignment(cost_matrix)
+
+    # Compute mean of matched similarities
+    matched_similarities = cos_sim[row_ind, col_ind]
+    return matched_similarities.mean().item()
 
 
 @dataclass
@@ -31,6 +76,9 @@ class SyntheticDataEvalResult:
 
     shrinkage: float
     """Average ratio of SAE output norm to input norm (1.0 = no shrinkage)"""
+
+    mcc: float
+    """Mean Correlation Coefficient between SAE decoder and ground truth features"""
 
 
 @torch.no_grad()
@@ -75,9 +123,15 @@ def eval_sae_on_synthetic_data(
         (sae_output.norm(dim=-1) / hidden_acts_filtered.norm(dim=-1)).mean().item()
     )
 
+    # Compute MCC between SAE decoder and ground truth features
+    sae_decoder: torch.Tensor = sae.W_dec  # type: ignore[attr-defined]
+    gt_features = feature_dict.feature_vectors
+    mcc = mean_correlation_coefficient(sae_decoder, gt_features)
+
     return SyntheticDataEvalResult(
         true_l0=true_l0,
         sae_l0=sae_l0,
         dead_latents=dead_latents,
         shrinkage=shrinkage,
+        mcc=mcc,
     )
