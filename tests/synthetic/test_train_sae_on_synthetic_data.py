@@ -102,7 +102,9 @@ def synthetic_training_setup() -> SyntheticSetup:
     return sae, feature_dict, activations_gen
 
 
-def test_train_sae_on_synthetic_data_runs(synthetic_training_setup: SyntheticSetup) -> None:
+def test_train_sae_on_synthetic_data_runs(
+    synthetic_training_setup: SyntheticSetup,
+) -> None:
     """Test that training runs without errors."""
     sae, feature_dict, activations_gen = synthetic_training_setup
 

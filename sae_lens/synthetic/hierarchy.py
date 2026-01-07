@@ -9,18 +9,176 @@ Based on Noa Nabeshima's Matryoshka SAEs:
 https://github.com/noanabeshima/matryoshka-saes/blob/main/toy_model.py
 """
 
-from collections.abc import Sequence
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import torch
 
+ActivationsModifier = Callable[[torch.Tensor], torch.Tensor]
+
+
+def _validate_hierarchy(roots: Sequence[HierarchyNode]) -> None:
+    """
+    Validate a forest of hierarchy trees.
+
+    Treats the input as children of a virtual root node and validates the
+    entire structure.
+
+    Checks that:
+    1. There are no loops (no node is its own ancestor)
+    2. Each node has at most one parent (no node appears in multiple children lists)
+    3. No feature index appears in multiple trees
+
+    Args:
+        roots: Root nodes of the hierarchy trees to validate
+
+    Raises:
+        ValueError: If the hierarchy is invalid
+    """
+    if not roots:
+        return
+
+    # Collect all nodes and check for loops, treating roots as children of virtual root
+    all_nodes: list[HierarchyNode] = []
+    virtual_root_id = id(roots)  # Use the list itself as virtual root identity
+
+    for root in roots:
+        all_nodes.append(root)
+        _collect_nodes_and_check_loops(root, all_nodes, ancestors={virtual_root_id})
+
+    # Check for multiple parents (same node appearing multiple times)
+    seen_ids: set[int] = set()
+    for node in all_nodes:
+        node_id = id(node)
+        if node_id in seen_ids:
+            node_desc = _node_description(node)
+            raise ValueError(
+                f"Node ({node_desc}) has multiple parents. "
+                "Each node must have at most one parent."
+            )
+        seen_ids.add(node_id)
+
+    # Check for overlapping feature indices across trees
+    if len(roots) > 1:
+        all_indices: set[int] = set()
+        for root in roots:
+            tree_indices = root.get_all_feature_indices()
+            overlap = all_indices & set(tree_indices)
+            if overlap:
+                raise ValueError(
+                    f"Feature indices {overlap} appear in multiple hierarchy trees. "
+                    "Each feature should belong to at most one hierarchy."
+                )
+            all_indices.update(tree_indices)
+
+
+def _collect_nodes_and_check_loops(
+    node: HierarchyNode,
+    all_nodes: list[HierarchyNode],
+    ancestors: set[int],
+) -> None:
+    """Recursively collect nodes and check for loops."""
+    node_id = id(node)
+
+    if node_id in ancestors:
+        node_desc = _node_description(node)
+        raise ValueError(f"Loop detected: node ({node_desc}) is its own ancestor.")
+
+    # Add to ancestors for children traversal
+    new_ancestors = ancestors | {node_id}
+
+    for child in node.children:
+        # Collect child (before recursing, so we can detect multiple parents)
+        all_nodes.append(child)
+        _collect_nodes_and_check_loops(child, all_nodes, new_ancestors)
+
+
+def _node_description(node: HierarchyNode) -> str:
+    """Get a human-readable description of a node for error messages."""
+    if node.feature_index is not None:
+        return f"feature_index={node.feature_index}"
+    if node.feature_id:
+        return f"id={node.feature_id}"
+    return "unnamed node"
+
+
+def hierarchy_modifier(
+    roots: Sequence[HierarchyNode],
+    *,
+    validate: bool = True,
+) -> ActivationsModifier:
+    """
+    Create an activations modifier from one or more hierarchy trees.
+
+    This is the recommended way to use hierarchies with ActivationGenerator.
+    It validates the hierarchy structure and returns a modifier function that
+    applies all hierarchy constraints.
+
+    Args:
+        roots: One or more root HierarchyNode objects. Each root defines an
+            independent hierarchy tree. All trees are validated and applied.
+        validate: If True (default), validates all hierarchies before returning.
+            Set to False to skip validation for performance if you've already
+            validated the hierarchies.
+
+    Returns:
+        An ActivationsModifier function that can be passed to ActivationGenerator.
+
+    Raises:
+        ValueError: If validate=True and any hierarchy contains loops or
+            nodes with multiple parents.
+
+    Example:
+        >>> # Create two independent hierarchies
+        >>> tree1 = HierarchyNode(feature_index=0, children=[
+        ...     HierarchyNode(feature_index=1),
+        ...     HierarchyNode(feature_index=2),
+        ... ])
+        >>> tree2 = HierarchyNode(feature_index=3, children=[
+        ...     HierarchyNode(feature_index=4),
+        ... ])
+        >>>
+        >>> # Create modifier and use with ActivationGenerator
+        >>> modifier = hierarchy_modifier([tree1, tree2])
+        >>> gen = ActivationGenerator(
+        ...     num_features=5,
+        ...     firing_probabilities=0.1,
+        ...     modify_activations=modifier,
+        ... )
+    """
+    if not roots:
+        # No hierarchies - return identity function
+        def identity(activations: torch.Tensor) -> torch.Tensor:
+            return activations
+
+        return identity
+
+    # Validate all hierarchies as a single forest
+    if validate:
+        _validate_hierarchy(roots)
+
+    # Create modifier function that applies all hierarchies
+    def modifier(activations: torch.Tensor) -> torch.Tensor:
+        result = activations.clone()
+        for root in roots:
+            root._apply_hierarchy(result, parent_active_mask=None)
+        return result
+
+    return modifier
+
 
 class HierarchyNode:
     """
-    Enforces hierarchical (tree) structure on feature activations.
+    Represents a node in a feature hierarchy tree.
 
-    Works as an ActivationsModifier: takes a tensor of activations and returns
-    a modified tensor where children are deactivated when parents are inactive.
+    Used to define hierarchical dependencies between features. Children are
+    deactivated when their parent is inactive, and children can optionally
+    be mutually exclusive.
+
+    Use `hierarchy_modifier()` to create an ActivationsModifier from one or
+    more HierarchyNode trees.
 
     Example:
         >>> # Create a simple hierarchy:
@@ -32,9 +190,10 @@ class HierarchyNode:
         ...     children=[child1, child2],
         ...     mutually_exclusive_children=True
         ... )
-        >>> # Use directly as modifier
+        >>> # Create modifier via hierarchy_modifier
+        >>> modifier = hierarchy_modifier([root])
         >>> activations = torch.tensor([[1.0, 0.5, 0.3], [0.0, 0.5, 0.3]])
-        >>> modified = root(activations)
+        >>> modified = modifier(activations)
         >>> # Row 0: root active, one child kept (mutual exclusion)
         >>> # Row 1: root inactive, both children deactivated
 
@@ -45,11 +204,11 @@ class HierarchyNode:
         feature_id: Optional identifier for debugging
     """
 
-    children: Sequence["HierarchyNode"]
+    children: Sequence[HierarchyNode]
     feature_index: int | None
 
     @classmethod
-    def from_dict(cls, tree_dict: dict[str, Any]) -> "HierarchyNode":
+    def from_dict(cls, tree_dict: dict[str, Any]) -> HierarchyNode:
         """
         Create a HierarchyNode from a dictionary specification.
 
@@ -89,7 +248,7 @@ class HierarchyNode:
     def __init__(
         self,
         feature_index: int | None = None,
-        children: Sequence["HierarchyNode"] | None = None,
+        children: Sequence[HierarchyNode] | None = None,
         mutually_exclusive_children: bool = False,
         feature_id: str | None = None,
     ):
@@ -112,23 +271,6 @@ class HierarchyNode:
             assert (
                 len(self.children) >= 2
             ), "Need at least 2 children for mutual exclusion"
-
-    def __call__(self, activations: torch.Tensor) -> torch.Tensor:
-        """
-        Apply hierarchical constraints to activations.
-
-        Deactivates children when parents are inactive. For mutually exclusive
-        children, randomly selects one active child when multiple are active.
-
-        Args:
-            activations: Tensor of shape [batch_size, num_features]
-
-        Returns:
-            Modified activations with hierarchical constraints applied
-        """
-        result = activations.clone()
-        self._apply_hierarchy(result, parent_active_mask=None)
-        return result
 
     def _apply_hierarchy(
         self,
@@ -225,53 +367,7 @@ class HierarchyNode:
         Raises:
             ValueError: If the hierarchy is invalid
         """
-        # Check for loops and collect all nodes
-        all_nodes: list[HierarchyNode] = []
-        self._collect_nodes_and_check_loops(all_nodes, ancestors=set())
-
-        # Check for multiple parents
-        seen_ids: set[int] = set()
-        for node in all_nodes:
-            node_id = id(node)
-            if node_id in seen_ids:
-                node_desc = (
-                    f"feature_index={node.feature_index}"
-                    if node.feature_index is not None
-                    else f"id={node.feature_id}"
-                    if node.feature_id
-                    else "unnamed node"
-                )
-                raise ValueError(
-                    f"Node ({node_desc}) has multiple parents. "
-                    "Each node must have at most one parent."
-                )
-            seen_ids.add(node_id)
-
-    def _collect_nodes_and_check_loops(
-        self,
-        all_nodes: list["HierarchyNode"],
-        ancestors: set[int],
-    ) -> None:
-        """Recursively collect nodes and check for loops."""
-        node_id = id(self)
-
-        if node_id in ancestors:
-            node_desc = (
-                f"feature_index={self.feature_index}"
-                if self.feature_index is not None
-                else f"id={self.feature_id}"
-                if self.feature_id
-                else "unnamed node"
-            )
-            raise ValueError(f"Loop detected: node ({node_desc}) is its own ancestor.")
-
-        # Add to ancestors for children traversal
-        new_ancestors = ancestors | {node_id}
-
-        for child in self.children:
-            # Collect child (before recursing, so we can detect multiple parents)
-            all_nodes.append(child)
-            child._collect_nodes_and_check_loops(all_nodes, new_ancestors)
+        _validate_hierarchy([self])
 
     def __repr__(self, indent: int = 0) -> str:
         s = " " * (indent * 2)

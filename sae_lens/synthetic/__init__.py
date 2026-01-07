@@ -70,7 +70,7 @@ from sae_lens.synthetic.firing_probabilities import (
     random_firing_probabilities,
     zipfian_firing_probabilities,
 )
-from sae_lens.synthetic.hierarchy import HierarchyNode
+from sae_lens.synthetic.hierarchy import HierarchyNode, hierarchy_modifier
 from sae_lens.synthetic.initialization import init_sae_to_match_feature_dict
 from sae_lens.synthetic.plotting import (
     find_best_feature_ordering,
@@ -88,6 +88,7 @@ __all__ = [
     # Main classes
     "FeatureDictionary",
     "HierarchyNode",
+    "hierarchy_modifier",
     "ActivationGenerator",
     # Activation generation
     "generate_activations",
