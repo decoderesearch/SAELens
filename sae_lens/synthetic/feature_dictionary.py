@@ -100,15 +100,11 @@ def orthogonal_initializer(
     num_steps: int = 200, lr: float = 0.01, show_progress: bool = False
 ) -> FeatureDictionaryInitializer:
     def initializer(feature_dict: "FeatureDictionary") -> None:
-        feature_dict.embed.weight.data = (
-            orthogonalize_embeddings(
-                feature_dict.embed.weight.T,
-                num_steps=num_steps,
-                lr=lr,
-                show_progress=show_progress,
-            )
-            .T.clone()
-            .contiguous()
+        feature_dict.feature_vectors.data = orthogonalize_embeddings(
+            feature_dict.feature_vectors,
+            num_steps=num_steps,
+            lr=lr,
+            show_progress=show_progress,
         )
 
     return initializer
@@ -137,8 +133,13 @@ class FeatureDictionary(nn.Module):
         >>> hidden_activations.shape  # torch.Size([32, 64])
 
     Attributes:
-        embed: Linear layer mapping feature space to hidden space
+        feature_vectors: Parameter of shape [num_features, hidden_dim] containing the
+            feature embedding vectors
+        bias: Parameter of shape [hidden_dim] containing the bias term (zeros if bias=False)
     """
+
+    feature_vectors: nn.Parameter
+    bias: nn.Parameter
 
     def __init__(
         self,
@@ -167,11 +168,15 @@ class FeatureDictionary(nn.Module):
         self.num_features = num_features
         self.hidden_dim = hidden_dim
 
-        self.embed = nn.Linear(num_features, hidden_dim, bias=bias)
-        with torch.no_grad():
-            embeddings = torch.randn_like(self.embed.weight.data)
-            embeddings /= embeddings.norm(p=2, dim=0, keepdim=True)
-        self.embed.weight.data = embeddings
+        # Initialize feature vectors as unit vectors
+        embeddings = torch.randn(num_features, hidden_dim)
+        embeddings = embeddings / embeddings.norm(p=2, dim=1, keepdim=True)
+        self.feature_vectors = nn.Parameter(embeddings)
+
+        # Initialize bias (zeros if not using bias, but still a parameter for consistent API)
+        self.bias = nn.Parameter(
+            torch.zeros(hidden_dim), requires_grad=bias
+        )
 
         # Handle backwards-compatible ortho_num_steps parameter
         if ortho_num_steps is not None and initializer is None:
@@ -179,12 +184,12 @@ class FeatureDictionary(nn.Module):
             # Note: orthogonalize_embeddings uses gradient descent internally,
             # so we can't wrap it in no_grad()
             orthogonalized = orthogonalize_embeddings(
-                self.embed.weight.T,
+                self.feature_vectors,
                 target_cos_sim=target_cos_sim,
                 num_steps=ortho_num_steps,
             )
             with torch.no_grad():
-                self.embed.weight.data = orthogonalized.T.clone().contiguous()
+                self.feature_vectors.data = orthogonalized.clone().contiguous()
         elif initializer is not None:
             initializer(self)
 
@@ -199,24 +204,4 @@ class FeatureDictionary(nn.Module):
         Returns:
             Tensor of shape [batch, hidden_dim] containing dense hidden activations
         """
-        return self.embed(feature_activations)
-
-    @property
-    def feature_vectors(self) -> torch.Tensor:
-        """
-        Get the feature vectors (dictionary columns).
-
-        Returns:
-            Tensor of shape [num_features, hidden_dim] where each row is a feature vector
-        """
-        return self.embed.weight.T
-
-    @property
-    def bias_vector(self) -> torch.Tensor:
-        """
-        Get the bias term.
-
-        Returns:
-            Tensor of shape [hidden_dim]
-        """
-        return self.embed.bias or self.embed.weight.new_zeros(self.hidden_dim)
+        return feature_activations @ self.feature_vectors + self.bias

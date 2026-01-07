@@ -30,8 +30,8 @@ def test_orthogonalize_vectors_respects_target_cos_sim():
 
 def test_FeatureDictionary_creates_correct_shape():
     feature_dict = FeatureDictionary(num_features=10, hidden_dim=8, ortho_num_steps=100)
-    assert feature_dict.embed.weight.shape == (8, 10)
     assert feature_dict.feature_vectors.shape == (10, 8)
+    assert feature_dict.bias.shape == (8,)
 
 
 def test_FeatureDictionary_creates_orthogonal_features():
