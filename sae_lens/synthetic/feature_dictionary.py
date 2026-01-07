@@ -146,10 +146,7 @@ class FeatureDictionary(nn.Module):
         num_features: int,
         hidden_dim: int,
         bias: bool = False,
-        initializer: FeatureDictionaryInitializer | None = None,
-        # Backwards-compatible parameters
-        ortho_num_steps: int | None = None,
-        target_cos_sim: float = 0.0,
+        initializer: FeatureDictionaryInitializer | None = orthogonal_initializer(),
     ):
         """
         Create a new FeatureDictionary.
@@ -158,11 +155,7 @@ class FeatureDictionary(nn.Module):
             num_features: Number of features in the dictionary
             hidden_dim: Dimensionality of the hidden space
             bias: Whether to include a bias term in the embedding
-            initializer: Initializer function to use. If None, the embeddings are initialized to random unit vectors.
-            ortho_num_steps: (Deprecated) Number of optimization steps for orthogonalization.
-                If provided, creates an orthogonal initializer automatically.
-            target_cos_sim: (Deprecated) Target pairwise cosine similarity for orthogonalization.
-                Only used if ortho_num_steps is provided.
+            initializer: Initializer function to use. If None, the embeddings are initialized to random unit vectors. By default will orthogonalize embeddings.
         """
         super().__init__()
         self.num_features = num_features
@@ -174,23 +167,9 @@ class FeatureDictionary(nn.Module):
         self.feature_vectors = nn.Parameter(embeddings)
 
         # Initialize bias (zeros if not using bias, but still a parameter for consistent API)
-        self.bias = nn.Parameter(
-            torch.zeros(hidden_dim), requires_grad=bias
-        )
+        self.bias = nn.Parameter(torch.zeros(hidden_dim), requires_grad=bias)
 
-        # Handle backwards-compatible ortho_num_steps parameter
-        if ortho_num_steps is not None and initializer is None:
-            # Apply orthogonalization with target_cos_sim
-            # Note: orthogonalize_embeddings uses gradient descent internally,
-            # so we can't wrap it in no_grad()
-            orthogonalized = orthogonalize_embeddings(
-                self.feature_vectors,
-                target_cos_sim=target_cos_sim,
-                num_steps=ortho_num_steps,
-            )
-            with torch.no_grad():
-                self.feature_vectors.data = orthogonalized.clone().contiguous()
-        elif initializer is not None:
+        if initializer is not None:
             initializer(self)
 
     def forward(self, feature_activations: torch.Tensor) -> torch.Tensor:

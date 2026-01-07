@@ -115,17 +115,21 @@ def dtype_to_str(dtype: torch.dtype) -> str:
     return DTYPE_TO_STR[dtype]
 
 
-def cosine_similarities(mat1: torch.Tensor, mat2: torch.Tensor) -> torch.Tensor:
+def cosine_similarities(
+    mat1: torch.Tensor, mat2: torch.Tensor | None = None
+) -> torch.Tensor:
     """
     Compute cosine similarities between each row of mat1 and each row of mat2.
 
     Args:
         mat1: Tensor of shape [n1, d]
-        mat2: Tensor of shape [n2, d]
+        mat2: Tensor of shape [n2, d]. If not provided, mat1 = mat2
 
     Returns:
         Tensor of shape [n1, n2] with cosine similarities
     """
+    if mat2 is None:
+        mat2 = mat1
     mat1_normed = mat1 / mat1.norm(dim=1, keepdim=True).clamp(min=1e-8)
     mat2_normed = mat2 / mat2.norm(dim=1, keepdim=True).clamp(min=1e-8)
     return mat1_normed @ mat2_normed.T

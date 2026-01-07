@@ -113,7 +113,7 @@ def plot_sae_feature_similarity(
     show_plot: bool = True,
     dtick: int | None = 1,
     scale: float = 1.0,
-) -> go.Figure:
+):
     """
     Plot cosine similarities between SAE features and true features.
 
@@ -235,5 +235,3 @@ def plot_sae_feature_similarity(
 
     if show_plot:
         fig.show()
-
-    return fig
