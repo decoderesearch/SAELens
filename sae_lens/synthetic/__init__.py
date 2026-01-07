@@ -78,9 +78,9 @@ from sae_lens.synthetic.plotting import (
     find_best_feature_ordering_from_sae,
     plot_sae_feature_similarity,
 )
-from sae_lens.synthetic.train_sae_on_synthetic_data import (
+from sae_lens.synthetic.training import (
     SyntheticActivationIterator,
-    train_sae_on_synthetic_data,
+    train_toy_sae,
 )
 from sae_lens.util import cosine_similarities
 
@@ -115,7 +115,7 @@ __all__ = [
     # Training utilities
     "SyntheticActivationIterator",
     "SyntheticDataEvalResult",
-    "train_sae_on_synthetic_data",
+    "train_toy_sae",
     "eval_sae_on_synthetic_data",
     "mean_correlation_coefficient",
     "init_sae_to_match_feature_dict",

@@ -8,7 +8,7 @@ from sae_lens.synthetic import (
     ActivationGenerator,
     FeatureDictionary,
     SyntheticActivationIterator,
-    train_sae_on_synthetic_data,
+    train_toy_sae,
 )
 from sae_lens.training.sae_trainer import SAETrainer
 
@@ -70,7 +70,7 @@ SyntheticSetup = tuple[TrainingSAE[Any], FeatureDictionary, ActivationGenerator]
 
 @pytest.fixture
 def synthetic_training_setup() -> SyntheticSetup:
-    """Create a minimal setup for testing train_sae_on_synthetic_data."""
+    """Create a minimal setup for testing train_toy_sae."""
     hidden_dim = 8
     num_features = 10
 
@@ -102,13 +102,13 @@ def synthetic_training_setup() -> SyntheticSetup:
     return sae, feature_dict, activations_gen
 
 
-def test_train_sae_on_synthetic_data_runs(
+def test_train_toy_sae_runs(
     synthetic_training_setup: SyntheticSetup,
 ) -> None:
     """Test that training runs without errors."""
     sae, feature_dict, activations_gen = synthetic_training_setup
 
-    train_sae_on_synthetic_data(
+    train_toy_sae(
         sae=sae,
         feature_dict=feature_dict,
         activations_generator=activations_gen,
@@ -117,7 +117,7 @@ def test_train_sae_on_synthetic_data_runs(
     )
 
 
-def test_train_sae_on_synthetic_data_snapshot_fn_called_correct_times(
+def test_train_toy_sae_snapshot_fn_called_correct_times(
     synthetic_training_setup: SyntheticSetup,
 ) -> None:
     """Test that snapshot_fn is called n_snapshots times."""
@@ -128,7 +128,7 @@ def test_train_sae_on_synthetic_data_snapshot_fn_called_correct_times(
     def on_snapshot(trainer: SAETrainer[Any, Any]) -> None:
         snapshot_calls.append(trainer.n_training_steps)
 
-    train_sae_on_synthetic_data(
+    train_toy_sae(
         sae=sae,
         feature_dict=feature_dict,
         activations_generator=activations_gen,
@@ -141,7 +141,7 @@ def test_train_sae_on_synthetic_data_snapshot_fn_called_correct_times(
     assert len(snapshot_calls) == 4
 
 
-def test_train_sae_on_synthetic_data_snapshot_fn_receives_trainer(
+def test_train_toy_sae_snapshot_fn_receives_trainer(
     synthetic_training_setup: SyntheticSetup,
 ) -> None:
     """Test that snapshot_fn receives the trainer with expected attributes."""
@@ -152,7 +152,7 @@ def test_train_sae_on_synthetic_data_snapshot_fn_receives_trainer(
     def on_snapshot(trainer: SAETrainer[Any, Any]) -> None:
         received_trainers.append(trainer)
 
-    train_sae_on_synthetic_data(
+    train_toy_sae(
         sae=sae,
         feature_dict=feature_dict,
         activations_generator=activations_gen,
@@ -170,7 +170,7 @@ def test_train_sae_on_synthetic_data_snapshot_fn_receives_trainer(
         assert hasattr(trainer, "sae")
 
 
-def test_train_sae_on_synthetic_data_snapshots_evenly_spaced(
+def test_train_toy_sae_snapshots_evenly_spaced(
     synthetic_training_setup: SyntheticSetup,
 ) -> None:
     """Test that snapshots are taken at evenly spaced intervals."""
@@ -183,7 +183,7 @@ def test_train_sae_on_synthetic_data_snapshots_evenly_spaced(
 
     # 4096 samples / 128 batch = 32 steps total
     # 4 snapshots should be at steps 8, 16, 24, 32
-    train_sae_on_synthetic_data(
+    train_toy_sae(
         sae=sae,
         feature_dict=feature_dict,
         activations_generator=activations_gen,
@@ -204,14 +204,14 @@ def test_train_sae_on_synthetic_data_snapshots_evenly_spaced(
     assert max(intervals) - min(intervals) <= 1
 
 
-def test_train_sae_on_synthetic_data_no_snapshots_by_default(
+def test_train_toy_sae_no_snapshots_by_default(
     synthetic_training_setup: SyntheticSetup,
 ) -> None:
     """Test that no snapshot_fn is needed when n_snapshots=0."""
     sae, feature_dict, activations_gen = synthetic_training_setup
 
     # Should not raise even without snapshot_fn
-    train_sae_on_synthetic_data(
+    train_toy_sae(
         sae=sae,
         feature_dict=feature_dict,
         activations_generator=activations_gen,
@@ -221,14 +221,14 @@ def test_train_sae_on_synthetic_data_no_snapshots_by_default(
     )
 
 
-def test_train_sae_on_synthetic_data_snapshot_fn_required_when_n_snapshots_positive(
+def test_train_toy_sae_snapshot_fn_required_when_n_snapshots_positive(
     synthetic_training_setup: SyntheticSetup,
 ) -> None:
     """Test that snapshot_fn is required when n_snapshots > 0."""
     sae, feature_dict, activations_gen = synthetic_training_setup
 
     with pytest.raises(ValueError, match="snapshot_fn must be provided"):
-        train_sae_on_synthetic_data(
+        train_toy_sae(
             sae=sae,
             feature_dict=feature_dict,
             activations_generator=activations_gen,

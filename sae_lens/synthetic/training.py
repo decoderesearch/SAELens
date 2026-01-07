@@ -11,7 +11,7 @@ from sae_lens.synthetic.feature_dictionary import FeatureDictionary
 from sae_lens.training.sae_trainer import SAETrainer, SaveCheckpointFn
 
 
-def train_sae_on_synthetic_data(
+def train_toy_sae(
     sae: TrainingSAE[Any],
     feature_dict: FeatureDictionary,
     activations_generator: ActivationGenerator,
@@ -28,7 +28,7 @@ def train_sae_on_synthetic_data(
     Train an SAE on synthetic activations from a feature dictionary.
 
     This is a convenience function that sets up the training loop with
-    sensible defaults for synthetic data experiments.
+    sensible defaults for small-scale synthetic data experiments.
 
     Args:
         sae: The TrainingSAE to train
@@ -51,7 +51,7 @@ def train_sae_on_synthetic_data(
         >>> from sae_lens.synthetic import (
         ...     ActivationGenerator,
         ...     FeatureDictionary,
-        ...     train_sae_on_synthetic_data,
+        ...     train_toy_sae,
         ... )
         >>> from sae_lens.saes.sae import TrainingSAE
         >>>
@@ -67,7 +67,7 @@ def train_sae_on_synthetic_data(
         >>> def on_snapshot(trainer):
         ...     snapshots.append(trainer.n_training_steps)
         >>>
-        >>> train_sae_on_synthetic_data(
+        >>> train_toy_sae(
         ...     sae, feature_dict, generator,
         ...     training_samples=100_000,
         ...     n_snapshots=5,
