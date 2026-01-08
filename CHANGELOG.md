@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## v6.27.3 (2026-01-05)
+
+### Performance
+
+* perf: simplify activation store loading batches (#614)
+
+* perf: simplify activation store loading batches
+
+* fixing benchmark typing
+
+* change from CR ([`4dd0a95`](https://github.com/decoderesearch/SAELens/commit/4dd0a955ad0b4f05d3f97fffc1ed3bb4837a8def))
+
+## v6.27.2 (2026-01-04)
+
+### Fix
+
+* fix: stop mixing buffer from growing indefinitely on high mix fraction (#613) ([`a385f4a`](https://github.com/decoderesearch/SAELens/commit/a385f4aeb9779772e99cba07bb323023fe4721be))
+
+## v6.27.1 (2026-01-02)
+
+### Fix
+
+* fix: handle empty or nearly empty sequences when disable_concat_sequences=True (#611) ([`0e4b3e9`](https://github.com/decoderesearch/SAELens/commit/0e4b3e9397a30659a2f25b469130c197bdc20bba))
+
 ## v6.27.0 (2026-01-01)
 
 ### Documentation

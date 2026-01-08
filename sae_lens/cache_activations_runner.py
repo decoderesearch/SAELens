@@ -263,14 +263,21 @@ class CacheActivationsRunner:
 
         for i in tqdm(range(self.cfg.n_buffers), desc="Caching activations"):
             try:
-                buffer = self.activations_store.get_raw_buffer(
-                    self.cfg.n_batches_in_buffer, shuffle=False
-                )
-                shard = self._create_shard(buffer)
+                # Accumulate n_batches_in_buffer batches into one shard
+                buffers: list[tuple[torch.Tensor, torch.Tensor | None]] = []
+                for _ in range(self.cfg.n_batches_in_buffer):
+                    buffers.append(self.activations_store.get_raw_llm_batch())
+                # Concatenate all batches
+                acts = torch.cat([b[0] for b in buffers], dim=0)
+                token_ids: torch.Tensor | None = None
+                if buffers[0][1] is not None:
+                    # All batches have token_ids if the first one does
+                    token_ids = torch.cat([b[1] for b in buffers], dim=0)  # type: ignore[arg-type]
+                shard = self._create_shard((acts, token_ids))
                 shard.save_to_disk(
                     f"{tmp_cached_activation_path}/shard_{i:05d}", num_shards=1
                 )
-                del buffer, shard
+                del buffers, acts, token_ids, shard
             except StopIteration:
                 logger.warning(
                     f"Warning: Ran out of samples while filling the buffer at batch {i} before reaching {self.cfg.n_buffers} batches."

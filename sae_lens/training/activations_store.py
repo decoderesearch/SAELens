@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import warnings
-from collections.abc import Generator, Iterator, Sequence
+from collections.abc import Generator, Iterator
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -254,7 +254,6 @@ class ActivationsStore:
         self.context_size = context_size
         self.d_in = d_in
         self.n_batches_in_buffer = n_batches_in_buffer
-        self.half_buffer_size = n_batches_in_buffer // 2
         self.total_training_tokens = total_training_tokens
         self.store_batch_size_prompts = store_batch_size_prompts
         self.train_batch_size_tokens = train_batch_size_tokens
@@ -538,18 +537,15 @@ class ActivationsStore:
 
         return stacked_activations
 
-    def _load_buffer_from_cached(
+    def _load_raw_llm_batch_from_cached(
         self,
-        total_size: int,
-        context_size: int,
-        d_in: int,
         raise_on_epoch_end: bool,
     ) -> tuple[
         torch.Tensor,
         torch.Tensor | None,
     ]:
         """
-        Loads `total_size` activations from `cached_activation_dataset`
+        Loads a batch of activations from `cached_activation_dataset`
 
         The dataset has columns for each hook_name,
         each containing activations of shape (context_size, d_in).
@@ -557,6 +553,10 @@ class ActivationsStore:
         raises StopIteration
         """
         assert self.cached_activation_dataset is not None
+        context_size = self.context_size
+        batch_size = self.store_batch_size_prompts
+        d_in = self.d_in
+
         # In future, could be a list of multiple hook names
         if self.hook_name not in self.cached_activation_dataset.column_names:
             raise ValueError(
@@ -564,138 +564,100 @@ class ActivationsStore:
                 f"got {self.cached_activation_dataset.column_names}."
             )
 
-        if self.current_row_idx > len(self.cached_activation_dataset) - total_size:
+        if self.current_row_idx > len(self.cached_activation_dataset) - batch_size:
             self.current_row_idx = 0
             if raise_on_epoch_end:
                 raise StopIteration
 
-        new_buffer = []
         ds_slice = self.cached_activation_dataset[
-            self.current_row_idx : self.current_row_idx + total_size
+            self.current_row_idx : self.current_row_idx + batch_size
         ]
         # Load activations for each hook.
         # Usually faster to first slice dataset then pick column
-        new_buffer = ds_slice[self.hook_name]
-        if new_buffer.shape != (total_size, context_size, d_in):
+        acts_buffer = ds_slice[self.hook_name]
+        if acts_buffer.shape != (batch_size, context_size, d_in):
             raise ValueError(
-                f"new_buffer has shape {new_buffer.shape}, "
-                f"but expected ({total_size}, {context_size}, {d_in})."
+                f"acts_buffer has shape {acts_buffer.shape}, "
+                f"but expected ({batch_size}, {context_size}, {d_in})."
             )
 
-        self.current_row_idx += total_size
-        acts_buffer = new_buffer.reshape(total_size * context_size, d_in)
+        self.current_row_idx += batch_size
+        acts_buffer = acts_buffer.reshape(batch_size * context_size, d_in)
 
         if "token_ids" not in self.cached_activation_dataset.column_names:
             return acts_buffer, None
 
         token_ids_buffer = ds_slice["token_ids"]
-        if token_ids_buffer.shape != (total_size, context_size):
+        if token_ids_buffer.shape != (batch_size, context_size):
             raise ValueError(
                 f"token_ids_buffer has shape {token_ids_buffer.shape}, "
-                f"but expected ({total_size}, {context_size})."
+                f"but expected ({batch_size}, {context_size})."
             )
-        token_ids_buffer = token_ids_buffer.reshape(total_size * context_size)
+        token_ids_buffer = token_ids_buffer.reshape(batch_size * context_size)
         return acts_buffer, token_ids_buffer
 
     @torch.no_grad()
-    def get_raw_buffer(
+    def get_raw_llm_batch(
         self,
-        n_batches_in_buffer: int,
         raise_on_epoch_end: bool = False,
-        shuffle: bool = True,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
-        Loads the next n_batches_in_buffer batches of activations into a tensor and returns it.
+        Loads the next batch of activations from the LLM and returns it.
 
-        The primary purpose here is maintaining a shuffling buffer.
+        If raise_on_epoch_end is True, when the dataset is exhausted it will
+        automatically refill the dataset and then raise a StopIteration so that
+        the caller has a chance to react.
 
-        If raise_on_epoch_end is True, when the dataset it exhausted it will automatically refill the dataset and then raise a StopIteration so that the caller has a chance to react.
+        Returns:
+            Tuple of (activations, token_ids) where activations has shape
+            (batch_size * context_size, d_in) and token_ids has shape
+            (batch_size * context_size,).
         """
-        context_size = self.context_size
-        batch_size = self.store_batch_size_prompts
         d_in = self.d_in
-        total_size = batch_size * n_batches_in_buffer
 
         if self.cached_activation_dataset is not None:
-            return self._load_buffer_from_cached(
-                total_size, context_size, d_in, raise_on_epoch_end
-            )
+            return self._load_raw_llm_batch_from_cached(raise_on_epoch_end)
 
-        refill_iterator = range(0, total_size, batch_size)
-        # Initialize empty tensor buffer of the maximum required size with an additional dimension for layers
-        new_buffer_activations = torch.zeros(
-            (total_size, self.training_context_size, d_in),
-            dtype=self.dtype,  # type: ignore
-            device=self.device,
+        # move batch toks to gpu for model
+        batch_tokens = self.get_batch_tokens(raise_at_epoch_end=raise_on_epoch_end).to(
+            _get_model_device(self.model)
         )
-        new_buffer_token_ids = torch.zeros(
-            (total_size, self.training_context_size),
-            dtype=torch.long,
-            device=self.device,
-        )
+        activations = self.get_activations(batch_tokens).to(self.device)
 
-        for refill_batch_idx_start in tqdm(
-            refill_iterator, leave=False, desc="Refilling buffer"
-        ):
-            # move batch toks to gpu for model
-            refill_batch_tokens = self.get_batch_tokens(
-                raise_at_epoch_end=raise_on_epoch_end
-            ).to(_get_model_device(self.model))
-            refill_activations = self.get_activations(refill_batch_tokens)
-            # move acts back to cpu
-            refill_activations.to(self.device)
-            new_buffer_activations[
-                refill_batch_idx_start : refill_batch_idx_start + batch_size, ...
-            ] = refill_activations
+        # handle seqpos_slice, this is done for activations in get_activations
+        batch_tokens = batch_tokens[:, slice(*self.seqpos_slice)]
 
-            # handle seqpos_slice, this is done for activations in get_activations
-            refill_batch_tokens = refill_batch_tokens[:, slice(*self.seqpos_slice)]
-            new_buffer_token_ids[
-                refill_batch_idx_start : refill_batch_idx_start + batch_size, ...
-            ] = refill_batch_tokens
+        # reshape from (batch, context, d_in) to (batch * context, d_in)
+        activations = activations.reshape(-1, d_in)
+        token_ids = batch_tokens.reshape(-1)
 
-        new_buffer_activations = new_buffer_activations.reshape(-1, d_in)
-        new_buffer_token_ids = new_buffer_token_ids.reshape(-1)
-        if shuffle:
-            new_buffer_activations, new_buffer_token_ids = permute_together(
-                [new_buffer_activations, new_buffer_token_ids]
-            )
+        return activations, token_ids
 
-        return (
-            new_buffer_activations,
-            new_buffer_token_ids,
-        )
-
-    def get_filtered_buffer(
+    def get_filtered_llm_batch(
         self,
-        n_batches_in_buffer: int,
         raise_on_epoch_end: bool = False,
-        shuffle: bool = True,
     ) -> torch.Tensor:
+        """
+        Get a batch of LLM activations with special tokens filtered out.
+        """
         return _filter_buffer_acts(
-            self.get_raw_buffer(
-                n_batches_in_buffer=n_batches_in_buffer,
-                raise_on_epoch_end=raise_on_epoch_end,
-                shuffle=shuffle,
-            ),
+            self.get_raw_llm_batch(raise_on_epoch_end=raise_on_epoch_end),
             self.exclude_special_tokens,
         )
 
     def _iterate_filtered_activations(self) -> Generator[torch.Tensor, None, None]:
         """
-        Iterate over the filtered tokens in the buffer.
+        Iterate over filtered LLM activation batches.
         """
         while True:
             try:
-                yield self.get_filtered_buffer(
-                    self.half_buffer_size, raise_on_epoch_end=True
-                )
+                yield self.get_filtered_llm_batch(raise_on_epoch_end=True)
             except StopIteration:
                 warnings.warn(
                     "All samples in the training dataset have been exhausted, beginning new epoch."
                 )
                 try:
-                    yield self.get_filtered_buffer(self.half_buffer_size)
+                    yield self.get_filtered_llm_batch()
                 except StopIteration:
                     raise ValueError(
                         "Unable to fill buffer after starting new epoch. Dataset may be too small."
@@ -827,9 +789,3 @@ def _filter_buffer_acts(
 
     mask = torch.isin(tokens, exclude_tokens)
     return activations[~mask]
-
-
-def permute_together(tensors: Sequence[torch.Tensor]) -> tuple[torch.Tensor, ...]:
-    """Permute tensors together."""
-    permutation = torch.randperm(tensors[0].shape[0])
-    return tuple(t[permutation] for t in tensors)

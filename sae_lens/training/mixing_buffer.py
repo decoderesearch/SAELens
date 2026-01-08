@@ -44,9 +44,10 @@ def mixing_buffer(
             if mix_fraction > 0:
                 storage_buffer = storage_buffer[torch.randperm(storage_buffer.shape[0])]
 
-            num_serving_batches = max(
-                1, int(storage_buffer.shape[0] * (1 - mix_fraction)) // batch_size
-            )
+            # Keep a fixed amount for mixing, serve the rest
+            keep_for_mixing = int(buffer_size * mix_fraction)
+            num_to_serve = storage_buffer.shape[0] - keep_for_mixing
+            num_serving_batches = max(1, num_to_serve // batch_size)
             serving_cutoff = num_serving_batches * batch_size
             serving_buffer = storage_buffer[:serving_cutoff]
             storage_buffer = storage_buffer[serving_cutoff:]

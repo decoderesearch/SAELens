@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 import pytest
 import torch
 
@@ -182,3 +184,43 @@ def test_mixing_buffer_mix_fraction_matches_observed_mix_fraction():
 
     mean_mix_fraction = sum(observed_mix_fractions) / len(observed_mix_fractions)
     assert mean_mix_fraction == pytest.approx(target_mix_frac, abs=0.03)
+
+
+@pytest.mark.parametrize("mix_fraction", [0.9, 1.0])
+def test_mixing_buffer_bounded_storage_with_high_mix_fraction(mix_fraction: float):
+    """
+    Regression test: with high mix_fraction, the storage buffer should not grow
+    unbounded. It should stay bounded around buffer_size, not grow to many times
+    buffer_size.
+    """
+    buffer_size = 100
+    batch_size = 10
+    num_iterations = 20
+
+    batches_yielded = [0]
+    max_implied_buffer = [0]
+
+    def tracking_loader() -> Iterator[torch.Tensor]:
+        for i in range(num_iterations):
+            # Calculate implied buffer size before this iteration
+            total_input = i * buffer_size
+            total_yielded = batches_yielded[0] * batch_size
+            implied_buffer = total_input - total_yielded
+            max_implied_buffer[0] = max(max_implied_buffer[0], implied_buffer)
+            yield torch.randn(buffer_size, 8)
+
+    for _ in mixing_buffer(
+        buffer_size=buffer_size,
+        batch_size=batch_size,
+        activations_loader=tracking_loader(),
+        mix_fraction=mix_fraction,
+    ):
+        batches_yielded[0] += 1
+
+    # Buffer should stay bounded around buffer_size, allow some tolerance for
+    # mix_fraction portion plus one incoming batch
+    max_acceptable = buffer_size * 2
+    assert max_implied_buffer[0] <= max_acceptable, (
+        f"Buffer grew to {max_implied_buffer[0]}, exceeding {max_acceptable}. "
+        f"With mix_fraction={mix_fraction}, buffer should stay bounded around buffer_size."
+    )

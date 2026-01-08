@@ -19,13 +19,11 @@ from sae_lens.saes.standard_sae import StandardSAEConfig, StandardTrainingSAECon
 from sae_lens.training.activations_store import (
     ActivationsStore,
     _filter_buffer_acts,
-    permute_together,
     validate_pretokenized_dataset_tokenizer,
 )
 from tests.helpers import (
     NEEL_NANDA_C4_10K_DATASET,
     assert_close,
-    assert_not_close,
     build_runner_cfg,
     load_model_cached,
 )
@@ -136,21 +134,18 @@ def test_activations_store__shapes_look_correct_with_real_models_and_datasets(
     )
     assert activations.device == store.device
 
-    # --- Next, get buffer and assert it looks correct ---
+    # --- Next, get LLM batch and assert it looks correct ---
 
-    n_batches_in_buffer = 3
-    act_buffer, tok_buffer = store.get_raw_buffer(n_batches_in_buffer)
+    act_batch, tok_batch = store.get_raw_llm_batch()
 
-    assert isinstance(act_buffer, torch.Tensor)
-    assert isinstance(tok_buffer, torch.Tensor)
-    buffer_size_expected = (
-        store.store_batch_size_prompts * store.context_size * n_batches_in_buffer
-    )
+    assert isinstance(act_batch, torch.Tensor)
+    assert isinstance(tok_batch, torch.Tensor)
+    batch_size_expected = store.store_batch_size_prompts * store.context_size
 
-    assert act_buffer.shape == (buffer_size_expected, store.d_in)
-    assert tok_buffer.shape == (buffer_size_expected,)
-    assert act_buffer.device == store.device
-    assert tok_buffer.device == store.device
+    assert act_batch.shape == (batch_size_expected, store.d_in)
+    assert tok_batch.shape == (batch_size_expected,)
+    assert act_batch.device == store.device
+    assert tok_batch.device == store.device
 
 
 def test_activations_store__get_activations_head_hook(ts_model: HookedTransformer):
@@ -570,54 +565,20 @@ def test_activations_store_save_and_restore_from_checkpoint(
     assert torch.allclose(next_tokens, next_tokens_new)
 
 
-def test_activations_store_buffer_contains_token_ids(ts_model: HookedTransformer):
-    """Test that the buffer contains both activations and token IDs."""
+def test_activations_store_llm_batch_contains_token_ids(ts_model: HookedTransformer):
+    """Test that the LLM batch contains both activations and token IDs."""
     cfg = build_runner_cfg(context_size=3, store_batch_size_prompts=5)
     dataset = Dataset.from_list([{"text": "hello world"}] * 100)
 
     store = ActivationsStore.from_config(ts_model, cfg, override_dataset=dataset)
-    acts, token_ids = store.get_raw_buffer(n_batches_in_buffer=2)
+    acts, token_ids = store.get_raw_llm_batch()
 
-    assert acts.shape == (30, 64)  # (batch_size x context_size x n_batches, d_in)
+    assert acts.shape == (15, 64)  # (batch_size x context_size, d_in)
     assert token_ids is not None
-    assert token_ids.shape == (30,)  # (batch_size x context_size x n_batches,)
+    assert token_ids.shape == (15,)  # (batch_size x context_size,)
 
     expected_tokens = set(ts_model.to_tokens("hello world").squeeze().tolist())  # type: ignore
     assert set(token_ids.tolist()) == expected_tokens
-
-
-def test_activations_store_buffer_shuffling(ts_model: HookedTransformer):
-    """Test that buffer shuffling maintains alignment between acts and token_ids."""
-    cfg = build_runner_cfg()
-    dataset = Dataset.from_list([{"text": "hello world"}] * 100)
-
-    # Get unshuffled buffer
-    store = ActivationsStore.from_config(ts_model, cfg, override_dataset=dataset)
-    acts_unshuffled_1, token_ids_unshuffled_1 = store.get_raw_buffer(
-        n_batches_in_buffer=2, shuffle=False
-    )
-
-    store = ActivationsStore.from_config(ts_model, cfg, override_dataset=dataset)
-    acts_unshuffled_2, token_ids_unshuffled_2 = store.get_raw_buffer(
-        n_batches_in_buffer=2, shuffle=False
-    )
-
-    # Get shuffled buffer
-    store = ActivationsStore.from_config(ts_model, cfg, override_dataset=dataset)
-    acts_shuffled, token_ids_shuffled = store.get_raw_buffer(
-        n_batches_in_buffer=2, shuffle=True
-    )
-
-    assert token_ids_unshuffled_1 is not None
-    assert token_ids_unshuffled_2 is not None
-    assert token_ids_shuffled is not None
-
-    assert_close(acts_unshuffled_1, acts_unshuffled_2)
-    assert_close(token_ids_unshuffled_1, token_ids_unshuffled_2)
-    assert_not_close(acts_unshuffled_1, acts_shuffled)
-    assert_not_close(token_ids_unshuffled_1, token_ids_shuffled)
-
-    assert set(token_ids_shuffled.tolist()) == set(token_ids_unshuffled_1.tolist())
 
 
 @torch.no_grad()
@@ -703,42 +664,6 @@ def test_activations_next_batch_excludes_special_tokens(
     assert (batch_exclude_special_tokens.squeeze() - bos_act).abs().sum(
         dim=-1
     ).min().item() != pytest.approx(0.0, abs=1e-5)
-
-
-def test_permute_together():
-    """Test that permute_together correctly permutes tensors together."""
-    # Create test tensors
-    t1 = torch.tensor([[1, 2], [3, 4], [5, 6]])
-    t2 = torch.tensor([10, 20, 30])
-    t3 = torch.tensor([[100], [200], [300]])
-
-    # Permute them together
-    p1, p2, p3 = permute_together([t1, t2, t3])
-
-    # Verify shapes are preserved
-    assert p1.shape == t1.shape
-    assert p2.shape == t2.shape
-    assert p3.shape == t3.shape
-
-    # Find the permutation that was applied by looking at t2
-    perm = torch.zeros_like(t2, dtype=torch.long)
-    for i in range(len(t2)):
-        perm[i] = torch.where(p2 == t2[i])[0]
-
-    # Verify all tensors used the same permutation
-    for i in range(len(t2)):
-        assert_close(p1[i], t1[perm[i]])
-        assert_close(p2[i], t2[perm[i]])
-        assert_close(p3[i], t3[perm[i]])
-
-
-def test_permute_together_different_sizes_raises():
-    """Test that permute_together raises an error if tensors have different first dimensions."""
-    t1 = torch.tensor([[1, 2], [3, 4], [5, 6]])  # Shape (3, 2)
-    t2 = torch.tensor([10, 20])  # Shape (2,)
-
-    with pytest.raises(IndexError):
-        permute_together([t1, t2])
 
 
 def test_filter_buffer_acts_no_filtering():
