@@ -61,6 +61,34 @@ sae = SAE.load_from_disk("/path/to/your/sae", device="cuda")
 
 You can import an SAE created with another library by writing a custom `PretrainedSaeHuggingfaceLoader` or `PretrainedSaeDiskLoader` for use with `SAE.from_pretrained()` or `SAE.load_from_disk()`, respectively. See the [pretrained_sae_loaders.py](https://github.com/decoderesearch/SAELens/blob/main/sae_lens/loading/pretrained_sae_loaders.py) file for more details, or ask on the [Open Source Mechanistic Interpretability Slack](https://join.slack.com/t/opensourcemechanistic/shared_invite/zt-375zalm04-GFd5tdBU1yLKlu_T_JSqZQ). If you write a good custom loader for another library, please consider contributing it back to SAELens!
 
+## Model Compatibility
+
+SAELens SAEs are standard PyTorch modules and work with any framework or model architecture, not just TransformerLens. While SAELens provides deep integration with TransformerLens through `HookedSAETransformer`, you can use SAEs with:
+
+- **Hugging Face Transformers**: Extract activations using PyTorch hooks and pass them to `sae.encode()` / `sae.decode()`
+- **nnsight**: Use nnsight's tracing API for clean intervention patterns with SAE features
+- **Any PyTorch model**: SAEs work on any tensor with the correct input dimension
+
+The core SAE methods (`encode`, `decode`, `forward`) accept standard PyTorch tensors, making them compatible with any activation extraction method.
+
+```python
+import torch
+from sae_lens import SAE
+
+sae = SAE.from_pretrained(
+    release="gpt2-small-res-jb",
+    sae_id="blocks.8.hook_resid_pre",
+    device="cuda"
+)
+
+# SAEs work with any activation tensor of the right shape
+activations = torch.randn(1, 128, 768, device="cuda")  # From any source
+features = sae.encode(activations)
+reconstructed = sae.decode(features)
+```
+
+For detailed examples including Hugging Face and nnsight integration, see the [Usage Guide](usage.md).
+
 ### Background and further Readings
 
 We highly recommend this [tutorial](https://www.lesswrong.com/posts/LnHowHgmrMbWtpkxx/intro-to-superposition-and-sparse-autoencoders-colab).
@@ -69,7 +97,7 @@ For recent progress in SAEs, we recommend the LessWrong forum's [Sparse Autoenco
 
 ## Tutorials
 
-I wrote a tutorial to show users how to do some basic exploration of their SAE:
+Below are some tutorials that show how to do some basic exploration of SAEs:
 
 - Loading and Analysing Pre-Trained Sparse Autoencoders [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/basic_loading_and_analysing.ipynb)
 - Understanding SAE Features with the Logit Lens [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/logits_lens_with_features.ipynb)
