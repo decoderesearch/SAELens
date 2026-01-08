@@ -47,6 +47,7 @@ from sae_lens.loading.pretrained_saes_directory import (
     get_config_overrides,
     get_norm_scaling_factor,
     get_pretrained_saes_directory,
+    get_releases_for_repo_id,
     get_repo_id_and_folder_name,
 )
 from sae_lens.registry import get_sae_class, get_sae_training_class
@@ -623,6 +624,18 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
             if "/" not in release:
                 raise ValueError(
                     f"Release {release} not found in pretrained SAEs directory, and is not a valid huggingface repo."
+                )
+            # Check if the user passed a repo_id that's in the pretrained SAEs list
+            matching_releases = get_releases_for_repo_id(release)
+            if matching_releases:
+                warnings.warn(
+                    f"You are loading an SAE using the HuggingFace repo_id '{release}' directly. "
+                    f"This repo is registered in the official pretrained SAEs list with release name(s): {matching_releases}. "
+                    f"For better compatibility and to access additional metadata, consider loading with: "
+                    f"SAE.from_pretrained(release='{matching_releases[0]}', sae_id='<sae_id>'). "
+                    f"See the full list of pretrained SAEs at: https://decoderesearch.github.io/SAELens/latest/pretrained_saes/",
+                    UserWarning,
+                    stacklevel=2,
                 )
         elif sae_id not in sae_directory[release].saes_map:
             # Handle special cases like Gemma Scope

@@ -1811,3 +1811,54 @@ def test_dictionary_learning_sae_huggingface_loader_1_matryoshka(
     torch.testing.assert_close(state_dict["b_enc"], b_enc)
     assert state_dict["threshold"].shape == (D_SAE,)
     assert torch.all(state_dict["threshold"] == threshold_scalar)
+
+
+def test_from_pretrained_warns_when_using_registered_repo_id_directly(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Test that a warning is issued when loading using a repo_id that is in the pretrained_saes.yaml."""
+    D_IN = 768
+    D_SAE = 24576
+
+    # Create mock config and state dict
+    mock_cfg_dict = {
+        "architecture": "standard",
+        "d_in": D_IN,
+        "d_sae": D_SAE,
+        "dtype": "float32",
+        "device": "cpu",
+        "apply_b_dec_to_input": True,
+        "normalize_activations": "none",
+        "reshape_activations": "none",
+        "metadata": {},
+    }
+    mock_state_dict = {
+        "W_enc": torch.randn(D_IN, D_SAE),
+        "W_dec": torch.randn(D_SAE, D_IN),
+        "b_enc": torch.zeros(D_SAE),
+        "b_dec": torch.zeros(D_IN),
+    }
+
+    def mock_sae_lens_loader(**_kwargs: Any):
+        return mock_cfg_dict, mock_state_dict, None
+
+    monkeypatch.setattr(
+        "sae_lens.saes.sae.NAMED_PRETRAINED_SAE_LOADERS",
+        {"sae_lens": mock_sae_lens_loader},
+    )
+    monkeypatch.setattr(
+        "sae_lens.saes.sae.get_conversion_loader_name",
+        lambda _release: "sae_lens",
+    )
+
+    # Using repo_id "jbloom/GPT2-Small-SAEs-Reformatted" directly should warn
+    # because it's registered in pretrained_saes.yaml under "gpt2-small-res-jb"
+    with pytest.warns(
+        UserWarning,
+        match=r"You are loading an SAE using the HuggingFace repo_id.*jbloom/GPT2-Small-SAEs-Reformatted.*directly",
+    ):
+        SAE.from_pretrained(
+            release="jbloom/GPT2-Small-SAEs-Reformatted",
+            sae_id="blocks.0.hook_resid_pre",
+            device="cpu",
+        )

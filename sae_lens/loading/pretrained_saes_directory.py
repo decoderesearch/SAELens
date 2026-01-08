@@ -103,3 +103,21 @@ def get_config_overrides(release: str, sae_id: str) -> dict[str, Any]:
         if sae_info.neuronpedia_id is not None and sae_id in sae_info.neuronpedia_id:
             config_overrides["neuronpedia_id"] = sae_info.neuronpedia_id[sae_id]
     return config_overrides
+
+
+def get_releases_for_repo_id(repo_id: str) -> list[str]:
+    """
+    Find all release names that use the given HuggingFace repo_id.
+
+    Args:
+        repo_id: The HuggingFace repository ID to search for.
+
+    Returns:
+        A list of release names that use this repo_id.
+    """
+    saes_directory = get_pretrained_saes_directory()
+    return [
+        release
+        for release, lookup in saes_directory.items()
+        if lookup.repo_id == repo_id
+    ]

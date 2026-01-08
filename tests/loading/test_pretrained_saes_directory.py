@@ -4,6 +4,7 @@ import pytest
 from sae_lens.loading.pretrained_saes_directory import (
     PretrainedSAELookup,
     get_pretrained_saes_directory,
+    get_releases_for_repo_id,
     get_repo_id_and_folder_name,
 )
 
@@ -138,3 +139,13 @@ def test_get_repo_id_and_folder_name_release_not_found():
 def test_get_repo_id_and_folder_name_raises_error_if_sae_id_not_found():
     with pytest.raises(ValueError):
         get_repo_id_and_folder_name("gpt2-small-res-jb", sae_id="sae1")
+
+
+def test_get_releases_for_repo_id_found():
+    releases = get_releases_for_repo_id("jbloom/GPT2-Small-SAEs-Reformatted")
+    assert "gpt2-small-res-jb" in releases
+
+
+def test_get_releases_for_repo_id_not_found():
+    releases = get_releases_for_repo_id("nonexistent/repo")
+    assert releases == []
