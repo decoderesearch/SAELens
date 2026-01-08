@@ -6,15 +6,15 @@ This guide covers how to use SAEs for inference and analysis. For training SAEs,
 
 ### From Pretrained (Hugging Face)
 
-Load SAEs from the SAELens registry or any Hugging Face repository with the `saelens` tag.
+Load SAEs from the [SAELens registry](pretrained_saes/index.md) or any Hugging Face repository with the `saelens` tag.
 
 ```python
 from sae_lens import SAE
 
 # Load from SAELens registry
 sae = SAE.from_pretrained(
-    release="gpt2-small-res-jb",
-    sae_id="blocks.8.hook_resid_pre",
+    release="gemma-scope-2b-pt-res-canonical",
+    sae_id="layer_12/width_16k/canonical",
     device="cuda"
 )
 
@@ -41,20 +41,6 @@ sae = SAE.load_from_disk(
 )
 ```
 
-### Loading with Config and Sparsity
-
-If you need the configuration dictionary and sparsity information alongside the SAE:
-
-```python
-from sae_lens import SAE
-
-sae, cfg_dict, log_sparsities = SAE.from_pretrained_with_cfg_and_sparsity(
-    release="gpt2-small-res-jb",
-    sae_id="blocks.8.hook_resid_pre",
-    device="cuda"
-)
-```
-
 ## Running SAEs Directly
 
 The SAE class provides three main methods for inference: `encode()`, `decode()`, and `forward()`.
@@ -68,13 +54,14 @@ import torch
 from sae_lens import SAE
 
 sae = SAE.from_pretrained(
-    release="gpt2-small-res-jb",
-    sae_id="blocks.8.hook_resid_pre",
+    release="gemma-scope-2b-pt-res-canonical",
+    sae_id="layer_12/width_16k/canonical",
     device="cuda"
 )
 
 # activations shape: (batch, seq_len, d_model)
-activations = torch.randn(1, 128, 768, device="cuda")
+# Gemma 2 2B has d_model=2304
+activations = torch.randn(1, 128, 2304, device="cuda")
 
 # feature_acts shape: (batch, seq_len, d_sae)
 feature_acts = sae.encode(activations)
@@ -216,7 +203,7 @@ logits = model.run_with_hooks(
 
 ## Using SAEs Without TransformerLens
 
-SAEs from SAELens are standard PyTorch modules and can be used with any model or framework. The key is extracting activations from your model and passing them to the SAE's `encode()`, `decode()`, or `forward()` methods.
+SAEs from SAELens are standard PyTorch modules and can be used with any model or framework. The key is extracting activations from your model and passing them to the SAE's `encode()`, `decode()`, or `forward()` methods. Also note that the names of hook points will be different between TransformerLens and Hugging Face / nnsight.
 
 ### Pure PyTorch with Hugging Face Transformers
 
@@ -224,18 +211,18 @@ Use standard PyTorch hooks to extract activations from Hugging Face models.
 
 ```python
 import torch
-from transformers import GPT2Model, GPT2Tokenizer
+from transformers import AutoModel, AutoTokenizer
 from sae_lens import SAE
 
 # Load Hugging Face model
-hf_model = GPT2Model.from_pretrained("gpt2")
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-hf_model.eval()
+model = AutoModel.from_pretrained("google/gemma-2-2b")
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
+model.eval()
 
-# Load SAE (trained on GPT-2 residual stream at layer 8)
+# Load SAE (trained on Gemma 2 2B residual stream at layer 12)
 sae = SAE.from_pretrained(
-    release="gpt2-small-res-jb",
-    sae_id="blocks.8.hook_resid_pre",
+    release="gemma-scope-2b-pt-res-canonical",
+    sae_id="layer_12/width_16k/canonical",
     device="cpu"
 )
 
@@ -243,27 +230,27 @@ sae = SAE.from_pretrained(
 activations = {}
 
 def hook_fn(module, input, output):
-    # GPT-2 transformer blocks output a tuple; hidden states are first
+    # Gemma transformer blocks output a tuple; hidden states are first
     hidden_states = output[0] if isinstance(output, tuple) else output
-    activations["layer_8"] = hidden_states.detach()
+    activations["layer_12"] = hidden_states.detach()
 
-# Register hook on layer 8 (before layer 9's processing = "resid_pre" at layer 8)
-handle = hf_model.h[8].register_forward_hook(hook_fn)
+# Register hook on layer 12
+handle = model.layers[12].register_forward_hook(hook_fn)
 
 # Run forward pass
 inputs = tokenizer("Hello, world!", return_tensors="pt")
 with torch.no_grad():
-    hf_model(**inputs)
+    model(**inputs)
 
 # Remove hook
 handle.remove()
 
 # Use SAE on extracted activations
-layer_8_acts = activations["layer_8"]
-feature_acts = sae.encode(layer_8_acts)
+layer_12_acts = activations["layer_12"]
+feature_acts = sae.encode(layer_12_acts)
 reconstructed = sae.decode(feature_acts)
 
-print(f"Input shape: {layer_8_acts.shape}")
+print(f"Input shape: {layer_12_acts.shape}")
 print(f"Feature activations shape: {feature_acts.shape}")
 print(f"Active features per token: {(feature_acts > 0).sum(dim=-1)}")
 ```
@@ -272,24 +259,24 @@ print(f"Active features per token: {(feature_acts > 0).sum(dim=-1)}")
 
 ```python
 import torch
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from sae_lens import SAE
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Load model and tokenizer
-model = GPT2LMHeadModel.from_pretrained("gpt2").to(device)
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2-2b").to(device)
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
 model.eval()
 
 # Load SAE
 sae = SAE.from_pretrained(
-    release="gpt2-small-res-jb",
-    sae_id="blocks.8.hook_resid_pre",
+    release="gemma-scope-2b-pt-res-canonical",
+    sae_id="layer_12/width_16k/canonical",
     device=device
 )
 
-def get_sae_features(text, layer=8):
+def get_sae_features(text, layer=12):
     """Extract SAE features for a given text."""
     activations = {}
 
@@ -297,7 +284,7 @@ def get_sae_features(text, layer=8):
         hidden_states = output[0] if isinstance(output, tuple) else output
         activations["hidden"] = hidden_states.detach()
 
-    handle = model.transformer.h[layer].register_forward_hook(hook_fn)
+    handle = model.model.layers[layer].register_forward_hook(hook_fn)
 
     inputs = tokenizer(text, return_tensors="pt").to(device)
     with torch.no_grad():
@@ -331,12 +318,12 @@ from nnsight import LanguageModel
 from sae_lens import SAE
 
 # Load model with nnsight
-model = LanguageModel("openai-community/gpt2", device_map="auto")
+model = LanguageModel("google/gemma-2-2b", device_map="auto")
 
 # Load SAE
 sae = SAE.from_pretrained(
-    release="gpt2-small-res-jb",
-    sae_id="blocks.8.hook_resid_pre",
+    release="gemma-scope-2b-pt-res-canonical",
+    sae_id="layer_12/width_16k/canonical",
     device="cuda"
 )
 
@@ -344,8 +331,8 @@ prompt = "The Eiffel Tower is located in"
 
 # Extract activations and compute SAE features
 with model.trace(prompt) as tracer:
-    # Access hidden states at layer 8
-    hidden_states = model.transformer.h[8].output[0]
+    # Access hidden states at layer 12
+    hidden_states = model.model.layers[12].output[0]
 
     # Save the hidden states
     hidden_states_saved = hidden_states.save()
@@ -365,11 +352,11 @@ import torch
 from nnsight import LanguageModel
 from sae_lens import SAE
 
-model = LanguageModel("openai-community/gpt2", device_map="auto")
+model = LanguageModel("google/gemma-2-2b", device_map="auto")
 
 sae = SAE.from_pretrained(
-    release="gpt2-small-res-jb",
-    sae_id="blocks.8.hook_resid_pre",
+    release="gemma-scope-2b-pt-res-canonical",
+    sae_id="layer_12/width_16k/canonical",
     device="cuda"
 )
 
@@ -390,13 +377,13 @@ def ablate_top_features(hidden_states, sae, k=10):
 # Run with intervention
 with model.trace(prompt) as tracer:
     # Get hidden states
-    hidden_states = model.transformer.h[8].output[0]
+    hidden_states = model.model.layers[12].output[0]
 
     # Modify using SAE
     modified = ablate_top_features(hidden_states, sae, k=10)
 
     # Replace the hidden states
-    model.transformer.h[8].output[0][:] = modified
+    model.model.layers[12].output[0][:] = modified
 
     # Get output logits
     logits = model.lm_head.output.save()
@@ -411,11 +398,11 @@ import torch
 from nnsight import LanguageModel
 from sae_lens import SAE
 
-model = LanguageModel("openai-community/gpt2", device_map="auto")
+model = LanguageModel("google/gemma-2-2b", device_map="auto")
 
 sae = SAE.from_pretrained(
-    release="gpt2-small-res-jb",
-    sae_id="blocks.8.hook_resid_pre",
+    release="gemma-scope-2b-pt-res-canonical",
+    sae_id="layer_12/width_16k/canonical",
     device="cuda"
 )
 
@@ -434,11 +421,11 @@ def steer_with_feature(hidden_states, sae, feature_idx, strength):
     return hidden_states + strength * steering_vector
 
 with model.trace(prompt) as tracer:
-    hidden_states = model.transformer.h[8].output[0]
+    hidden_states = model.model.layers[12].output[0]
 
     # Apply steering
     steered = steer_with_feature(hidden_states, sae, feature_idx, steering_strength)
-    model.transformer.h[8].output[0][:] = steered
+    model.model.layers[12].output[0][:] = steered
 
     logits = model.lm_head.output.save()
 
@@ -457,8 +444,8 @@ After loading an SAE, you can access useful configuration and metadata:
 
 ```python
 sae = SAE.from_pretrained(
-    release="gpt2-small-res-jb",
-    sae_id="blocks.8.hook_resid_pre",
+    release="gemma-scope-2b-pt-res-canonical",
+    sae_id="layer_12/width_16k/canonical",
     device="cuda"
 )
 
@@ -471,6 +458,9 @@ print(f"Expansion factor: {sae.cfg.d_sae / sae.cfg.d_in}")
 print(f"Hook name: {sae.cfg.metadata.hook_name}")
 print(f"Model name: {sae.cfg.metadata.model_name}")
 print(f"Context size: {sae.cfg.metadata.context_size}")
+
+# Hugging Face / nnsight Hook Name (if present)
+print(f"Hook name: {sae.cfg.metadata.hf_hook_name}")
 
 # Weights
 print(f"Encoder weights shape: {sae.W_enc.shape}")  # (d_in, d_sae)

@@ -76,13 +76,14 @@ import torch
 from sae_lens import SAE
 
 sae = SAE.from_pretrained(
-    release="gpt2-small-res-jb",
-    sae_id="blocks.8.hook_resid_pre",
+    release="gemma-scope-2b-pt-res-canonical",
+    sae_id="layer_12/width_16k/canonical",
     device="cuda"
 )
 
 # SAEs work with any activation tensor of the right shape
-activations = torch.randn(1, 128, 768, device="cuda")  # From any source
+# Gemma 2 2B has d_model=2304
+activations = torch.randn(1, 128, 2304, device="cuda")  # From any source
 features = sae.encode(activations)
 reconstructed = sae.decode(features)
 ```

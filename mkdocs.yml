@@ -48,7 +48,6 @@ extra_css:
 nav:
   - Home: index.md
   - Usage: usage.md
-  - Roadmap: roadmap.md
   - Training SAEs: training_saes.md
   - Synthetic Data: synthetic_data.md
   - Custom SAEs: custom_saes.md
