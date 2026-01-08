@@ -105,9 +105,7 @@ def _node_description(node: HierarchyNode) -> str:
 
 
 def hierarchy_modifier(
-    roots: Sequence[HierarchyNode],
-    *,
-    validate: bool = True,
+    roots: Sequence[HierarchyNode] | HierarchyNode,
 ) -> ActivationsModifier:
     """
     Create an activations modifier from one or more hierarchy trees.
@@ -119,9 +117,6 @@ def hierarchy_modifier(
     Args:
         roots: One or more root HierarchyNode objects. Each root defines an
             independent hierarchy tree. All trees are validated and applied.
-        validate: If True (default), validates all hierarchies before returning.
-            Set to False to skip validation for performance if you've already
-            validated the hierarchies.
 
     Returns:
         An ActivationsModifier function that can be passed to ActivationGenerator.
@@ -155,9 +150,9 @@ def hierarchy_modifier(
 
         return identity
 
-    # Validate all hierarchies as a single forest
-    if validate:
-        _validate_hierarchy(roots)
+    if isinstance(roots, HierarchyNode):
+        roots = [roots]
+    _validate_hierarchy(roots)
 
     # Create modifier function that applies all hierarchies
     def modifier(activations: torch.Tensor) -> torch.Tensor:
@@ -198,7 +193,7 @@ class HierarchyNode:
         >>> # Row 1: root inactive, both children deactivated
 
     Attributes:
-        feature_index: Index of this feature in the activation tensor (None for non-readout nodes)
+        feature_index: Index of this feature in the activation tensor
         children: Child HierarchyNode nodes
         mutually_exclusive_children: If True, at most one child is active per sample
         feature_id: Optional identifier for debugging
@@ -214,7 +209,7 @@ class HierarchyNode:
 
         Args:
             tree_dict: Dictionary with keys:
-                - feature_index (optional): Index in the activation tensor (None for non-readout)
+                - feature_index (optional): Index in the activation tensor
                 - children (optional): List of child tree dictionaries
                 - mutually_exclusive_children (optional): Whether children are exclusive
                 - id (optional): Identifier for this node

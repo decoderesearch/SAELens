@@ -81,9 +81,6 @@ class ActivationGenerator(nn.Module):
 
         mean_firing_magnitudes = self.mean_firing_magnitudes.to(device)
 
-        if self.modify_activations is not None:
-            firing_features = self.modify_activations(firing_features)
-
         firing_features = firing_features.to(device)
         firing_magnitude_delta = torch.normal(
             torch.zeros_like(self.firing_probabilities)
@@ -93,9 +90,13 @@ class ActivationGenerator(nn.Module):
             self.std_firing_magnitudes.unsqueeze(0).expand(batch_size, -1).to(device),
         )
         firing_magnitude_delta[firing_features == 0] = 0
-        return (
+        feature_activations = (
             firing_features * mean_firing_magnitudes + firing_magnitude_delta
         ).relu()
+
+        if self.modify_activations is not None:
+            feature_activations = self.modify_activations(feature_activations).relu()
+        return feature_activations
 
     def forward(self, batch_size: int) -> torch.Tensor:
         return self.sample(batch_size)

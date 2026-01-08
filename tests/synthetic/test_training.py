@@ -14,7 +14,7 @@ from sae_lens.training.sae_trainer import SAETrainer
 
 
 def test_SyntheticActivationIterator_generates_correct_shape():
-    feature_dict = FeatureDictionary(num_features=10, hidden_dim=8, ortho_num_steps=100)
+    feature_dict = FeatureDictionary(num_features=10, hidden_dim=8)
     probs = torch.ones(10) * 0.1
 
     activations_gen = ActivationGenerator(
@@ -29,7 +29,7 @@ def test_SyntheticActivationIterator_generates_correct_shape():
 
 
 def test_SyntheticActivationIterator_is_iterable():
-    feature_dict = FeatureDictionary(num_features=5, hidden_dim=4, ortho_num_steps=100)
+    feature_dict = FeatureDictionary(num_features=5, hidden_dim=4)
     probs = torch.ones(5) * 0.2
 
     activations_gen = ActivationGenerator(
@@ -45,9 +45,7 @@ def test_SyntheticActivationIterator_is_iterable():
 
 
 def test_SyntheticActivationIterator_produces_sparse_activations():
-    feature_dict = FeatureDictionary(
-        num_features=20, hidden_dim=10, ortho_num_steps=100
-    )
+    feature_dict = FeatureDictionary(num_features=20, hidden_dim=10)
     probs = torch.ones(20) * 0.05
 
     activations_gen = ActivationGenerator(
@@ -74,9 +72,7 @@ def synthetic_training_setup() -> SyntheticSetup:
     hidden_dim = 8
     num_features = 10
 
-    feature_dict = FeatureDictionary(
-        num_features=num_features, hidden_dim=hidden_dim, ortho_num_steps=100
-    )
+    feature_dict = FeatureDictionary(num_features=num_features, hidden_dim=hidden_dim)
 
     activations_gen = ActivationGenerator(
         num_features=num_features,

@@ -107,7 +107,7 @@ def eval_setup() -> EvalSetup:
     num_features = 10
 
     feature_dict = FeatureDictionary(
-        num_features=num_features, hidden_dim=hidden_dim, ortho_num_steps=100
+        num_features=num_features, hidden_dim=hidden_dim
     )
 
     activations_gen = ActivationGenerator(
@@ -233,8 +233,6 @@ class TestEvalSaeOnSyntheticData:
         feature_dict = FeatureDictionary(
             num_features=num_features,
             hidden_dim=hidden_dim,
-            target_cos_sim=0,  # Orthogonal features
-            ortho_num_steps=500,
         )
 
         activations_gen = ActivationGenerator(
@@ -278,7 +276,7 @@ class TestEvalSaeOnSyntheticData:
         num_features = 10
 
         feature_dict = FeatureDictionary(
-            num_features=num_features, hidden_dim=hidden_dim, ortho_num_steps=100
+            num_features=num_features, hidden_dim=hidden_dim
         )
 
         activations_gen = ActivationGenerator(

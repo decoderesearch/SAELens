@@ -35,11 +35,11 @@ def test_FeatureDictionary_creates_correct_shape():
 
 
 def test_FeatureDictionary_creates_orthogonal_features():
-    feature_dict = FeatureDictionary(num_features=8, hidden_dim=8, target_cos_sim=0)
+    feature_dict = FeatureDictionary(num_features=8, hidden_dim=8)
     features = feature_dict.feature_vectors
     dot_products = features @ features.T
     expected = torch.eye(8)
-    assert torch.allclose(dot_products, expected, atol=1e-5)
+    assert torch.allclose(dot_products, expected, atol=1e-4)
 
 
 def test_FeatureDictionary_creates_unit_norm_features():

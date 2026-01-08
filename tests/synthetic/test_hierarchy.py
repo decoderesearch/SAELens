@@ -407,8 +407,8 @@ def test_HierarchyNode_validate_empty_hierarchy():
     root.validate()  # Should not raise
 
 
-def test_HierarchyNode_validate_non_readout_nodes():
-    """Validation should work with non-readout (None feature_index) nodes."""
+def test_HierarchyNode_validate_none_feature_index_nodes():
+    """Validation should work with None feature_index nodes."""
     child1 = HierarchyNode(feature_index=0)
     child2 = HierarchyNode(feature_index=1)
     organizational = HierarchyNode(feature_index=None, children=[child1, child2])
@@ -467,18 +467,6 @@ def test_hierarchy_modifier_validates_by_default():
 
     with pytest.raises(ValueError, match="Loop detected"):
         hierarchy_modifier([root])
-
-
-def test_hierarchy_modifier_skip_validation():
-    """Should skip validation when validate=False."""
-    child = HierarchyNode(feature_index=1)
-    root = HierarchyNode(feature_index=0, children=[child])
-    # Create loop - normally invalid
-    child.children = [root]
-
-    # Should not raise with validate=False
-    modifier = hierarchy_modifier([root], validate=False)
-    assert callable(modifier)
 
 
 def test_hierarchy_modifier_detects_overlapping_features():

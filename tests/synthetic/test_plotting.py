@@ -32,7 +32,7 @@ def test_find_best_feature_ordering_aligns_identical_features():
 
 
 def test_find_best_feature_ordering_with_feature_dict():
-    feature_dict = FeatureDictionary(num_features=5, hidden_dim=8, ortho_num_steps=100)
+    feature_dict = FeatureDictionary(num_features=5, hidden_dim=8)
     true_features = feature_dict.feature_vectors.detach()
 
     # Create shuffled SAE features
