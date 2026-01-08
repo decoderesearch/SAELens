@@ -2,7 +2,11 @@ import pytest
 import torch
 
 from sae_lens.synthetic import ActivationGenerator
-from sae_lens.synthetic.activation_generator import _normalize_modifiers, _to_tensor
+from sae_lens.synthetic.activation_generator import (
+    _normalize_modifiers,
+    _to_tensor,
+    _validate_correlation_matrix,
+)
 from sae_lens.synthetic.correlation import generate_random_correlation_matrix
 
 
@@ -265,3 +269,80 @@ class TestNormalizeModifiers:
         output = result(input_tensor)
         expected = (input_tensor + 1) * 2
         torch.testing.assert_close(output, expected)
+
+
+class TestValidateCorrelationMatrix:
+    def test_valid_correlation_matrix(self):
+        """Test that valid correlation matrix passes validation."""
+        correlation_matrix = generate_random_correlation_matrix(num_features=3, seed=42)
+        _validate_correlation_matrix(correlation_matrix, num_features=3)
+
+    def test_identity_matrix_is_valid(self):
+        """Test that identity matrix is a valid correlation matrix."""
+        identity = torch.eye(5)
+        _validate_correlation_matrix(identity, num_features=5)
+
+    def test_raises_on_wrong_shape(self):
+        """Test that wrong shape raises ValueError."""
+        wrong_shape = torch.eye(3)
+        with pytest.raises(ValueError, match="must have shape"):
+            _validate_correlation_matrix(wrong_shape, num_features=5)
+
+    def test_raises_on_non_unit_diagonal(self):
+        """Test that non-unit diagonal raises ValueError."""
+        matrix = torch.eye(3)
+        matrix[0, 0] = 2.0
+        with pytest.raises(ValueError, match="diagonal must be all 1s"):
+            _validate_correlation_matrix(matrix, num_features=3)
+
+    def test_raises_on_not_positive_definite(self):
+        """Test that non-positive-definite matrix raises ValueError."""
+        # Matrix with off-diagonal values > 1 is not positive definite
+        matrix = torch.tensor(
+            [
+                [1.0, 2.0, 0.0],
+                [2.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ]
+        )
+        with pytest.raises(ValueError, match="must be positive definite"):
+            _validate_correlation_matrix(matrix, num_features=3)
+
+
+class TestActivationGeneratorCorrelationMatrixValidation:
+    def test_raises_on_invalid_shape(self):
+        """Test that ActivationGenerator raises on wrong shape correlation matrix."""
+        wrong_shape = torch.eye(3)
+        with pytest.raises(ValueError, match="must have shape"):
+            ActivationGenerator(
+                num_features=5,
+                firing_probabilities=0.5,
+                correlation_matrix=wrong_shape,
+            )
+
+    def test_raises_on_non_unit_diagonal(self):
+        """Test that ActivationGenerator raises on non-unit diagonal."""
+        matrix = torch.eye(3)
+        matrix[1, 1] = 0.5
+        with pytest.raises(ValueError, match="diagonal must be all 1s"):
+            ActivationGenerator(
+                num_features=3,
+                firing_probabilities=0.5,
+                correlation_matrix=matrix,
+            )
+
+    def test_raises_on_not_positive_definite(self):
+        """Test that ActivationGenerator raises on non-positive-definite matrix."""
+        matrix = torch.tensor(
+            [
+                [1.0, 2.0, 0.0],
+                [2.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ]
+        )
+        with pytest.raises(ValueError, match="must be positive definite"):
+            ActivationGenerator(
+                num_features=3,
+                firing_probabilities=0.5,
+                correlation_matrix=matrix,
+            )

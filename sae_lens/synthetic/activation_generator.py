@@ -52,6 +52,8 @@ class ActivationGenerator(nn.Module):
             mean_firing_magnitudes, num_features, device, dtype
         )
         self.modify_activations = _normalize_modifiers(modify_activations)
+        if correlation_matrix is not None:
+            _validate_correlation_matrix(correlation_matrix, num_features)
         self.correlation_matrix = correlation_matrix
 
     def sample(self, batch_size: int) -> torch.Tensor:
@@ -176,3 +178,32 @@ def _normalize_modifiers(
         return result
 
     return chained
+
+
+def _validate_correlation_matrix(
+    correlation_matrix: torch.Tensor, num_features: int
+) -> None:
+    """Validate that a correlation matrix has correct properties.
+
+    Args:
+        correlation_matrix: The matrix to validate
+        num_features: Expected number of features (matrix should be [num_features, num_features])
+
+    Raises:
+        ValueError: If the matrix has incorrect shape, non-unit diagonal, or is not positive definite
+    """
+    expected_shape = (num_features, num_features)
+    if correlation_matrix.shape != expected_shape:
+        raise ValueError(
+            f"Correlation matrix must have shape {expected_shape}, "
+            f"got {tuple(correlation_matrix.shape)}"
+        )
+
+    diagonal = torch.diag(correlation_matrix)
+    if not torch.allclose(diagonal, torch.ones_like(diagonal)):
+        raise ValueError("Correlation matrix diagonal must be all 1s")
+
+    try:
+        torch.linalg.cholesky(correlation_matrix)
+    except RuntimeError as e:
+        raise ValueError("Correlation matrix must be positive definite") from e
