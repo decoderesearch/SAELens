@@ -100,18 +100,23 @@ reconstructed = sae(activations)
 
 HookedSAETransformer extends TransformerLens's HookedTransformer to seamlessly integrate SAEs into the model's forward pass.
 
+<!-- prettier-ignore-start -->
+!!! warning
+    When using `HookedSAETransformer` or `HookedTransformer`, you should probably use `from_pretrained_no_processing` to load the model, not `from_pretrained`. Most SAEs are trained on raw LLM activations, and the default processing in `from_pretrained` will apply post-processing to the activations, and may break your SAE.
+<!-- prettier-ignore-end -->
+
 ### Setup
 
 ```python
 from sae_lens import SAE, HookedSAETransformer
 
 # Load model
-model = HookedSAETransformer.from_pretrained("gpt2-small", device="cuda")
+model = HookedSAETransformer.from_pretrained_no_processing("gemma-2-2b", device="cuda")
 
 # Load SAE
 sae = SAE.from_pretrained(
-    release="gpt2-small-res-jb",
-    sae_id="blocks.8.hook_resid_pre",
+    release="gemma-scope-2b-pt-res-canonical",
+    sae_id="layer_12/width_16k/canonical",
     device="cuda"
 )
 ```
@@ -135,7 +140,7 @@ Cache activations including SAE feature activations.
 logits, cache = model.run_with_cache_with_saes(tokens, saes=[sae])
 
 # Access SAE feature activations
-sae_acts = cache["blocks.8.hook_resid_pre.hook_sae_acts_post"]
+sae_acts = cache["blocks.12.hook_resid_post.hook_sae_acts_post"]
 print(f"SAE activations shape: {sae_acts.shape}")
 ```
 
@@ -155,7 +160,7 @@ logits = model.run_with_hooks_with_saes(
     tokens,
     saes=[sae],
     fwd_hooks=[
-        ("blocks.8.hook_resid_pre.hook_sae_acts_post",
+        ("blocks.12.hook_resid_post.hook_sae_acts_post",
          partial(ablate_feature, feature_id=1000))
     ]
 )
@@ -177,7 +182,7 @@ logits, cache = model.run_with_cache(tokens)
 model.reset_saes()
 
 # Or remove specific SAEs
-model.reset_saes(act_names=["blocks.8.hook_resid_pre"])
+model.reset_saes(act_names=["blocks.12.hook_resid_post"])
 ```
 
 ### Using Error Terms
@@ -195,7 +200,7 @@ logits = model(tokens)
 logits = model.run_with_hooks(
     tokens,
     fwd_hooks=[
-        ("blocks.8.hook_resid_pre.hook_sae_error",
+        ("blocks.12.hook_resid_post.hook_sae_error",
          lambda act, hook: torch.zeros_like(act))
     ]
 )
@@ -203,7 +208,7 @@ logits = model.run_with_hooks(
 
 ## Using SAEs Without TransformerLens
 
-SAEs from SAELens are standard PyTorch modules and can be used with any model or framework. The key is extracting activations from your model and passing them to the SAE's `encode()`, `decode()`, or `forward()` methods. Also note that the names of hook points will be different between TransformerLens and Hugging Face / nnsight.
+SAEs from SAELens are standard PyTorch modules and can be used with any model or framework. The key is extracting activations from your model and passing them to the SAE's `encode()`, `decode()`, or `forward()` methods. Also note that the names of hook points will be different between TransformerLens and Hugging Face / NNsight.
 
 ### Pure PyTorch with Hugging Face Transformers
 
@@ -308,7 +313,7 @@ for idx, (feat_idx, value) in enumerate(zip(top_features.indices, top_features.v
     print(f"  Feature {feat_idx.item()}: {value.item():.4f}")
 ```
 
-### Using SAEs with nnsight
+### Using SAEs with NNsight
 
 [nnsight](https://nnsight.net/) provides a clean interface for model interventions. SAEs integrate naturally with nnsight's tracing API.
 
@@ -339,13 +344,13 @@ with model.trace(prompt) as tracer:
 
 # Get SAE features outside the trace
 with torch.no_grad():
-    features = sae.encode(hidden_states_saved.value)
+    features = sae.encode(hidden_states_saved)
 
 print(f"Feature activations shape: {features.shape}")
-print(f"Average L0: {(features > 0).sum(dim=-1).float().mean().item():.1f}")
+print(f"Average L0: {(features[:, 1:, :] > 0).sum(dim=-1).float().mean().item():.1f}")
 ```
 
-### Intervening on SAE Features with nnsight
+### Intervening on SAE Features with NNsight
 
 ```python
 import torch
@@ -388,54 +393,7 @@ with model.trace(prompt) as tracer:
     # Get output logits
     logits = model.lm_head.output.save()
 
-print(f"Output shape: {logits.value.shape}")
-```
-
-### Steering with SAE Features using nnsight
-
-```python
-import torch
-from nnsight import LanguageModel
-from sae_lens import SAE
-
-model = LanguageModel("google/gemma-2-2b", device_map="auto")
-
-sae = SAE.from_pretrained(
-    release="gemma-scope-2b-pt-res-canonical",
-    sae_id="layer_12/width_16k/canonical",
-    device="cuda"
-)
-
-prompt = "I think this movie is"
-
-# Identify a feature to amplify (you would find this through analysis)
-feature_idx = 1000  # Example feature index
-steering_strength = 5.0
-
-def steer_with_feature(hidden_states, sae, feature_idx, strength):
-    """Add a steering vector based on an SAE feature direction."""
-    # Get the decoder direction for this feature
-    steering_vector = sae.W_dec[feature_idx]
-
-    # Add to hidden states (broadcast across sequence)
-    return hidden_states + strength * steering_vector
-
-with model.trace(prompt) as tracer:
-    hidden_states = model.model.layers[12].output[0]
-
-    # Apply steering
-    steered = steer_with_feature(hidden_states, sae, feature_idx, steering_strength)
-    model.model.layers[12].output[0][:] = steered
-
-    logits = model.lm_head.output.save()
-
-# Decode the most likely next tokens
-next_token_logits = logits.value[0, -1, :]
-top_tokens = torch.topk(next_token_logits, k=5)
-tokenizer = model.tokenizer
-print("Top predicted tokens:")
-for token_id, logit in zip(top_tokens.indices, top_tokens.values):
-    print(f"  {tokenizer.decode([token_id])!r}: {logit.item():.2f}")
+print(f"Output shape: {logits.shape}")
 ```
 
 ## Key SAE Attributes
@@ -459,7 +417,7 @@ print(f"Hook name: {sae.cfg.metadata.hook_name}")
 print(f"Model name: {sae.cfg.metadata.model_name}")
 print(f"Context size: {sae.cfg.metadata.context_size}")
 
-# Hugging Face / nnsight Hook Name (if present)
+# Hugging Face / NNsight Hook Name (if present)
 print(f"Hook name: {sae.cfg.metadata.hf_hook_name}")
 
 # Weights
