@@ -118,6 +118,7 @@ class GatedTrainingSAE(TrainingSAE[GatedTrainingSAEConfig]):
     """
     GatedTrainingSAE is a concrete implementation of BaseTrainingSAE for the "gated" SAE architecture.
     It implements:
+
       - initialize_weights: sets up gating parameters (as in GatedSAE) plus optional training-specific init.
       - encode: calls encode_with_hidden_pre (standard training approach).
       - decode: linear transformation + hooking, same as GatedSAE or StandardTrainingSAE.

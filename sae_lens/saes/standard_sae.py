@@ -34,6 +34,7 @@ class StandardSAE(SAE[StandardSAEConfig]):
     using a simple linear encoder and decoder.
 
     It implements the required abstract methods from BaseSAE:
+
       - initialize_weights: sets up simple parameter initializations for W_enc, b_enc, W_dec, and b_dec.
       - encode: computes the feature activations from an input.
       - decode: reconstructs the input from the feature activations.
@@ -99,6 +100,7 @@ class StandardTrainingSAE(TrainingSAE[StandardTrainingSAEConfig]):
     """
     StandardTrainingSAE is a concrete implementation of BaseTrainingSAE using the "standard" SAE architecture.
     It implements:
+
       - initialize_weights: basic weight initialization for encoder/decoder.
       - encode: inference encoding (invokes encode_with_hidden_pre).
       - decode: a simple linear decoder.

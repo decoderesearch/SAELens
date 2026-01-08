@@ -167,6 +167,7 @@ class TemporalSAE(SAE[TemporalSAEConfig]):
     """TemporalSAE: Sparse Autoencoder with temporal attention.
 
     This SAE decomposes each activation x_t into:
+
     - x_pred: Information aggregated from context {x_0, ..., x_{t-1}}
     - x_novel: Novel information at position t (encoded sparsely)
 

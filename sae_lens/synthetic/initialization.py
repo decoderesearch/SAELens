@@ -14,6 +14,7 @@ def init_sae_to_match_feature_dict(
     Initialize an SAE's weights to match a feature dictionary.
 
     This can be useful for:
+
     - Starting training from a known good initialization
     - Testing SAE evaluation code with ground truth
     - Ablation studies on initialization
@@ -23,11 +24,6 @@ def init_sae_to_match_feature_dict(
         feature_dict: The feature dictionary to match
         noise_level: Standard deviation of Gaussian noise to add (0 = exact match)
         feature_ordering: Optional permutation of feature indices
-
-    Example:
-        >>> feature_dict = FeatureDictionary(num_features=10, hidden_dim=8)
-        >>> sae = TrainingSAE(cfg)
-        >>> init_sae_from_feature_dict(sae, feature_dict, noise_level=0.01)
     """
     features = feature_dict.feature_vectors  # [num_features, hidden_dim]
     min_dim = min(sae.W_enc.shape[1], features.shape[0])  # type: ignore[attr-defined]

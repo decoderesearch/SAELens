@@ -106,9 +106,7 @@ def eval_setup() -> EvalSetup:
     hidden_dim = 8
     num_features = 10
 
-    feature_dict = FeatureDictionary(
-        num_features=num_features, hidden_dim=hidden_dim
-    )
+    feature_dict = FeatureDictionary(num_features=num_features, hidden_dim=hidden_dim)
 
     activations_gen = ActivationGenerator(
         num_features=num_features,

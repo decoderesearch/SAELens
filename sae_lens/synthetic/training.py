@@ -46,33 +46,6 @@ def train_toy_sae(
         snapshot_fn: Callback function called at each snapshot point. Receives
             the SAETrainer instance, allowing access to the SAE, training step,
             and other training state. Required if n_snapshots > 0.
-
-    Example:
-        >>> from sae_lens.synthetic import (
-        ...     ActivationGenerator,
-        ...     FeatureDictionary,
-        ...     train_toy_sae,
-        ... )
-        >>> from sae_lens.saes.sae import TrainingSAE
-        >>>
-        >>> # Create feature dictionary and activation generator
-        >>> feature_dict = FeatureDictionary(num_features=100, hidden_dim=64)
-        >>> generator = ActivationGenerator(num_features=100, firing_probabilities=0.1)
-        >>>
-        >>> # Create SAE
-        >>> sae = TrainingSAE.from_dict({...})
-        >>>
-        >>> # Train with snapshots
-        >>> snapshots = []
-        >>> def on_snapshot(trainer):
-        ...     snapshots.append(trainer.n_training_steps)
-        >>>
-        >>> train_toy_sae(
-        ...     sae, feature_dict, generator,
-        ...     training_samples=100_000,
-        ...     n_snapshots=5,
-        ...     snapshot_fn=on_snapshot,
-        ... )
     """
 
     device_str = str(device) if isinstance(device, torch.device) else device

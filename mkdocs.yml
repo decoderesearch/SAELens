@@ -49,6 +49,7 @@ nav:
   - Home: index.md
   - Roadmap: roadmap.md
   - Training SAEs: training_saes.md
+  - Synthetic Data: synthetic_data.md
   - Custom SAEs: custom_saes.md
   - Extending SAELens: extending_saelens.md
   - Citation: citation.md

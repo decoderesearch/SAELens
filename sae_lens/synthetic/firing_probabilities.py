@@ -25,13 +25,6 @@ def zipfian_firing_probabilities(
 
     Returns:
         Tensor of shape [num_features] with firing probabilities in descending order
-
-    Example:
-        >>> probs = zipfian_firing_probabilities(100, exponent=1.0, max_prob=0.3, min_prob=0.01)
-        >>> probs.shape
-        torch.Size([100])
-        >>> probs[0] > probs[-1]  # First feature fires most often
-        True
     """
     if num_features < 1:
         raise ValueError("num_features must be at least 1")
@@ -68,11 +61,6 @@ def linear_firing_probabilities(
 
     Returns:
         Tensor of shape [num_features] with linearly decaying probabilities
-
-    Example:
-        >>> probs = linear_firing_probabilities(5, max_prob=0.5, min_prob=0.1)
-        >>> probs
-        tensor([0.5000, 0.4000, 0.3000, 0.2000, 0.1000])
     """
     if num_features < 1:
         raise ValueError("num_features must be at least 1")
@@ -102,11 +90,6 @@ def random_firing_probabilities(
 
     Returns:
         Tensor of shape [num_features] with random firing probabilities
-
-    Example:
-        >>> probs = random_firing_probabilities(100, max_prob=0.3, min_prob=0.01, seed=42)
-        >>> torch.all((probs >= 0.01) & (probs <= 0.3))
-        True
     """
     if num_features < 1:
         raise ValueError("num_features must be at least 1")

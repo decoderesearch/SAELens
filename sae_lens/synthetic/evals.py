@@ -2,6 +2,7 @@
 Utilities for training SAEs on synthetic data.
 
 This module provides helpers for:
+
 - Generating training data from feature dictionaries
 - Training SAEs on synthetic data
 - Evaluating SAEs against known ground truth features
@@ -37,11 +38,6 @@ def mean_correlation_coefficient(
 
     Returns:
         MCC score in range [0, 1], where 1 indicates perfect alignment
-
-    Example:
-        >>> sae_features = sae.W_dec  # [num_sae_features, hidden_dim]
-        >>> gt_features = feature_dict.feature_vectors  # [num_gt_features, hidden_dim]
-        >>> mcc = mean_correlation_coefficient(sae_features, gt_features)
     """
     # Normalize to unit vectors
     a_norm = features_a / features_a.norm(dim=1, keepdim=True).clamp(min=1e-8)

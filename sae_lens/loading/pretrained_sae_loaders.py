@@ -1831,6 +1831,7 @@ def temporal_sae_huggingface_loader(
     Load TemporalSAE from canrager/temporalSAEs format (safetensors version).
 
     Expects folder_name to contain:
+
     - conf.yaml (configuration)
     - latest_ckpt.safetensors (model weights)
     """

@@ -208,12 +208,6 @@ def generate_activations(
 
     Returns:
         Tensor of shape [batch_size, num_features] with non-negative activations
-
-    Example:
-        >>> probs = torch.tensor([0.3, 0.2, 0.1])
-        >>> activations = generate_activations(1000, probs)
-        >>> activations.shape
-        torch.Size([1000, 3])
     """
     num_features = firing_probabilities.shape[0]
     generator = ActivationGenerator(
@@ -229,94 +223,3 @@ def generate_activations(
         correlation_matrix=correlation_matrix,
     )
     return generator.sample(batch_size)
-
-
-def suppress_features(
-    dominant_feature: int,
-    suppressed_features: list[int],
-) -> ActivationsModifier:
-    """
-    Create a modifier that suppresses certain features when a dominant feature fires.
-
-    When the dominant feature is active, the suppressed features are set to zero.
-    This simulates inhibitory relationships between features.
-
-    Args:
-        dominant_feature: Index of the feature that dominates
-        suppressed_features: Indices of features to suppress when dominant fires
-
-    Returns:
-        A modifier function that can be passed to generate_activations
-
-    Example:
-        >>> modifier = suppress_features(dominant_feature=0, suppressed_features=[1, 2])
-        >>> activations = generate_activations(1000, probs, modify_activations=modifier)
-    """
-
-    def modifier(activations: torch.Tensor) -> torch.Tensor:
-        result = activations.clone()
-        dominant_active = activations[:, dominant_feature] > 0
-        for feat_idx in suppressed_features:
-            result[dominant_active, feat_idx] = 0
-        return result
-
-    return modifier
-
-
-def absorb_features(
-    parent_child_pairs: list[tuple[int, int]],
-) -> ActivationsModifier:
-    """
-    Create a modifier that activates parent features when child features fire.
-
-    For each (parent, child) pair, when the child fires, the parent is also
-    activated with magnitude 1. This simulates hierarchical feature relationships.
-
-    Args:
-        parent_child_pairs: List of (parent_index, child_index) tuples
-
-    Returns:
-        A modifier function that can be passed to generate_activations
-
-    Example:
-        >>> modifier = absorb_features([(0, 2), (1, 3)])
-        >>> # When feature 2 fires, feature 0 will also fire
-        >>> # When feature 3 fires, feature 1 will also fire
-    """
-
-    def modifier(activations: torch.Tensor) -> torch.Tensor:
-        result = activations.clone()
-        for parent_idx, child_idx in parent_child_pairs:
-            child_active = activations[:, child_idx] > 0
-            result[child_active, parent_idx] = 1.0
-        return result
-
-    return modifier
-
-
-def chain_modifiers(
-    modifiers: list[ActivationsModifier],
-) -> ActivationsModifier:
-    """
-    Chain multiple modifiers to apply them in sequence.
-
-    Args:
-        modifiers: List of modifier functions to apply in order
-
-    Returns:
-        A single modifier function that applies all modifiers in sequence
-
-    Example:
-        >>> modifier = chain_modifiers([
-        ...     absorb_features([(1, 2)]),
-        ...     suppress_features(0, [1]),
-        ... ])
-    """
-
-    def chained(activations: torch.Tensor) -> torch.Tensor:
-        result = activations
-        for modifier in modifiers:
-            result = modifier(result)
-        return result
-
-    return chained

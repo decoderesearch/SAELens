@@ -124,24 +124,6 @@ def hierarchy_modifier(
     Raises:
         ValueError: If validate=True and any hierarchy contains loops or
             nodes with multiple parents.
-
-    Example:
-        >>> # Create two independent hierarchies
-        >>> tree1 = HierarchyNode(feature_index=0, children=[
-        ...     HierarchyNode(feature_index=1),
-        ...     HierarchyNode(feature_index=2),
-        ... ])
-        >>> tree2 = HierarchyNode(feature_index=3, children=[
-        ...     HierarchyNode(feature_index=4),
-        ... ])
-        >>>
-        >>> # Create modifier and use with ActivationGenerator
-        >>> modifier = hierarchy_modifier([tree1, tree2])
-        >>> gen = ActivationGenerator(
-        ...     num_features=5,
-        ...     firing_probabilities=0.1,
-        ...     modify_activations=modifier,
-        ... )
     """
     if not roots:
         # No hierarchies - return identity function
@@ -175,22 +157,6 @@ class HierarchyNode:
     Use `hierarchy_modifier()` to create an ActivationsModifier from one or
     more HierarchyNode trees.
 
-    Example:
-        >>> # Create a simple hierarchy:
-        >>> # Feature 0 (root) -> Feature 1, Feature 2 (mutually exclusive)
-        >>> child1 = HierarchyNode(feature_index=1)
-        >>> child2 = HierarchyNode(feature_index=2)
-        >>> root = HierarchyNode(
-        ...     feature_index=0,
-        ...     children=[child1, child2],
-        ...     mutually_exclusive_children=True
-        ... )
-        >>> # Create modifier via hierarchy_modifier
-        >>> modifier = hierarchy_modifier([root])
-        >>> activations = torch.tensor([[1.0, 0.5, 0.3], [0.0, 0.5, 0.3]])
-        >>> modified = modifier(activations)
-        >>> # Row 0: root active, one child kept (mutual exclusion)
-        >>> # Row 1: root inactive, both children deactivated
 
     Attributes:
         feature_index: Index of this feature in the activation tensor
@@ -209,6 +175,7 @@ class HierarchyNode:
 
         Args:
             tree_dict: Dictionary with keys:
+
                 - feature_index (optional): Index in the activation tensor
                 - children (optional): List of child tree dictionaries
                 - mutually_exclusive_children (optional): Whether children are exclusive
@@ -216,16 +183,6 @@ class HierarchyNode:
 
         Returns:
             HierarchyNode instance
-
-        Example:
-            >>> hierarchy = HierarchyNode.from_dict({
-            ...     "feature_index": 0,
-            ...     "children": [
-            ...         {"feature_index": 1},
-            ...         {"feature_index": 2}
-            ...     ],
-            ...     "mutually_exclusive_children": True
-            ... })
         """
         children = [
             HierarchyNode.from_dict(child_dict)

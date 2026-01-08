@@ -2,6 +2,7 @@
 Plotting utilities for visualizing SAE training on synthetic data.
 
 This module provides functions for:
+
 - Plotting cosine similarities between SAE features and true features
 - Automatically reordering features for better visualization
 - Creating comparison plots between encoder and decoder
@@ -137,11 +138,6 @@ def plot_sae_feature_similarity(
 
     Returns:
         The plotly figure object
-
-    Example:
-        >>> sae = TrainingSAE(cfg)
-        >>> # ... train SAE ...
-        >>> plot_sae_feature_similarity(sae, feature_dict, reorder_features=True)
     """
     # Get cosine similarities
     true_features = feature_dict.feature_vectors.detach()

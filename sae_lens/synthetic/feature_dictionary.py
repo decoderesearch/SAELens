@@ -38,11 +38,6 @@ def orthogonalize_vectors(
 
     Returns:
         Tensor of shape [num_vectors, vector_dim] with unit-norm vectors
-
-    Example:
-        >>> vectors = orthogonalize_vectors(num_vectors=10, vector_dim=10)
-        >>> norms = vectors.norm(dim=1)
-        >>> assert torch.allclose(norms, torch.ones(10), atol=1e-5)
     """
     embeddings = torch.randn(num_vectors, vector_dim)
     return orthogonalize_embeddings(
@@ -119,18 +114,6 @@ class FeatureDictionary(nn.Module):
 
     The feature vectors can be configured to have a specific pairwise cosine similarity,
     which is useful for controlling the difficulty of sparse recovery.
-
-    Example:
-        >>> # Create a dictionary with 100 features in 64-dimensional space
-        >>> feature_dict = FeatureDictionary(num_features=100, hidden_dim=64)
-        >>>
-        >>> # Generate some sparse feature activations (e.g., from a feature generator)
-        >>> feature_activations = torch.zeros(32, 100)  # batch of 32
-        >>> feature_activations[0, [5, 10, 20]] = torch.tensor([1.2, 0.8, 1.5])
-        >>>
-        >>> # Convert to hidden activations
-        >>> hidden_activations = feature_dict(feature_activations)
-        >>> hidden_activations.shape  # torch.Size([32, 64])
 
     Attributes:
         feature_vectors: Parameter of shape [num_features, hidden_dim] containing the

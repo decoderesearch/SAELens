@@ -105,6 +105,7 @@ class JumpReLUSAE(SAE[JumpReLUSAEConfig]):
     activation function (e.g., ReLU etc.).
 
     It implements:
+
       - initialize_weights: sets up parameters, including a threshold.
       - encode: computes the feature activations using JumpReLU.
       - decode: reconstructs the input from the feature activations.
@@ -216,10 +217,12 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
     JumpReLUTrainingSAE is a training-focused implementation of a SAE using a JumpReLU activation.
 
     Similar to the inference-only JumpReLUSAE, but with:
+
       - A learnable log-threshold parameter (instead of a raw threshold).
       - A specialized auxiliary loss term for sparsity (L0 or similar).
 
     Methods of interest include:
+
     - initialize_weights: sets up W_enc, b_enc, W_dec, b_dec, and log_threshold.
     - encode_with_hidden_pre_jumprelu: runs a forward pass for training.
     - training_forward_pass: calculates MSE and auxiliary losses, returning a TrainStepOutput.

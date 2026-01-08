@@ -3,97 +3,6 @@ import random
 import torch
 
 
-def create_correlation_matrix(
-    num_features: int,
-    correlations: dict[tuple[int, int], float] | None = None,
-    default_correlation: float = 0.0,
-) -> torch.Tensor:
-    """
-    Create a correlation matrix with specified pairwise correlations.
-
-    This is an alias for create_correlation_matrix_from_correlations.
-
-    Args:
-        num_features: Number of features
-        correlations: Dict mapping (i, j) pairs to correlation values.
-            Pairs should have i < j.
-        default_correlation: Default correlation for unspecified pairs
-
-    Returns:
-        Correlation matrix of shape [num_features, num_features]
-
-    Example:
-        >>> # Create matrix where features 0,1 are correlated and 2,3 are anti-correlated
-        >>> corr = create_correlation_matrix(
-        ...     num_features=4,
-        ...     correlations={(0, 1): 0.8, (2, 3): -0.5}
-        ... )
-    """
-    return create_correlation_matrix_from_correlations(
-        num_features, correlations, default_correlation
-    )
-
-
-def create_block_correlation_matrix(
-    block_sizes: list[int],
-    within_block_correlation: float = 0.5,
-    between_block_correlation: float = 0.0,
-    seed: int | None = None,
-) -> torch.Tensor:
-    """
-    Create a correlation matrix with block structure.
-
-    Features are grouped into blocks. Within each block, features have the
-    specified within-block correlation. Between blocks, features have the
-    specified between-block correlation.
-
-    Args:
-        block_sizes: List of block sizes. Total features = sum(block_sizes).
-        within_block_correlation: Correlation between features in the same block
-        between_block_correlation: Correlation between features in different blocks
-        seed: Random seed for reproducibility
-
-    Returns:
-        Correlation matrix of shape [num_features, num_features]
-
-    Example:
-        >>> # Create 2 blocks of 3 features each
-        >>> corr = create_block_correlation_matrix(
-        ...     block_sizes=[3, 3],
-        ...     within_block_correlation=0.8,
-        ...     between_block_correlation=0.1
-        ... )
-    """
-    if seed is not None:
-        random.seed(seed)
-        torch.manual_seed(seed)
-
-    num_features = sum(block_sizes)
-    correlations: dict[tuple[int, int], float] = {}
-
-    # Assign feature indices to blocks
-    block_start = 0
-    feature_to_block = {}
-    for block_idx, block_size in enumerate(block_sizes):
-        for i in range(block_start, block_start + block_size):
-            feature_to_block[i] = block_idx
-        block_start += block_size
-
-    # Generate correlations for all pairs
-    for i in range(num_features):
-        for j in range(i + 1, num_features):
-            if feature_to_block[i] == feature_to_block[j]:
-                # Within block - add some noise to avoid singular matrices
-                noise = random.uniform(-0.05, 0.05)
-                correlations[(i, j)] = within_block_correlation + noise
-            else:
-                # Between blocks - add some noise
-                noise = random.uniform(-0.05, 0.05)
-                correlations[(i, j)] = between_block_correlation + noise
-
-    return create_correlation_matrix_from_correlations(num_features, correlations)
-
-
 def create_correlation_matrix_from_correlations(
     num_features: int,
     correlations: dict[tuple[int, int], float] | None = None,
@@ -110,13 +19,6 @@ def create_correlation_matrix_from_correlations(
 
     Returns:
         Correlation matrix of shape [num_features, num_features]
-
-    Example:
-        >>> # Create matrix where features 0,1 are correlated and 2,3 are anti-correlated
-        >>> corr = create_correlation_matrix_from_correlations(
-        ...     num_features=4,
-        ...     correlations={(0, 1): 0.8, (2, 3): -0.5}
-        ... )
     """
     matrix = torch.eye(num_features) + default_correlation * (
         1 - torch.eye(num_features)
@@ -173,19 +75,6 @@ def generate_random_correlations(
 
     Returns:
         Dictionary mapping (i, j) pairs to correlation values
-
-    Example:
-        # Generate correlations where 70% are positive, 20% uncorrelated,
-        # and correlation strengths range from 0.2 to 0.9
-        correlations = generate_random_correlations(
-            num_features=6,
-            positive_ratio=0.7,
-            uncorrelated_ratio=0.2,
-            min_correlation_strength=0.2,
-            max_correlation_strength=0.9,
-            seed=42
-        )
-        correlation_matrix = create_correlation_matrix_from_correlations(6, correlations)
     """
     if seed is not None:
         random.seed(seed)
@@ -261,24 +150,6 @@ def generate_random_correlation_matrix(
 
     Returns:
         Random correlation matrix of shape [num_features, num_features]
-
-    Example:
-        # Generate a random 10x10 correlation matrix
-        correlation_matrix = generate_random_correlation_matrix(
-            num_features=10,
-            positive_ratio=0.7,
-            uncorrelated_ratio=0.2,
-            min_correlation_strength=0.3,
-            max_correlation_strength=0.8,
-            seed=42
-        )
-
-        # Use directly in get_training_batch
-        batch = get_training_batch(
-            batch_size=1000,
-            firing_probabilities=torch.rand(10) * 0.5 + 0.2,
-            correlation_matrix=correlation_matrix
-        )
     """
     # Generate random correlations
     correlations = generate_random_correlations(
