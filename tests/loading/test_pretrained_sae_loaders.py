@@ -1839,7 +1839,9 @@ def test_from_pretrained_warns_when_using_registered_repo_id_directly(
         "b_dec": torch.zeros(D_IN),
     }
 
-    def mock_sae_lens_loader(**_kwargs: Any):
+    def mock_sae_lens_loader(
+        **_kwargs: Any,
+    ) -> tuple[dict[str, Any], dict[str, torch.Tensor], torch.Tensor | None]:
         return mock_cfg_dict, mock_state_dict, None
 
     monkeypatch.setattr(
