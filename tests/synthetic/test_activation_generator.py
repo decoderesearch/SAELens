@@ -136,9 +136,7 @@ class TestActivationGeneratorModifiers:
 class TestActivationGeneratorCorrelatedFeatures:
     def test_with_correlation_matrix(self):
         """Test that correlation matrix affects feature firing patterns."""
-        correlation_matrix = generate_random_correlation_matrix(
-            num_features=5, seed=42
-        )
+        correlation_matrix = generate_random_correlation_matrix(num_features=5, seed=42)
 
         generator = ActivationGenerator(
             num_features=5,
