@@ -7,7 +7,7 @@ synthetic activations for testing and experimenting with SAEs.
 Main components:
 
 - FeatureDictionary: Maps sparse feature activations to dense hidden activations
-- generate_activations: Generates batches of synthetic feature activations
+- ActivationGenerator: Generates batches of synthetic feature activations
 - HierarchyNode: Enforces hierarchical structure on feature activations
 - Training utilities: Helpers for training and evaluating SAEs on synthetic data
 - Plotting utilities: Visualization helpers for understanding SAE behavior
@@ -17,7 +17,6 @@ from sae_lens.synthetic.activation_generator import (
     ActivationGenerator,
     ActivationsModifier,
     ActivationsModifierInput,
-    generate_activations,
 )
 from sae_lens.synthetic.correlation import (
     create_correlation_matrix_from_correlations,
@@ -62,7 +61,6 @@ __all__ = [
     "hierarchy_modifier",
     "ActivationGenerator",
     # Activation generation
-    "generate_activations",
     "zipfian_firing_probabilities",
     "linear_firing_probabilities",
     "random_firing_probabilities",

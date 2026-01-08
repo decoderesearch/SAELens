@@ -130,6 +130,9 @@ def cosine_similarities(
     """
     if mat2 is None:
         mat2 = mat1
+    # Clamp norm to 1e-8 to prevent division by zero. This threshold is chosen
+    # to be small enough to not affect normal vectors but large enough to avoid
+    # numerical instability. Zero vectors will effectively map to zero similarity.
     mat1_normed = mat1 / mat1.norm(dim=1, keepdim=True).clamp(min=1e-8)
     mat2_normed = mat2 / mat2.norm(dim=1, keepdim=True).clamp(min=1e-8)
     return mat1_normed @ mat2_normed.T

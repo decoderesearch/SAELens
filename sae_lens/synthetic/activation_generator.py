@@ -68,6 +68,8 @@ class ActivationGenerator(nn.Module):
         Returns:
             Tensor of shape [batch_size, num_features] with non-negative activations
         """
+        # All tensors (firing_probabilities, std_firing_magnitudes, mean_firing_magnitudes)
+        # are on the same device from __init__ via _to_tensor()
         device = self.firing_probabilities.device
 
         if self.correlation_matrix is not None:
@@ -79,19 +81,15 @@ class ActivationGenerator(nn.Module):
                 self.firing_probabilities.unsqueeze(0).expand(batch_size, -1)
             )
 
-        mean_firing_magnitudes = self.mean_firing_magnitudes.to(device)
-
-        firing_features = firing_features.to(device)
         firing_magnitude_delta = torch.normal(
             torch.zeros_like(self.firing_probabilities)
             .unsqueeze(0)
-            .expand(batch_size, -1)
-            .to(device),
-            self.std_firing_magnitudes.unsqueeze(0).expand(batch_size, -1).to(device),
+            .expand(batch_size, -1),
+            self.std_firing_magnitudes.unsqueeze(0).expand(batch_size, -1),
         )
         firing_magnitude_delta[firing_features == 0] = 0
         feature_activations = (
-            firing_features * mean_firing_magnitudes + firing_magnitude_delta
+            firing_features * self.mean_firing_magnitudes + firing_magnitude_delta
         ).relu()
 
         if self.modify_activations is not None:
@@ -178,48 +176,3 @@ def _normalize_modifiers(
         return result
 
     return chained
-
-
-# Standalone functions for backward compatibility
-
-
-def generate_activations(
-    batch_size: int,
-    firing_probabilities: torch.Tensor,
-    std_firing_magnitudes: torch.Tensor | None = None,
-    mean_firing_magnitudes: torch.Tensor | None = None,
-    modify_activations: ActivationsModifierInput = None,
-    correlation_matrix: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """
-    Generate a batch of feature activations with controlled properties.
-
-    This is a standalone function that creates a temporary ActivationGenerator
-    and samples from it. For repeated sampling, use the ActivationGenerator class
-    directly for better performance.
-
-    Args:
-        batch_size: Number of samples to generate
-        firing_probabilities: Per-feature firing probability tensor of shape [num_features]
-        std_firing_magnitudes: Standard deviation of firing magnitudes (default: 0)
-        mean_firing_magnitudes: Mean firing magnitudes when features fire (default: 1)
-        modify_activations: Optional modifier or list of modifiers to apply after generation
-        correlation_matrix: Optional correlation matrix for correlated feature firing
-
-    Returns:
-        Tensor of shape [batch_size, num_features] with non-negative activations
-    """
-    num_features = firing_probabilities.shape[0]
-    generator = ActivationGenerator(
-        num_features=num_features,
-        firing_probabilities=firing_probabilities,
-        std_firing_magnitudes=std_firing_magnitudes
-        if std_firing_magnitudes is not None
-        else 0.0,
-        mean_firing_magnitudes=mean_firing_magnitudes
-        if mean_firing_magnitudes is not None
-        else 1.0,
-        modify_activations=modify_activations,
-        correlation_matrix=correlation_matrix,
-    )
-    return generator.sample(batch_size)

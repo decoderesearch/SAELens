@@ -29,9 +29,13 @@ def create_correlation_matrix_from_correlations(
             matrix[i, j] = corr
             matrix[j, i] = corr
 
+    # Ensure matrix is symmetric (numerical precision)
+    matrix = (matrix + matrix.T) / 2
+
     # Check positive definiteness and fix if necessary
-    eigenvals = torch.linalg.eigvals(matrix)
-    if torch.any(eigenvals.real < -1e-6):
+    # Use eigvalsh for symmetric matrices (returns real eigenvalues)
+    eigenvals = torch.linalg.eigvalsh(matrix)
+    if torch.any(eigenvals < -1e-6):
         matrix = _fix_correlation_matrix(matrix)
 
     return matrix
@@ -76,9 +80,8 @@ def generate_random_correlations(
     Returns:
         Dictionary mapping (i, j) pairs to correlation values
     """
-    if seed is not None:
-        random.seed(seed)
-        torch.manual_seed(seed)
+    # Use local random number generator to avoid side effects on global state
+    rng = random.Random(seed)
 
     # Validate inputs
     if not 0.0 <= positive_ratio <= 1.0:
@@ -106,7 +109,7 @@ def generate_random_correlations(
     num_correlated = total_pairs - num_uncorrelated
 
     # Randomly select which pairs to correlate
-    correlated_pairs = random.sample(all_pairs, num_correlated)
+    correlated_pairs = rng.sample(all_pairs, num_correlated)
 
     # For correlated pairs, determine positive vs negative
     num_positive = int(num_correlated * positive_ratio)
@@ -114,13 +117,13 @@ def generate_random_correlations(
 
     # Assign signs
     signs = [1] * num_positive + [-1] * num_negative
-    random.shuffle(signs)
+    rng.shuffle(signs)
 
     # Generate correlation strengths
     correlations = {}
     for pair, sign in zip(correlated_pairs, signs):
         # Sample correlation strength uniformly from range
-        strength = random.uniform(min_correlation_strength, max_correlation_strength)
+        strength = rng.uniform(min_correlation_strength, max_correlation_strength)
         correlations[pair] = sign * strength
 
     return correlations

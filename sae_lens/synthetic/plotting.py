@@ -135,9 +135,6 @@ def plot_sae_feature_similarity(
         show_plot: If True, displays the plot
         dtick: Tick spacing for axes
         scale: Scale factor for image resolution when saving
-
-    Returns:
-        The plotly figure object
     """
     # Get cosine similarities
     true_features = feature_dict.feature_vectors.detach()

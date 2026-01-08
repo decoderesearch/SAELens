@@ -90,7 +90,7 @@ def eval_sae_on_synthetic_data(
     Args:
         sae: The SAE to evaluate. Must have encode() and decode() methods.
         feature_dict: The feature dictionary used to generate activations
-        generate_features_fn: Function that generates feature activations
+        activations_generator: Generator that produces feature activations
         num_samples: Number of samples to use for evaluation
 
     Returns:

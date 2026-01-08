@@ -125,8 +125,7 @@ class SyntheticActivationIterator(Iterator[torch.Tensor]):
 
         Args:
             feature_dict: The feature dictionary to use for generating hidden activations
-            generate_features_fn: A function that takes a batch size and returns
-                feature activations of shape [batch_size, num_features]
+            activations_generator: Generator that produces feature activations
             batch_size: Number of samples per batch
         """
         self.feature_dict = feature_dict

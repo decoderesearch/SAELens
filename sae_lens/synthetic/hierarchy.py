@@ -275,7 +275,11 @@ class HierarchyNode:
         if len(child_indices) < 2:
             return
 
-        # For each sample where parent is active, enforce mutual exclusion
+        # For each sample where parent is active, enforce mutual exclusion.
+        # Note: This loop is not vectorized because we need to randomly select
+        # which child to keep active per sample. Vectorizing would require either
+        # a deterministic selection (losing randomness) or complex gather/scatter
+        # operations that aren't more efficient for typical batch sizes.
         for batch_idx in range(batch_size):
             if not parent_active_mask[batch_idx]:
                 continue
