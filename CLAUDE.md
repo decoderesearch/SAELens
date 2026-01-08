@@ -17,3 +17,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Do not use `Example:` in docstrings.
 - If you use a markdown list in docstrings, you must put a blank line before the start of the list.
+- Each test file should mirror a file in the `sae_lens` package.

@@ -211,3 +211,57 @@ def test_cosine_similarities_range():
 
     assert torch.all(cos_sims >= -1.0 - 1e-5)
     assert torch.all(cos_sims <= 1.0 + 1e-5)
+
+
+def test_cosine_similarities_single_matrix_uses_self():
+    """When mat2 is None, should compare mat1 to itself."""
+    mat = torch.randn(5, 10)
+    cos_sims = cosine_similarities(mat)
+    cos_sims_explicit = cosine_similarities(mat, mat)
+    torch.testing.assert_close(cos_sims, cos_sims_explicit)
+
+
+def test_cosine_similarities_negated_vectors():
+    """Negated vectors should have cosine similarity -1."""
+    mat = torch.randn(5, 10)
+    cos_sims = cosine_similarities(mat, -mat)
+    diagonal = torch.diag(cos_sims)
+    torch.testing.assert_close(diagonal, -torch.ones(5))
+
+
+def test_cosine_similarities_scale_invariant():
+    """Cosine similarity should be invariant to scaling."""
+    mat1 = torch.randn(5, 10)
+    mat2 = mat1 * 5.0  # Scaled version
+
+    cos_sims = cosine_similarities(mat1, mat2)
+    diagonal = torch.diag(cos_sims)
+    torch.testing.assert_close(diagonal, torch.ones(5))
+
+
+def test_cosine_similarities_handles_near_zero_vectors():
+    """Should handle vectors with very small norms without crashing."""
+    mat1 = torch.randn(3, 10)
+    mat2 = torch.randn(3, 10)
+    mat2[0] = 1e-10  # Near-zero vector
+
+    cos_sims = cosine_similarities(mat1, mat2)
+    assert cos_sims.shape == (3, 3)
+    assert torch.all(torch.isfinite(cos_sims))
+
+
+def test_cosine_similarities_handles_exact_zero_vector():
+    """Should handle exact zero vectors without crashing."""
+    mat1 = torch.randn(3, 10)
+    mat2 = torch.randn(3, 10)
+    mat2[0] = 0.0  # Exact zero vector
+
+    cos_sims = cosine_similarities(mat1, mat2)
+    assert torch.all(torch.isfinite(cos_sims))
+
+
+def test_cosine_similarities_symmetric_when_same_matrix():
+    """Self-similarity matrix should be symmetric."""
+    mat = torch.randn(5, 10)
+    cos_sims = cosine_similarities(mat)
+    torch.testing.assert_close(cos_sims, cos_sims.T)
