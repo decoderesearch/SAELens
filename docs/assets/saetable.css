@@ -62,3 +62,49 @@
 .saetable-copyButton:hover {
     background-color: #45a049;
 }
+
+/* Hook label styles */
+.saetable-hookLabel {
+    display: inline-block;
+    font-size: 0.75em;
+    color: #888;
+    margin-left: 4px;
+    cursor: help;
+    position: relative;
+}
+
+.saetable-hookLabel:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #333;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-bottom: 4px;
+}
+
+.saetable-hookLabel:hover::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #333;
+    z-index: 1000;
+}
+
+.saetable-hookRow {
+    display: block;
+    margin-bottom: 2px;
+}
+
+.saetable-hookRow:last-child {
+    margin-bottom: 0;
+}

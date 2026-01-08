@@ -24,7 +24,6 @@ INCLUDED_CFG = [
     "neuronpedia",
     "hook_name",
     "d_sae",
-    "normalize_activations",
 ]
 
 CACHE_DIR = Path(
@@ -116,6 +115,22 @@ def on_page_content(html, page, config, files):  # noqa: ARG001
     return str(soup)
 
 
+def style_hook_name(row: pd.Series) -> str:
+    """Format hook_name column to show both TransformerLens and HuggingFace hooks."""
+    hook_name = row.get("hook_name", "")
+    hf_hook_name = row.get("hf_hook_name")
+
+    tl_label = '<span class="saetable-hookLabel" data-tooltip="Hook point for TransformerLens">tl</span>'
+    hf_label = '<span class="saetable-hookLabel" data-tooltip="Hook point for Hugging Face / NNsight">hf</span>'
+
+    if hf_hook_name:
+        return (
+            f'<span class="saetable-hookRow">{hook_name} {tl_label}</span>'
+            f'<span class="saetable-hookRow">{hf_hook_name} {hf_label}</span>'
+        )
+    return f'<span class="saetable-hookRow">{hook_name} {tl_label}</span>'
+
+
 def generate_release_content(
     release: str, model_info: dict, executor: ThreadPoolExecutor
 ) -> str:
@@ -158,12 +173,20 @@ def generate_release_content(
         info.update(cfg)
 
     df = pd.DataFrame(model_info["saes"])
-    df = df[INCLUDED_CFG]
 
     def style_id(val):
         return f"<div>{val}</div><a class=\"saetable-loadSaeId\" onclick=\"SaeTable.showCode('{release}', '{val}')\">Load this SAE</a>"
 
     df["id"] = df["id"].apply(style_id)
+    df["hook_name"] = df.apply(style_hook_name, axis=1)
+
+    # Determine which columns to include
+    columns = list(INCLUDED_CFG)
+    has_neuronpedia = df["neuronpedia"].notna().any()
+    if not has_neuronpedia:
+        columns.remove("neuronpedia")
+
+    df = df[columns]
     table = df.to_markdown(index=False)
     content += table + "\n\n"
 

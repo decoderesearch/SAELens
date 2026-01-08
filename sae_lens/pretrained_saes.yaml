@@ -40631,7 +40631,7 @@ gemma-3-1b-res-matryoshka-dc:
   conversion_func: null
   links:
     model: https://huggingface.co/google/gemma-3-1b-pt
-  model: gemma-3-1b
+  model: google/gemma-3-1b-pt
   repo_id: chanind/gemma-3-1b-batch-topk-matryoshka-saes-w-32k-l0-40
   saes:
   - id: blocks.0.hook_resid_post
