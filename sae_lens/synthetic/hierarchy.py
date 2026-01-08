@@ -219,10 +219,8 @@ class HierarchyNode:
         self.mutually_exclusive_children = mutually_exclusive_children
         self.feature_id = feature_id
 
-        if self.mutually_exclusive_children:
-            assert (
-                len(self.children) >= 2
-            ), "Need at least 2 children for mutual exclusion"
+        if self.mutually_exclusive_children and len(self.children) < 2:
+            raise ValueError("Need at least 2 children for mutual exclusion")
 
     def _apply_hierarchy(
         self,

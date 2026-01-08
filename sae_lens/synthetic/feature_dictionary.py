@@ -59,7 +59,7 @@ def orthogonalize_embeddings(
     num_vectors = embeddings.shape[0]
     # Create a detached copy and normalize, then enable gradients
     embeddings = embeddings.detach().clone()
-    embeddings = embeddings / embeddings.norm(p=2, dim=1, keepdim=True)
+    embeddings = embeddings / embeddings.norm(p=2, dim=1, keepdim=True).clamp(min=1e-8)
     embeddings = embeddings.requires_grad_(True)
 
     optimizer = torch.optim.Adam([embeddings], lr=lr)  # type: ignore[list-item]
@@ -87,7 +87,9 @@ def orthogonalize_embeddings(
         pbar.set_description(f"loss: {loss.item():.3f}")
 
     with torch.no_grad():
-        embeddings = embeddings / embeddings.norm(p=2, dim=1, keepdim=True)
+        embeddings = embeddings / embeddings.norm(p=2, dim=1, keepdim=True).clamp(
+            min=1e-8
+        )
     return embeddings.detach().clone()
 
 
@@ -146,7 +148,9 @@ class FeatureDictionary(nn.Module):
 
         # Initialize feature vectors as unit vectors
         embeddings = torch.randn(num_features, hidden_dim)
-        embeddings = embeddings / embeddings.norm(p=2, dim=1, keepdim=True)
+        embeddings = embeddings / embeddings.norm(p=2, dim=1, keepdim=True).clamp(
+            min=1e-8
+        )
         self.feature_vectors = nn.Parameter(embeddings)
 
         # Initialize bias (zeros if not using bias, but still a parameter for consistent API)

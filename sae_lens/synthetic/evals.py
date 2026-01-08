@@ -115,9 +115,17 @@ def eval_sae_on_synthetic_data(
     dead_latents = int(
         ((sae_latents == 0).sum(dim=0) == sae_latents.shape[0]).sum().item()
     )
-    shrinkage = (
-        (sae_output.norm(dim=-1) / hidden_acts_filtered.norm(dim=-1)).mean().item()
-    )
+    if hidden_acts_filtered.shape[0] == 0:
+        shrinkage = 0.0
+    else:
+        shrinkage = (
+            (
+                sae_output.norm(dim=-1)
+                / hidden_acts_filtered.norm(dim=-1).clamp(min=1e-8)
+            )
+            .mean()
+            .item()
+        )
 
     # Compute MCC between SAE decoder and ground truth features
     sae_decoder: torch.Tensor = sae.W_dec  # type: ignore[attr-defined]

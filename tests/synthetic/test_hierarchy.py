@@ -296,7 +296,7 @@ def test_HierarchyNode_repr_mutually_exclusive():
 def test_HierarchyNode_requires_two_children_for_mutual_exclusion():
     child = HierarchyNode(feature_index=1)
 
-    with pytest.raises(AssertionError, match="Need at least 2 children"):
+    with pytest.raises(ValueError, match="Need at least 2 children"):
         HierarchyNode(
             feature_index=0,
             children=[child],
