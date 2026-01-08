@@ -33,7 +33,6 @@ from sae_lens.synthetic.feature_dictionary import (
     FeatureDictionaryInitializer,
     orthogonal_initializer,
     orthogonalize_embeddings,
-    orthogonalize_vectors,
 )
 from sae_lens.synthetic.firing_probabilities import (
     linear_firing_probabilities,
@@ -71,7 +70,6 @@ __all__ = [
     "ActivationsModifier",
     "ActivationsModifierInput",
     # Utilities
-    "orthogonalize_vectors",
     "orthogonalize_embeddings",
     "orthogonal_initializer",
     "FeatureDictionaryInitializer",

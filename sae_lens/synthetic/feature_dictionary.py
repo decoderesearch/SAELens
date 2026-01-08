@@ -14,41 +14,6 @@ from tqdm import tqdm
 FeatureDictionaryInitializer = Callable[["FeatureDictionary"], None]
 
 
-def orthogonalize_vectors(
-    num_vectors: int,
-    vector_dim: int,
-    target_cos_sim: float = 0.0,
-    num_steps: int = 200,
-    lr: float = 0.01,
-    show_progress: bool = False,
-) -> torch.Tensor:
-    """
-    Create a set of (approximately) orthogonal unit vectors.
-
-    Uses gradient descent to optimize random vectors toward the target pairwise
-    cosine similarity while maintaining unit norms.
-
-    Args:
-        num_vectors: Number of vectors to create
-        vector_dim: Dimensionality of each vector
-        target_cos_sim: Target pairwise cosine similarity (0 = orthogonal)
-        num_steps: Number of optimization steps
-        lr: Learning rate for optimization
-        show_progress: Whether to show a progress bar
-
-    Returns:
-        Tensor of shape [num_vectors, vector_dim] with unit-norm vectors
-    """
-    embeddings = torch.randn(num_vectors, vector_dim)
-    return orthogonalize_embeddings(
-        embeddings,
-        target_cos_sim=target_cos_sim,
-        num_steps=num_steps,
-        lr=lr,
-        show_progress=show_progress,
-    )
-
-
 def orthogonalize_embeddings(
     embeddings: torch.Tensor,
     target_cos_sim: float = 0,

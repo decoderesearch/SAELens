@@ -1,31 +1,6 @@
 import torch
 
-from sae_lens.synthetic import FeatureDictionary, orthogonalize_vectors
-
-
-def test_orthogonalize_vectors_creates_unit_vectors():
-    vectors = orthogonalize_vectors(num_vectors=10, vector_dim=10, num_steps=500)
-    norms = torch.norm(vectors, dim=1)
-    assert torch.allclose(norms, torch.ones(10), atol=1e-5)
-
-
-def test_orthogonalize_vectors_creates_orthogonal_vectors():
-    vectors = orthogonalize_vectors(
-        num_vectors=10, vector_dim=10, target_cos_sim=0, num_steps=500
-    )
-    dot_products = vectors @ vectors.T
-    expected = torch.eye(10)
-    assert torch.allclose(dot_products, expected, atol=1e-5)
-
-
-def test_orthogonalize_vectors_respects_target_cos_sim():
-    target_cos_sim = 0.3
-    vectors = orthogonalize_vectors(
-        num_vectors=5, vector_dim=20, target_cos_sim=target_cos_sim, num_steps=500
-    )
-    dot_products = vectors @ vectors.T
-    off_diagonal = dot_products[~torch.eye(5, dtype=torch.bool)]
-    assert torch.allclose(off_diagonal, torch.tensor(target_cos_sim), atol=0.05)
+from sae_lens.synthetic import FeatureDictionary
 
 
 def test_FeatureDictionary_creates_correct_shape():

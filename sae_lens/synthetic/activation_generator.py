@@ -28,6 +28,7 @@ class ActivationGenerator(nn.Module):
     mean_firing_magnitudes: torch.Tensor
     modify_activations: ActivationsModifier | None
     correlation_matrix: torch.Tensor | None
+    correlation_thresholds: torch.Tensor | None
 
     def __init__(
         self,
@@ -52,8 +53,14 @@ class ActivationGenerator(nn.Module):
             mean_firing_magnitudes, num_features, device, dtype
         )
         self.modify_activations = _normalize_modifiers(modify_activations)
+        self.correlation_thresholds = None
         if correlation_matrix is not None:
             _validate_correlation_matrix(correlation_matrix, num_features)
+            self.correlation_thresholds = torch.tensor(
+                [norm.ppf(1 - p.item()) for p in self.firing_probabilities],
+                device=device,
+                dtype=self.firing_probabilities.dtype,
+            )
         self.correlation_matrix = correlation_matrix
 
     def sample(self, batch_size: int) -> torch.Tensor:
@@ -75,8 +82,12 @@ class ActivationGenerator(nn.Module):
         device = self.firing_probabilities.device
 
         if self.correlation_matrix is not None:
+            assert self.correlation_thresholds is not None
             firing_features = _generate_correlated_features(
-                batch_size, self.firing_probabilities, self.correlation_matrix, device
+                batch_size,
+                self.correlation_matrix,
+                self.correlation_thresholds,
+                device,
             )
         else:
             firing_features = torch.bernoulli(
@@ -104,8 +115,8 @@ class ActivationGenerator(nn.Module):
 
 def _generate_correlated_features(
     batch_size: int,
-    firing_probabilities: torch.Tensor,
     correlation_matrix: torch.Tensor,
+    thresholds: torch.Tensor,
     device: torch.device,
 ) -> torch.Tensor:
     """
@@ -116,23 +127,18 @@ def _generate_correlated_features(
 
     Args:
         batch_size: Number of samples to generate
-        firing_probabilities: Marginal probabilities for each feature
         correlation_matrix: Correlation matrix between features
+        thresholds: Pre-computed thresholds for each feature (from inverse normal CDF)
         device: Device to generate samples on
 
     Returns:
         Binary feature matrix of shape [batch_size, num_features]
     """
-    num_features = firing_probabilities.shape[0]
-
-    # Convert marginal probabilities to thresholds using inverse normal CDF
-    thresholds = torch.tensor(
-        [norm.ppf(1 - p.item()) for p in firing_probabilities], device=device
-    )
+    num_features = correlation_matrix.shape[0]
 
     mvn = MultivariateNormal(
-        loc=torch.zeros(num_features, device=device),
-        covariance_matrix=correlation_matrix.to(device),
+        loc=torch.zeros(num_features, device=device, dtype=thresholds.dtype),
+        covariance_matrix=correlation_matrix.to(device=device, dtype=thresholds.dtype),
     )
 
     gaussian_samples = mvn.sample((batch_size,))
