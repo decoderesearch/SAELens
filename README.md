@@ -56,7 +56,7 @@ Feel free to join the [Open Source Mechanistic Interpretability Slack](https://j
 - [Sparsify](https://github.com/EleutherAI/sparsify): A lean SAE training library focused on TopK SAEs.
 - [Overcomplete](https://github.com/KempnerInstitute/overcomplete): SAE training library focused on vision models.
 - [SAE-Vis](https://github.com/callummcdougall/sae_vis): A library for visualizing SAE features, works with SAELens.
-- [SAEBench](https://github.com/adamkarvonen/SAEBench): A suite of LLM SAE benchmarks, work with SAELens.
+- [SAEBench](https://github.com/adamkarvonen/SAEBench): A suite of LLM SAE benchmarks, works with SAELens.
 
 ## Citation
 

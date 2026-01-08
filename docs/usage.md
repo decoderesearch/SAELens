@@ -335,7 +335,7 @@ sae = SAE.from_pretrained(
 prompt = "The Eiffel Tower is located in"
 
 # Extract activations and compute SAE features
-with model.trace(prompt) as tracer:
+with model.trace(prompt):
     # Access hidden states at layer 12
     hidden_states = model.model.layers[12].output[0]
 
