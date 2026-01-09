@@ -241,7 +241,7 @@ def _build_sparse_hierarchy(
         num_groups = len(me_groups)
         me_group_siblings = torch.full((num_groups, max_siblings), -1, dtype=torch.long)
         me_group_sizes = torch.zeros(num_groups, dtype=torch.long)
-        me_group_parents = torch.zeros(num_groups, dtype=torch.long)
+        me_group_parents = torch.full((num_groups,), -1, dtype=torch.long)
         for g_idx, (_, parent_feat, siblings) in enumerate(me_groups):
             me_group_sizes[g_idx] = len(siblings)
             me_group_parents[g_idx] = parent_feat
@@ -337,20 +337,21 @@ def _apply_me_for_groups(
     # Check which parents are active: [batch_size, num_groups]
     # Groups with parent=-1 are always active (root-level ME)
     has_parent = parents >= 0
-    if has_parent.any():
+    if has_parent.all():
+        # All groups have parents - check their activation directly
+        parent_active = activations[:, parents] > 0  # [batch, num_groups]
+        if not parent_active.any():
+            return
+    elif has_parent.any():
+        # Mixed case: some groups have parents, some don't
+        # Use clamp to avoid indexing with -1 (reads feature 0, but result is masked out)
         safe_parents = parents.clamp(min=0)
         parent_active = activations[:, safe_parents] > 0  # [batch, num_groups]
         # Groups without parent are always "active"
         parent_active = parent_active | ~has_parent
     else:
-        # All groups have no parent - all are active
-        parent_active = torch.ones(
-            batch_size, num_groups, dtype=torch.bool, device=device
-        )
-
-    # Early exit if no parents are active
-    if not parent_active.any():
-        return
+        # No groups have parents - all are always active, skip parent check
+        parent_active = None
 
     # Get siblings for the groups we're processing
     siblings = me_group_siblings[group_indices]  # [num_groups, max_siblings]
@@ -368,7 +369,9 @@ def _apply_me_for_groups(
     valid_mask = sibling_range < sizes.unsqueeze(1)
 
     # Find active valid siblings, but only where parent is active: [batch, groups, siblings]
-    sibling_active = (sibling_activations > 0) & valid_mask & parent_active.unsqueeze(2)
+    sibling_active = (sibling_activations > 0) & valid_mask
+    if parent_active is not None:
+        sibling_active = sibling_active & parent_active.unsqueeze(2)
 
     # Count active per group and check for conflicts: [batch_size, num_groups]
     active_counts = sibling_active.sum(dim=2)
@@ -390,9 +393,11 @@ def _apply_me_for_groups(
         batch_with_conflict, groups_with_conflict
     ]  # [num_conflicts, max_siblings]
 
-    # Random selection for winner - use large negative instead of -inf tensor
+    # Random selection for winner
+    # Use -1e9 instead of -inf to avoid creating a tensor (torch.tensor(-float("inf")))
+    # on every call. Since random scores are in [0,1], -1e9 is effectively -inf for argmax.
     random_scores = torch.rand(num_conflicts, max_siblings, device=device)
-    random_scores[~conflict_active] = -1e9  # Mask out inactive siblings
+    random_scores[~conflict_active] = -1e9
 
     winner_idx = random_scores.argmax(dim=1)
 
@@ -556,85 +561,6 @@ class HierarchyNode:
 
         if self.mutually_exclusive_children and len(self.children) < 2:
             raise ValueError("Need at least 2 children for mutual exclusion")
-
-    def _apply_hierarchy(
-        self,
-        activations: torch.Tensor,
-        parent_active_mask: torch.Tensor | None,
-    ) -> None:
-        """Recursively apply hierarchical constraints."""
-        batch_size = activations.shape[0]
-
-        # Determine which samples have this node active
-        if self.feature_index is not None:
-            is_active = activations[:, self.feature_index] > 0
-        else:
-            # Non-readout node: active if parent is active (or always if root)
-            is_active = (
-                parent_active_mask
-                if parent_active_mask is not None
-                else torch.ones(batch_size, dtype=torch.bool, device=activations.device)
-            )
-
-        # Deactivate this node if parent is inactive
-        if parent_active_mask is not None and self.feature_index is not None:
-            activations[~parent_active_mask, self.feature_index] = 0
-            # Update is_active after deactivation
-            is_active = activations[:, self.feature_index] > 0
-
-        # Handle mutually exclusive children
-        if self.mutually_exclusive_children and len(self.children) >= 2:
-            self._enforce_mutual_exclusion(activations, is_active)
-
-        # Recursively process children
-        for child in self.children:
-            child._apply_hierarchy(activations, parent_active_mask=is_active)
-
-    def _enforce_mutual_exclusion(
-        self,
-        activations: torch.Tensor,
-        parent_active_mask: torch.Tensor,
-    ) -> None:
-        """Ensure at most one child is active per sample."""
-        batch_size = activations.shape[0]
-
-        # Get indices of children that have feature indices
-        child_indices = [
-            child.feature_index
-            for child in self.children
-            if child.feature_index is not None
-        ]
-
-        if len(child_indices) < 2:
-            return
-
-        # For each sample where parent is active, enforce mutual exclusion.
-        # Note: This loop is not vectorized because we need to randomly select
-        # which child to keep active per sample. Vectorizing would require either
-        # a deterministic selection (losing randomness) or complex gather/scatter
-        # operations that aren't more efficient for typical batch sizes.
-        for batch_idx in range(batch_size):
-            if not parent_active_mask[batch_idx]:
-                continue
-
-            # Find which children are active
-            active_children = [
-                i
-                for i, feat_idx in enumerate(child_indices)
-                if activations[batch_idx, feat_idx] > 0
-            ]
-
-            if len(active_children) <= 1:
-                continue
-
-            # Randomly select one to keep active
-            random_idx = int(torch.randint(len(active_children), (1,)).item())
-            keep_idx = active_children[random_idx]
-
-            # Deactivate all others
-            for i, feat_idx in enumerate(child_indices):
-                if i != keep_idx and i in active_children:
-                    activations[batch_idx, feat_idx] = 0
 
     def get_all_feature_indices(self) -> list[int]:
         """Get all feature indices in this subtree."""
