@@ -18,3 +18,5 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Do not use `Example:` in docstrings.
 - If you use a markdown list in docstrings, you must put a blank line before the start of the list.
 - Each test file should mirror a file in the `sae_lens` package.
+- When writing tests, focus on testing the core logic and meat of the code rather than just superficial things like tensor shapes.
+- Do not relax assertion tolerances in tests unless absolutely necessary. Never relax tolerances to mask an underlying bug. Ask for input if you are unsure.
