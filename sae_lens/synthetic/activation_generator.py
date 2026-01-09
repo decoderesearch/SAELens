@@ -63,6 +63,7 @@ class ActivationGenerator(nn.Module):
             )
         self.correlation_matrix = correlation_matrix
 
+    @torch.no_grad()
     def sample(self, batch_size: int) -> torch.Tensor:
         """
         Generate a batch of feature activations with controlled properties.

@@ -515,3 +515,252 @@ def test_hierarchy_modifier_works_with_activation_generator():
     parent_inactive = samples[:, 0] == 0
     assert torch.all(samples[parent_inactive, 1] == 0)
     assert torch.all(samples[parent_inactive, 2] == 0)
+
+
+def test_mutual_exclusion_statistical_distribution():
+    """Verify mutual exclusion selects children with approximately uniform distribution."""
+    child1 = HierarchyNode(feature_index=1)
+    child2 = HierarchyNode(feature_index=2)
+    root = HierarchyNode(
+        feature_index=0,
+        children=[child1, child2],
+        mutually_exclusive_children=True,
+    )
+    modifier = hierarchy_modifier([root])
+
+    # All samples have parent active and both children active
+    n_samples = 2000
+    activations = torch.ones(n_samples, 3)
+
+    result = modifier(activations)
+
+    # Count how often each child was kept
+    child1_kept = (result[:, 1] > 0).sum().item()
+    child2_kept = (result[:, 2] > 0).sum().item()
+
+    # Verify mutual exclusion holds
+    both_active = (result[:, 1] > 0) & (result[:, 2] > 0)
+    assert torch.sum(both_active) == 0, "Both children should never be active"
+
+    # Verify exactly one is kept per sample
+    assert child1_kept + child2_kept == n_samples, "Exactly one child should be kept"
+
+    # Statistical test: with 2000 samples and p=0.5, expect ~1000 each
+    # Using a generous margin (4 standard deviations: sqrt(2000*0.5*0.5) * 4 ≈ 89)
+    # This gives us a very low false positive rate while catching broken randomness
+    expected = n_samples / 2
+    margin = 120  # ~4 standard deviations, allows for statistical variation
+    assert abs(child1_kept - expected) < margin, (
+        f"Child 1 selected {child1_kept} times, expected ~{expected} "
+        f"(within {margin}). Distribution may not be uniform."
+    )
+    assert abs(child2_kept - expected) < margin, (
+        f"Child 2 selected {child2_kept} times, expected ~{expected} "
+        f"(within {margin}). Distribution may not be uniform."
+    )
+
+
+def test_mutual_exclusion_three_or_more_children():
+    """Verify mutual exclusion works with 3+ children."""
+    children = [HierarchyNode(feature_index=i) for i in range(1, 5)]  # 4 children
+    root = HierarchyNode(
+        feature_index=0,
+        children=children,
+        mutually_exclusive_children=True,
+    )
+    modifier = hierarchy_modifier([root])
+
+    # All samples have parent and all children active
+    n_samples = 4000
+    activations = torch.ones(n_samples, 5)
+
+    result = modifier(activations)
+
+    # Verify mutual exclusion: at most one child active per sample
+    active_counts = (result[:, 1:5] > 0).sum(dim=1)
+    assert torch.all(
+        active_counts <= 1
+    ), "At most one child should be active per sample"
+    assert torch.all(
+        active_counts == 1
+    ), "Exactly one child should be active per sample"
+
+    # Verify all children can be selected (each should appear at least sometimes)
+    child_selections = [(result[:, i] > 0).sum().item() for i in range(1, 5)]
+    for i, count in enumerate(child_selections):
+        assert count > 0, f"Child {i+1} was never selected - randomness may be broken"
+
+    # Statistical test: with 4 children and 4000 samples, expect ~1000 each
+    expected = n_samples / 4
+    margin = 150  # Allow for statistical variation
+    for i, count in enumerate(child_selections):
+        assert abs(count - expected) < margin, (
+            f"Child {i+1} selected {count} times, expected ~{expected}. "
+            f"Distribution may not be uniform."
+        )
+
+
+def test_mutual_exclusion_randomness_varies():
+    """Verify that mutual exclusion produces different results on different calls."""
+    child1 = HierarchyNode(feature_index=1)
+    child2 = HierarchyNode(feature_index=2)
+    root = HierarchyNode(
+        feature_index=0,
+        children=[child1, child2],
+        mutually_exclusive_children=True,
+    )
+    modifier = hierarchy_modifier([root])
+
+    # Run the same input multiple times
+    activations = torch.ones(100, 3)
+
+    results = []
+    for _ in range(5):
+        result = modifier(activations.clone())
+        child1_count = (result[:, 1] > 0).sum().item()
+        results.append(child1_count)
+
+    # The results should not all be identical (would indicate broken randomness)
+    # With 100 samples and 5 runs, the probability of all runs being identical
+    # by chance is astronomically low
+    unique_results = set(results)
+    assert len(unique_results) > 1, (
+        f"All 5 runs produced identical results ({results[0]} child1 selections). "
+        "Randomness may be broken or deterministic."
+    )
+
+
+def test_multi_level_hierarchy_with_mutual_exclusion():
+    """Verify hierarchy enforcement works correctly across multiple levels."""
+    # Create a 3-level hierarchy:
+    # Root (0) with mutual exclusion
+    #   ├── Child A (1) with mutual exclusion
+    #   │     ├── Grandchild A1 (3)
+    #   │     └── Grandchild A2 (4)
+    #   └── Child B (2) with mutual exclusion
+    #         ├── Grandchild B1 (5)
+    #         └── Grandchild B2 (6)
+
+    grandchild_a1 = HierarchyNode(feature_index=3)
+    grandchild_a2 = HierarchyNode(feature_index=4)
+    grandchild_b1 = HierarchyNode(feature_index=5)
+    grandchild_b2 = HierarchyNode(feature_index=6)
+
+    child_a = HierarchyNode(
+        feature_index=1,
+        children=[grandchild_a1, grandchild_a2],
+        mutually_exclusive_children=True,
+    )
+    child_b = HierarchyNode(
+        feature_index=2,
+        children=[grandchild_b1, grandchild_b2],
+        mutually_exclusive_children=True,
+    )
+    root = HierarchyNode(
+        feature_index=0,
+        children=[child_a, child_b],
+        mutually_exclusive_children=True,
+    )
+
+    modifier = hierarchy_modifier([root])
+
+    # Test with all features initially active
+    n_samples = 1000
+    activations = torch.ones(n_samples, 7)
+    result = modifier(activations)
+
+    # 1. Root's children should be mutually exclusive
+    both_children_active = (result[:, 1] > 0) & (result[:, 2] > 0)
+    assert (
+        both_children_active.sum() == 0
+    ), "Root's children should be mutually exclusive"
+
+    # 2. When Child A is active, its grandchildren should be mutually exclusive
+    child_a_active = result[:, 1] > 0
+    if child_a_active.any():
+        a_grandchildren_both = (result[child_a_active, 3] > 0) & (
+            result[child_a_active, 4] > 0
+        )
+        assert (
+            a_grandchildren_both.sum() == 0
+        ), "Child A's grandchildren should be exclusive"
+
+    # 3. When Child B is active, its grandchildren should be mutually exclusive
+    child_b_active = result[:, 2] > 0
+    if child_b_active.any():
+        b_grandchildren_both = (result[child_b_active, 5] > 0) & (
+            result[child_b_active, 6] > 0
+        )
+        assert (
+            b_grandchildren_both.sum() == 0
+        ), "Child B's grandchildren should be exclusive"
+
+    # 4. When Child A is inactive (because Child B was selected), its grandchildren should be 0
+    child_a_inactive = result[:, 1] == 0
+    assert torch.all(
+        result[child_a_inactive, 3] == 0
+    ), "Grandchild A1 should be 0 when Child A inactive"
+    assert torch.all(
+        result[child_a_inactive, 4] == 0
+    ), "Grandchild A2 should be 0 when Child A inactive"
+
+    # 5. When Child B is inactive (because Child A was selected), its grandchildren should be 0
+    child_b_inactive = result[:, 2] == 0
+    assert torch.all(
+        result[child_b_inactive, 5] == 0
+    ), "Grandchild B1 should be 0 when Child B inactive"
+    assert torch.all(
+        result[child_b_inactive, 6] == 0
+    ), "Grandchild B2 should be 0 when Child B inactive"
+
+    # 6. Verify distribution is reasonable (each path should be selected sometimes)
+    child_a_count = child_a_active.sum().item()
+    child_b_count = child_b_active.sum().item()
+    assert (
+        child_a_count > 100
+    ), f"Child A selected only {child_a_count} times, expected ~500"
+    assert (
+        child_b_count > 100
+    ), f"Child B selected only {child_b_count} times, expected ~500"
+
+
+def test_multi_level_hierarchy_parent_deactivation_propagates():
+    """Verify that parent deactivation propagates to all descendants."""
+    # 4-level hierarchy without mutual exclusion
+    # Root (0) -> Child (1) -> Grandchild (2) -> Great-grandchild (3)
+
+    great_grandchild = HierarchyNode(feature_index=3)
+    grandchild = HierarchyNode(feature_index=2, children=[great_grandchild])
+    child = HierarchyNode(feature_index=1, children=[grandchild])
+    root = HierarchyNode(feature_index=0, children=[child])
+
+    modifier = hierarchy_modifier([root])
+
+    # Test case 1: Root inactive - all descendants should be deactivated
+    activations = torch.tensor([[0.0, 1.0, 1.0, 1.0]])
+    result = modifier(activations)
+    assert result[0, 0] == 0.0
+    assert result[0, 1] == 0.0, "Child should be 0 when root inactive"
+    assert result[0, 2] == 0.0, "Grandchild should be 0 when root inactive"
+    assert result[0, 3] == 0.0, "Great-grandchild should be 0 when root inactive"
+
+    # Test case 2: Root active, Child inactive - grandchildren should be deactivated
+    activations = torch.tensor([[1.0, 0.0, 1.0, 1.0]])
+    result = modifier(activations)
+    assert result[0, 0] == 1.0
+    assert result[0, 1] == 0.0
+    assert result[0, 2] == 0.0, "Grandchild should be 0 when child inactive"
+    assert result[0, 3] == 0.0, "Great-grandchild should be 0 when child inactive"
+
+    # Test case 3: Root and Child active, Grandchild inactive
+    activations = torch.tensor([[1.0, 1.0, 0.0, 1.0]])
+    result = modifier(activations)
+    assert result[0, 0] == 1.0
+    assert result[0, 1] == 1.0
+    assert result[0, 2] == 0.0
+    assert result[0, 3] == 0.0, "Great-grandchild should be 0 when grandchild inactive"
+
+    # Test case 4: All active - all should remain active
+    activations = torch.tensor([[1.0, 1.0, 1.0, 1.0]])
+    result = modifier(activations)
+    assert torch.allclose(result, activations)
