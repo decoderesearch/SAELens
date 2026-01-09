@@ -140,6 +140,9 @@ class _SparseHierarchyData:
     # ME group data (shared across levels, indexed by me_group_indices)
     me_group_siblings: torch.Tensor  # [num_groups, max_siblings]
     me_group_sizes: torch.Tensor  # [num_groups]
+    me_group_parents: (
+        torch.Tensor
+    )  # [num_groups] - parent feature index (-1 if no parent)
 
     # Total number of ME groups
     num_groups: int
@@ -160,8 +163,8 @@ def _build_sparse_hierarchy(
     # Each entry: (feature_index, effective_parent, level)
     feature_info: list[tuple[int, int, int]] = []
 
-    # ME groups: list of (parent_level, child_feature_indices)
-    me_groups: list[tuple[int, list[int]]] = []
+    # ME groups: list of (parent_level, parent_feature, child_feature_indices)
+    me_groups: list[tuple[int, int, list[int]]] = []
 
     # BFS queue: (node, effective_parent, level)
     queue: deque[tuple[HierarchyNode, int, int]] = deque()
@@ -177,21 +180,25 @@ def _build_sparse_hierarchy(
         else:
             new_effective_parent = effective_parent
 
-        # Handle mutual exclusion children - record the parent's level
+        # Handle mutual exclusion children - record the parent's level and feature
         if node.mutually_exclusive_children and len(node.children) >= 2:
             child_feats = [
                 c.feature_index for c in node.children if c.feature_index is not None
             ]
             if len(child_feats) >= 2:
                 # ME group belongs to the parent's level (current level)
-                me_groups.append((level, child_feats))
+                # Parent feature is the node's feature_index (-1 if organizational node)
+                parent_feat = (
+                    node.feature_index if node.feature_index is not None else -1
+                )
+                me_groups.append((level, parent_feat, child_feats))
 
         for child in node.children:
             queue.append((child, new_effective_parent, level + 1))
 
     # Determine max level for both features and ME groups
     max_feature_level = max((info[2] for info in feature_info), default=-1)
-    max_me_level = max((lvl for lvl, _ in me_groups), default=-1)
+    max_me_level = max((lvl for lvl, _, _ in me_groups), default=-1)
     max_level = max(max_feature_level, max_me_level)
 
     # Build level data with ME group indices per level
@@ -199,7 +206,7 @@ def _build_sparse_hierarchy(
 
     # Group ME groups by their parent level
     me_groups_by_level: dict[int, list[int]] = {}
-    for g_idx, (parent_level, _) in enumerate(me_groups):
+    for g_idx, (parent_level, _, _) in enumerate(me_groups):
         if parent_level not in me_groups_by_level:
             me_groups_by_level[parent_level] = []
         me_groups_by_level[parent_level].append(g_idx)
@@ -228,26 +235,30 @@ def _build_sparse_hierarchy(
             _LevelData(features=feats, parents=parents, me_group_indices=me_indices)
         )
 
-    # Build group siblings tensor
+    # Build group siblings and parents tensors
     if me_groups:
-        max_siblings = max(len(children) for _, children in me_groups)
+        max_siblings = max(len(children) for _, _, children in me_groups)
         num_groups = len(me_groups)
         me_group_siblings = torch.full((num_groups, max_siblings), -1, dtype=torch.long)
         me_group_sizes = torch.zeros(num_groups, dtype=torch.long)
-        for g_idx, (_, siblings) in enumerate(me_groups):
+        me_group_parents = torch.zeros(num_groups, dtype=torch.long)
+        for g_idx, (_, parent_feat, siblings) in enumerate(me_groups):
             me_group_sizes[g_idx] = len(siblings)
+            me_group_parents[g_idx] = parent_feat
             me_group_siblings[g_idx, : len(siblings)] = torch.tensor(
                 siblings, dtype=torch.long
             )
     else:
         me_group_siblings = torch.empty((0, 0), dtype=torch.long)
         me_group_sizes = torch.empty(0, dtype=torch.long)
+        me_group_parents = torch.empty(0, dtype=torch.long)
         num_groups = 0
 
     return _SparseHierarchyData(
         level_data=level_data,
         me_group_siblings=me_group_siblings,
         me_group_sizes=me_group_sizes,
+        me_group_parents=me_group_parents,
         num_groups=num_groups,
     )
 
@@ -267,29 +278,27 @@ def _apply_hierarchy_sparse(
     This ensures that ME at level L affects parent deactivation at level L+1.
     """
     result = activations.clone()
-    device = result.device
 
-    me_group_siblings = sparse_data.me_group_siblings.to(device)
-    me_group_sizes = sparse_data.me_group_sizes.to(device)
+    # Data is already on correct device from cache
+    me_group_siblings = sparse_data.me_group_siblings
+    me_group_sizes = sparse_data.me_group_sizes
+    me_group_parents = sparse_data.me_group_parents
 
     for level_data in sparse_data.level_data:
         # Step 1: Deactivate children where parent is inactive
         if level_data.features.numel() > 0:
-            features_at_level = level_data.features.to(device)
-            parents_at_level = level_data.parents.to(device)
-
-            parent_vals = result[:, parents_at_level]
-            child_vals = result[:, features_at_level]
-            result[:, features_at_level] = child_vals * (parent_vals > 0)
+            parent_vals = result[:, level_data.parents]
+            child_vals = result[:, level_data.features]
+            result[:, level_data.features] = child_vals * (parent_vals > 0)
 
         # Step 2: Apply ME for groups whose parent is at this level
         if level_data.me_group_indices.numel() > 0:
-            group_indices = level_data.me_group_indices.to(device)
             _apply_me_for_groups(
                 result,
-                group_indices,
+                level_data.me_group_indices,
                 me_group_siblings,
                 me_group_sizes,
+                me_group_parents,
             )
 
     return result
@@ -300,15 +309,20 @@ def _apply_me_for_groups(
     group_indices: torch.Tensor,
     me_group_siblings: torch.Tensor,
     me_group_sizes: torch.Tensor,
+    me_group_parents: torch.Tensor,
 ) -> None:
     """
     Apply mutual exclusion for the specified groups.
+
+    Only processes groups where the parent is active (or has no parent).
+    This is a key optimization since most groups are skipped when parent is inactive.
 
     Args:
         activations: [batch_size, num_features] - modified in place
         group_indices: [num_groups_to_process] - which groups to apply ME for
         me_group_siblings: [total_groups, max_siblings] - sibling indices per group
         me_group_sizes: [total_groups] - number of valid siblings per group
+        me_group_parents: [total_groups] - parent feature index (-1 if no parent)
     """
     batch_size = activations.shape[0]
     device = activations.device
@@ -317,30 +331,46 @@ def _apply_me_for_groups(
     if num_groups == 0:
         return
 
+    # Get parent indices for these groups
+    parents = me_group_parents[group_indices]  # [num_groups]
+
+    # Check which parents are active: [batch_size, num_groups]
+    # Groups with parent=-1 are always active (root-level ME)
+    has_parent = parents >= 0
+    if has_parent.any():
+        safe_parents = parents.clamp(min=0)
+        parent_active = activations[:, safe_parents] > 0  # [batch, num_groups]
+        # Groups without parent are always "active"
+        parent_active = parent_active | ~has_parent
+    else:
+        # All groups have no parent - all are active
+        parent_active = torch.ones(
+            batch_size, num_groups, dtype=torch.bool, device=device
+        )
+
+    # Early exit if no parents are active
+    if not parent_active.any():
+        return
+
     # Get siblings for the groups we're processing
     siblings = me_group_siblings[group_indices]  # [num_groups, max_siblings]
     sizes = me_group_sizes[group_indices]  # [num_groups]
     max_siblings = siblings.shape[1]
 
     # Get activations for all siblings: [batch_size, num_groups, max_siblings]
-    safe_siblings = siblings.clamp(min=0)  # [num_groups, max_siblings]
-    flat_siblings = safe_siblings.view(-1)  # [num_groups * max_siblings]
-    sibling_activations = activations[:, flat_siblings].view(
+    safe_siblings = siblings.clamp(min=0)
+    sibling_activations = activations[:, safe_siblings.view(-1)].view(
         batch_size, num_groups, max_siblings
     )
 
-    # Create validity mask for padding
+    # Create validity mask for padding: [num_groups, max_siblings]
     sibling_range = torch.arange(max_siblings, device=device)
-    valid_mask = sibling_range.unsqueeze(0) < sizes.unsqueeze(
-        1
-    )  # [num_groups, max_siblings]
+    valid_mask = sibling_range < sizes.unsqueeze(1)
 
-    # Find active valid siblings
-    sibling_active = (sibling_activations > 0) & valid_mask.unsqueeze(
-        0
-    )  # [batch, groups, siblings]
+    # Find active valid siblings, but only where parent is active: [batch, groups, siblings]
+    sibling_active = (sibling_activations > 0) & valid_mask & parent_active.unsqueeze(2)
 
-    # Count active per group: [batch_size, num_groups]
+    # Count active per group and check for conflicts: [batch_size, num_groups]
     active_counts = sibling_active.sum(dim=2)
     needs_exclusion = active_counts > 1
 
@@ -349,11 +379,10 @@ def _apply_me_for_groups(
 
     # Get (batch, group) pairs needing exclusion
     batch_with_conflict, groups_with_conflict = torch.where(needs_exclusion)
-
-    if batch_with_conflict.numel() == 0:
-        return
-
     num_conflicts = batch_with_conflict.numel()
+
+    if num_conflicts == 0:
+        return
 
     # Get siblings and activations for conflicts
     conflict_siblings = siblings[groups_with_conflict]  # [num_conflicts, max_siblings]
@@ -361,17 +390,17 @@ def _apply_me_for_groups(
         batch_with_conflict, groups_with_conflict
     ]  # [num_conflicts, max_siblings]
 
-    # Random selection for winner
+    # Random selection for winner - use large negative instead of -inf tensor
     random_scores = torch.rand(num_conflicts, max_siblings, device=device)
-    random_scores = torch.where(
-        conflict_active,
-        random_scores,
-        torch.tensor(-float("inf"), device=device),
-    )
+    random_scores[~conflict_active] = -1e9  # Mask out inactive siblings
+
     winner_idx = random_scores.argmax(dim=1)
 
-    # Determine losers
-    is_winner = sibling_range == winner_idx.unsqueeze(1)
+    # Determine losers using scatter for efficiency
+    is_winner = torch.zeros(
+        num_conflicts, max_siblings, dtype=torch.bool, device=device
+    )
+    is_winner.scatter_(1, winner_idx.unsqueeze(1), True)
     should_deactivate = conflict_active & ~is_winner
 
     # Get (conflict, sibling) pairs to deactivate
@@ -439,6 +468,7 @@ def hierarchy_modifier(
                 ],
                 me_group_siblings=sparse_data.me_group_siblings.to(device),
                 me_group_sizes=sparse_data.me_group_sizes.to(device),
+                me_group_parents=sparse_data.me_group_parents.to(device),
                 num_groups=sparse_data.num_groups,
             )
         return device_cache[device]
