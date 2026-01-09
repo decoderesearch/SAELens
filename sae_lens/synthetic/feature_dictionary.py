@@ -97,6 +97,7 @@ class FeatureDictionary(nn.Module):
         hidden_dim: int,
         bias: bool = False,
         initializer: FeatureDictionaryInitializer | None = orthogonal_initializer(),
+        device: str | torch.device = "cpu",
     ):
         """
         Create a new FeatureDictionary.
@@ -106,20 +107,23 @@ class FeatureDictionary(nn.Module):
             hidden_dim: Dimensionality of the hidden space
             bias: Whether to include a bias term in the embedding
             initializer: Initializer function to use. If None, the embeddings are initialized to random unit vectors. By default will orthogonalize embeddings.
+            device: Device to use for the feature dictionary.
         """
         super().__init__()
         self.num_features = num_features
         self.hidden_dim = hidden_dim
 
         # Initialize feature vectors as unit vectors
-        embeddings = torch.randn(num_features, hidden_dim)
+        embeddings = torch.randn(num_features, hidden_dim, device=device)
         embeddings = embeddings / embeddings.norm(p=2, dim=1, keepdim=True).clamp(
             min=1e-8
         )
         self.feature_vectors = nn.Parameter(embeddings)
 
         # Initialize bias (zeros if not using bias, but still a parameter for consistent API)
-        self.bias = nn.Parameter(torch.zeros(hidden_dim), requires_grad=bias)
+        self.bias = nn.Parameter(
+            torch.zeros(hidden_dim, device=device), requires_grad=bias
+        )
 
         if initializer is not None:
             initializer(self)
