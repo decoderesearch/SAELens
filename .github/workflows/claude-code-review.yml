@@ -52,6 +52,8 @@ jobs:
 
             IMPORTANT: When referring to numbered list items, never use "#N" syntax (e.g., "item #3" or "see #2 above"). GitHub interprets "#N" as issue/PR references. Instead, use phrases like "item 3", "the third point", or "point 2 above".
 
+            Do not suggest tests that involve running on CUDA or moving to CUDA device. Our tests needs to run on Github Actions, which is CPU only.
+
             Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
 
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md

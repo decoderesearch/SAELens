@@ -764,3 +764,207 @@ def test_multi_level_hierarchy_parent_deactivation_propagates():
     activations = torch.tensor([[1.0, 1.0, 1.0, 1.0]])
     result = modifier(activations)
     assert torch.allclose(result, activations)
+
+
+def test_mutual_exclusion_root_level_groups_no_parent():
+    """Test ME groups at root level (parent=-1) work correctly.
+
+    This exercises the mixed-parent code path in _apply_me_for_groups where
+    some groups have parents and some don't. The implementation uses
+    `safe_parents = parents.clamp(min=0)` which reads activations[:, 0] for
+    root-level groups, but the result is masked out since these groups are
+    always considered "active" regardless of feature 0's value.
+    """
+    # Create two independent root-level ME groups (no parent feature)
+    # Tree 1: organizational root with ME children at features 0, 1
+    # Tree 2: organizational root with ME children at features 2, 3
+    tree1 = HierarchyNode(
+        feature_index=None,  # organizational node, no parent feature
+        children=[HierarchyNode(feature_index=0), HierarchyNode(feature_index=1)],
+        mutually_exclusive_children=True,
+    )
+    tree2 = HierarchyNode(
+        feature_index=None,
+        children=[HierarchyNode(feature_index=2), HierarchyNode(feature_index=3)],
+        mutually_exclusive_children=True,
+    )
+
+    modifier = hierarchy_modifier([tree1, tree2])
+
+    # All features active - ME should still be enforced
+    n_samples = 500
+    activations = torch.ones(n_samples, 4)
+    result = modifier(activations)
+
+    # Tree 1: features 0 and 1 should be mutually exclusive
+    both_01_active = (result[:, 0] > 0) & (result[:, 1] > 0)
+    assert both_01_active.sum() == 0, "Features 0 and 1 should be mutually exclusive"
+
+    # Tree 2: features 2 and 3 should be mutually exclusive
+    both_23_active = (result[:, 2] > 0) & (result[:, 3] > 0)
+    assert both_23_active.sum() == 0, "Features 2 and 3 should be mutually exclusive"
+
+    # Each ME group should have exactly one active
+    tree1_active = (result[:, 0] > 0) | (result[:, 1] > 0)
+    tree2_active = (result[:, 2] > 0) | (result[:, 3] > 0)
+    assert tree1_active.all(), "Tree 1 should always have one child active"
+    assert tree2_active.all(), "Tree 2 should always have one child active"
+
+
+def test_mutual_exclusion_mixed_root_and_nested_groups():
+    """Test hierarchy with both root-level and nested ME groups.
+
+    This exercises the code path where some ME groups have parent=-1 (root level)
+    and others have valid parent indices, ensuring the safe_parents.clamp(min=0)
+    logic handles the mixed case correctly.
+    """
+    # Tree 1: Root-level ME (parent=-1 for the ME group)
+    root_me = HierarchyNode(
+        feature_index=None,
+        children=[HierarchyNode(feature_index=0), HierarchyNode(feature_index=1)],
+        mutually_exclusive_children=True,
+    )
+
+    # Tree 2: Nested ME (parent=2 for the ME group)
+    nested_me = HierarchyNode(
+        feature_index=2,
+        children=[HierarchyNode(feature_index=3), HierarchyNode(feature_index=4)],
+        mutually_exclusive_children=True,
+    )
+
+    modifier = hierarchy_modifier([root_me, nested_me])
+
+    n_samples = 500
+    activations = torch.ones(n_samples, 5)
+    result = modifier(activations)
+
+    # Root-level ME: 0 and 1 mutually exclusive, always one active
+    both_01 = (result[:, 0] > 0) & (result[:, 1] > 0)
+    assert both_01.sum() == 0, "Root ME: 0 and 1 should be exclusive"
+    either_01 = (result[:, 0] > 0) | (result[:, 1] > 0)
+    assert either_01.all(), "Root ME: one of 0 or 1 should always be active"
+
+    # Nested ME: 3 and 4 mutually exclusive when parent (2) is active
+    parent_active = result[:, 2] > 0
+    both_34 = (result[:, 3] > 0) & (result[:, 4] > 0)
+    assert both_34.sum() == 0, "Nested ME: 3 and 4 should be exclusive"
+
+    # When parent is active, one child should be active
+    either_34_when_parent = ((result[:, 3] > 0) | (result[:, 4] > 0)) & parent_active
+    assert (
+        either_34_when_parent.sum() == parent_active.sum()
+    ), "Nested ME: one of 3 or 4 should be active when parent 2 is active"
+
+
+def test_hierarchy_modifier_large_hierarchy_performance():
+    """Test hierarchy modifier performance with a large hierarchy (50k nodes).
+
+    Creates a hierarchy with:
+    - 2500 root trees, each with 20 nodes (depth 2)
+    - Mix of ME and non-ME nodes to exercise all code paths
+    - Verifies correctness and that it completes in reasonable time
+    """
+    import time
+
+    num_features = 50_000
+    feature_idx = 0
+    trees = []
+
+    # Create 2500 trees, each with 20 features
+    # Structure: root -> 4 children (ME) -> 4 grandchildren each (ME)
+    # That's 1 + 4 + 16 = 21 features per tree, but we'll use 20 for simplicity
+    features_per_tree = 20
+    num_trees = num_features // features_per_tree
+
+    for _ in range(num_trees):
+        if feature_idx >= num_features - features_per_tree:
+            break
+
+        # Create grandchildren (leaf level) - 4 groups of 4
+        grandchildren_groups = []
+        for _ in range(4):
+            gc_group = []
+            for _ in range(4):
+                if feature_idx < num_features:
+                    gc_group.append(HierarchyNode(feature_index=feature_idx))
+                    feature_idx += 1
+            grandchildren_groups.append(gc_group)
+
+        # Create children with ME grandchildren
+        children = []
+        for gc_group in grandchildren_groups:
+            if feature_idx < num_features and len(gc_group) >= 2:
+                child = HierarchyNode(
+                    feature_index=feature_idx,
+                    children=gc_group,
+                    mutually_exclusive_children=True,
+                )
+                children.append(child)
+                feature_idx += 1
+
+        # Create root with ME children
+        if feature_idx < num_features and len(children) >= 2:
+            root = HierarchyNode(
+                feature_index=feature_idx,
+                children=children,
+                mutually_exclusive_children=True,
+            )
+            trees.append(root)
+            feature_idx += 1
+
+    actual_features = feature_idx
+    assert (
+        actual_features > 40_000
+    ), f"Should have created ~50k features, got {actual_features}"
+
+    # Time the modifier creation
+    start = time.perf_counter()
+    modifier = hierarchy_modifier(trees)
+    creation_time = time.perf_counter() - start
+
+    # Time the modifier application
+    batch_size = 1000
+    activations = torch.rand(batch_size, actual_features)
+    activations = (activations > 0.5).float()  # Binary activations
+
+    start = time.perf_counter()
+    result = modifier(activations)
+    apply_time = time.perf_counter() - start
+
+    # Verify basic correctness
+    assert result.shape == activations.shape
+
+    # Verify hierarchy is enforced: spot check a few trees
+    for tree in trees[:10]:
+        root_idx = tree.feature_index
+        root_inactive = result[:, root_idx] == 0
+
+        # All descendants should be 0 when root is inactive
+        for child in tree.children:
+            child_idx = child.feature_index
+            assert torch.all(
+                result[root_inactive, child_idx] == 0
+            ), f"Child {child_idx} should be 0 when root {root_idx} inactive"
+
+    # Verify ME is enforced for roots with ME children
+    for tree in trees[:10]:
+        if tree.mutually_exclusive_children and len(tree.children) >= 2:
+            root_idx = tree.feature_index
+            root_active = result[:, root_idx] > 0
+
+            child_indices = [c.feature_index for c in tree.children]
+            children_active = result[:, child_indices] > 0
+
+            # Count active children per sample where root is active
+            active_counts = children_active[root_active].sum(dim=1)
+            assert torch.all(
+                active_counts <= 1
+            ), "ME should enforce at most one child active"
+
+    # Performance assertions (generous bounds for CI variability)
+    assert (
+        creation_time < 2.0
+    ), f"Modifier creation took {creation_time:.2f}s, expected < 2s"
+    assert (
+        apply_time < 2.0
+    ), f"Modifier application took {apply_time:.2f}s, expected < 2s"

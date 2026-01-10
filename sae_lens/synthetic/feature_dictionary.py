@@ -66,11 +66,11 @@ def orthogonalize_embeddings(
             row_indices = torch.arange(chunk_len, device=embeddings.device)
             col_indices = i + row_indices  # column indices in full matrix
 
-            # Zero out diagonal positions
-            mask = torch.ones_like(chunk_dots)
-            mask[row_indices, col_indices] = 0
+            # Boolean mask: True for off-diagonal elements we want to include
+            off_diag_mask = torch.ones_like(chunk_dots, dtype=torch.bool)
+            off_diag_mask[row_indices, col_indices] = False
 
-            off_diag_loss = off_diag_loss + (chunk_dots * mask).pow(2).sum()
+            off_diag_loss = off_diag_loss + chunk_dots[off_diag_mask].pow(2).sum()
 
             # Diagonal loss: keep self-dot-products at 1
             diag_vals = chunk_dots[row_indices, col_indices]
