@@ -17,9 +17,9 @@ class LowRankCorrelationMatrix(NamedTuple):
     making it suitable for very large numbers of features (e.g., 1M+).
 
     Attributes:
-        correlation_factor: Factor matrix of shape [num_features, rank] that captures
+        correlation_factor: Factor matrix of shape (num_features, rank) that captures
             correlations through shared latent factors.
-        correlation_diag: Diagonal variance term of shape [num_features]. Should be
+        correlation_diag: Diagonal variance term of shape (num_features,). Should be
             chosen such that the diagonal of the full correlation matrix equals 1.
             Typically: correlation_diag[i] = 1 - sum(correlation_factor[i, :]^2)
     """
@@ -47,7 +47,7 @@ def create_correlation_matrix_from_correlations(
         default_correlation: Default correlation for unspecified pairs
 
     Returns:
-        Correlation matrix of shape [num_features, num_features]
+        Correlation matrix of shape (num_features, num_features)
     """
     matrix = torch.eye(num_features) + default_correlation * (
         1 - torch.eye(num_features)
@@ -79,6 +79,7 @@ def _fix_correlation_matrix(
     fixed_matrix = eigenvecs @ torch.diag(eigenvals) @ eigenvecs.T
 
     diag_vals = torch.diag(fixed_matrix)
+    diag_vals = torch.clamp(diag_vals, min=1e-8)  # Prevent division by zero
     fixed_matrix = fixed_matrix / torch.sqrt(
         diag_vals.unsqueeze(0) * diag_vals.unsqueeze(1)
     )
@@ -207,7 +208,7 @@ def generate_random_correlation_matrix(
         dtype: Data type for the matrix
 
     Returns:
-        Random correlation matrix of shape [num_features, num_features]
+        Random correlation matrix of shape (num_features, num_features)
     """
     dtype = str_to_dtype(dtype)
     _validate_correlation_params(

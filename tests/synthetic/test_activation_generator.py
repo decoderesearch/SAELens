@@ -346,7 +346,7 @@ class TestValidateLowRankCorrelationMatrix:
     def test_raises_on_wrong_factor_num_features(self):
         factor = torch.randn(3, 2)
         diag = torch.ones(5)
-        with pytest.raises(ValueError, match=r"must have shape \[5, rank\]"):
+        with pytest.raises(ValueError, match=r"must have shape \(5, rank\)"):
             _validate_low_rank_correlation(factor, diag, num_features=5)
 
     def test_raises_on_wrong_diag_shape(self):
@@ -556,7 +556,7 @@ class TestActivationGeneratorLowRankCorrelationMatrixValidation:
     def test_raises_on_wrong_factor_shape(self):
         factor = torch.randn(3, 2)
         diag = torch.ones(5)
-        with pytest.raises(ValueError, match=r"must have shape \[5, rank\]"):
+        with pytest.raises(ValueError, match=r"must have shape \(5, rank\)"):
             ActivationGenerator(
                 num_features=5,
                 firing_probabilities=0.5,

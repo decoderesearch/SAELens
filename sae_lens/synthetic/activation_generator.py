@@ -191,13 +191,13 @@ def _generate_low_rank_correlated_features(
 
     Args:
         batch_size: Number of samples to generate
-        correlation_factor: Factor matrix of shape [num_features, rank]
-        correlation_diag: Diagonal term of shape [num_features]
+        correlation_factor: Factor matrix of shape (num_features, rank)
+        correlation_diag: Diagonal term of shape (num_features,)
         thresholds: Pre-computed thresholds for each feature (from inverse normal CDF)
         device: Device to generate samples on
 
     Returns:
-        Binary feature matrix of shape [batch_size, num_features]
+        Binary feature matrix of shape (batch_size, num_features)
     """
     mvn = LowRankMultivariateNormal(
         loc=torch.zeros(
@@ -259,7 +259,7 @@ def _validate_correlation_matrix(
 
     Args:
         correlation_matrix: The matrix to validate
-        num_features: Expected number of features (matrix should be [num_features, num_features])
+        num_features: Expected number of features (matrix should be (num_features, num_features))
 
     Raises:
         ValueError: If the matrix has incorrect shape, non-unit diagonal, or is not positive definite
@@ -289,8 +289,8 @@ def _validate_low_rank_correlation(
     """Validate that low-rank correlation parameters have correct properties.
 
     Args:
-        correlation_factor: Factor matrix of shape [num_features, rank]
-        correlation_diag: Diagonal term of shape [num_features]
+        correlation_factor: Factor matrix of shape (num_features, rank)
+        correlation_diag: Diagonal term of shape (num_features,)
         num_features: Expected number of features
 
     Raises:
@@ -302,7 +302,7 @@ def _validate_low_rank_correlation(
         )
     if correlation_factor.shape[0] != num_features:
         raise ValueError(
-            f"correlation_factor must have shape [{num_features}, rank], "
+            f"correlation_factor must have shape ({num_features}, rank), "
             f"got {tuple(correlation_factor.shape)}"
         )
     if correlation_diag.shape != (num_features,):
