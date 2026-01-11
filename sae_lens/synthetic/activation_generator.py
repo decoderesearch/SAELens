@@ -163,7 +163,7 @@ def _generate_correlated_features(
         device: Device to generate samples on
 
     Returns:
-        Binary feature matrix of shape [batch_size, num_features]
+        Binary feature matrix of shape (batch_size, num_features)
     """
     num_features = correlation_matrix.shape[0]
 
