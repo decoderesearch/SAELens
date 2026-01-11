@@ -3,6 +3,8 @@ from typing import NamedTuple
 
 import torch
 
+from sae_lens.util import str_to_dtype
+
 
 class LowRankCorrelation(NamedTuple):
     """
@@ -34,10 +36,14 @@ def create_correlation_matrix_from_correlations(
     """
     Create a correlation matrix with specified pairwise correlations.
 
+    Note: If the resulting matrix is not positive definite, it will be adjusted
+    to ensure validity. This adjustment may change the specified correlation
+    values. To minimize this effect, use smaller correlation magnitudes.
+
     Args:
         num_features: Number of features
         correlations: Dict mapping (i, j) pairs to correlation values.
-            Pairs should have i < j.
+            Pairs should have i < j. Pairs not specified will use default_correlation.
         default_correlation: Default correlation for unspecified pairs
 
     Returns:
@@ -81,6 +87,25 @@ def _fix_correlation_matrix(
     return fixed_matrix
 
 
+def _validate_correlation_params(
+    positive_ratio: float,
+    uncorrelated_ratio: float,
+    min_correlation_strength: float,
+    max_correlation_strength: float,
+) -> None:
+    """Validate parameters for correlation generation."""
+    if not 0.0 <= positive_ratio <= 1.0:
+        raise ValueError("positive_ratio must be between 0.0 and 1.0")
+    if not 0.0 <= uncorrelated_ratio <= 1.0:
+        raise ValueError("uncorrelated_ratio must be between 0.0 and 1.0")
+    if min_correlation_strength < 0:
+        raise ValueError("min_correlation_strength must be non-negative")
+    if max_correlation_strength > 1.0:
+        raise ValueError("max_correlation_strength must be <= 1.0")
+    if min_correlation_strength > max_correlation_strength:
+        raise ValueError("min_correlation_strength must be <= max_correlation_strength")
+
+
 def generate_random_correlations(
     num_features: int,
     positive_ratio: float = 0.5,
@@ -94,29 +119,26 @@ def generate_random_correlations(
 
     Args:
         num_features: Number of features
-        positive_ratio: Fraction of correlations that should be positive (0.0 to 1.0)
-        uncorrelated_ratio: Fraction of feature pairs that should remain uncorrelated (0.0 to 1.0)
-        min_correlation_strength: Minimum absolute correlation strength
-        max_correlation_strength: Maximum absolute correlation strength
+        positive_ratio: Fraction of correlated pairs that should be positive (0.0 to 1.0)
+        uncorrelated_ratio: Fraction of feature pairs that should have zero correlation
+            (0.0 to 1.0). These pairs are omitted from the returned dictionary.
+        min_correlation_strength: Minimum absolute correlation strength for correlated pairs
+        max_correlation_strength: Maximum absolute correlation strength for correlated pairs
         seed: Random seed for reproducibility
 
     Returns:
-        Dictionary mapping (i, j) pairs to correlation values
+        Dictionary mapping (i, j) pairs to correlation values. Pairs with zero
+        correlation (determined by uncorrelated_ratio) are not included.
     """
     # Use local random number generator to avoid side effects on global state
     rng = random.Random(seed)
 
-    # Validate inputs
-    if not 0.0 <= positive_ratio <= 1.0:
-        raise ValueError("positive_ratio must be between 0.0 and 1.0")
-    if not 0.0 <= uncorrelated_ratio <= 1.0:
-        raise ValueError("uncorrelated_ratio must be between 0.0 and 1.0")
-    if min_correlation_strength < 0:
-        raise ValueError("min_correlation_strength must be non-negative")
-    if max_correlation_strength > 1.0:
-        raise ValueError("max_correlation_strength must be <= 1.0")
-    if min_correlation_strength > max_correlation_strength:
-        raise ValueError("min_correlation_strength must be <= max_correlation_strength")
+    _validate_correlation_params(
+        positive_ratio,
+        uncorrelated_ratio,
+        min_correlation_strength,
+        max_correlation_strength,
+    )
 
     # Generate all possible feature pairs (i, j) where i < j
     all_pairs = [
@@ -159,35 +181,84 @@ def generate_random_correlation_matrix(
     min_correlation_strength: float = 0.1,
     max_correlation_strength: float = 0.8,
     seed: int | None = None,
+    device: torch.device | str = "cpu",
+    dtype: torch.dtype | str = torch.float32,
 ) -> torch.Tensor:
     """
     Generate a random correlation matrix with specified constraints.
 
-    This is a convenience function that combines generate_random_correlations()
-    and create_correlation_matrix_from_correlations() into a single call.
+    Uses vectorized torch operations for efficiency with large numbers of features.
+
+    Note: If the randomly generated matrix is not positive definite, it will be
+    adjusted to ensure validity. This adjustment may change correlation values,
+    including turning some zero correlations into non-zero values. To minimize
+    this effect, use smaller correlation strengths (e.g., 0.01-0.1).
 
     Args:
         num_features: Number of features
-        positive_ratio: Fraction of correlations that should be positive (0.0 to 1.0)
-        uncorrelated_ratio: Fraction of feature pairs that should remain uncorrelated (0.0 to 1.0)
-        min_correlation_strength: Minimum absolute correlation strength
-        max_correlation_strength: Maximum absolute correlation strength
+        positive_ratio: Fraction of correlated pairs that should be positive (0.0 to 1.0)
+        uncorrelated_ratio: Fraction of feature pairs that should have zero correlation
+            (0.0 to 1.0). Note that matrix fixing for positive definiteness may reduce
+            the actual number of zero correlations.
+        min_correlation_strength: Minimum absolute correlation strength for correlated pairs
+        max_correlation_strength: Maximum absolute correlation strength for correlated pairs
         seed: Random seed for reproducibility
+        device: Device to create the matrix on
+        dtype: Data type for the matrix
 
     Returns:
         Random correlation matrix of shape [num_features, num_features]
     """
-    # Generate random correlations
-    correlations = generate_random_correlations(
-        num_features=num_features,
-        positive_ratio=positive_ratio,
-        uncorrelated_ratio=uncorrelated_ratio,
-        min_correlation_strength=min_correlation_strength,
-        max_correlation_strength=max_correlation_strength,
-        seed=seed,
+    dtype = str_to_dtype(dtype)
+    _validate_correlation_params(
+        positive_ratio,
+        uncorrelated_ratio,
+        min_correlation_strength,
+        max_correlation_strength,
     )
 
-    # Create and return correlation matrix
-    return create_correlation_matrix_from_correlations(
-        num_features=num_features, correlations=correlations
+    if num_features <= 1:
+        return torch.eye(num_features, device=device, dtype=dtype)
+
+    # Set random seed if provided
+    generator = torch.Generator(device=device)
+    if seed is not None:
+        generator.manual_seed(seed)
+
+    # Get upper triangular indices (i < j)
+    row_idx, col_idx = torch.triu_indices(num_features, num_features, offset=1)
+    num_pairs = row_idx.shape[0]
+
+    # Generate random values for all pairs at once
+    # is_correlated: 1 if this pair should have a correlation, 0 otherwise
+    is_correlated = (
+        torch.rand(num_pairs, generator=generator, device=device) >= uncorrelated_ratio
     )
+
+    # signs: +1 for positive correlation, -1 for negative
+    is_positive = (
+        torch.rand(num_pairs, generator=generator, device=device) < positive_ratio
+    )
+    signs = torch.where(is_positive, 1.0, -1.0)
+
+    # strengths: uniform in [min_strength, max_strength]
+    strengths = (
+        torch.rand(num_pairs, generator=generator, device=device, dtype=dtype)
+        * (max_correlation_strength - min_correlation_strength)
+        + min_correlation_strength
+    )
+
+    # Combine: correlation = is_correlated * sign * strength
+    correlations = is_correlated.to(dtype) * signs.to(dtype) * strengths
+
+    # Build the symmetric matrix
+    matrix = torch.eye(num_features, device=device, dtype=dtype)
+    matrix[row_idx, col_idx] = correlations
+    matrix[col_idx, row_idx] = correlations
+
+    # Check positive definiteness and fix if necessary
+    eigenvals = torch.linalg.eigvalsh(matrix)
+    if torch.any(eigenvals < -1e-6):
+        matrix = _fix_correlation_matrix(matrix)
+
+    return matrix

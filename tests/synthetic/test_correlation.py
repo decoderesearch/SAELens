@@ -187,3 +187,136 @@ class TestGenerateRandomCorrelationMatrix:
         result = generate_random_correlation_matrix(num_features=5, seed=42)
         eigenvals = torch.linalg.eigvalsh(result)
         assert torch.all(eigenvals >= -1e-6)
+
+    def test_respects_device_parameter(self):
+        result = generate_random_correlation_matrix(num_features=5, device="cpu")
+        assert result.device == torch.device("cpu")
+
+    def test_respects_dtype_parameter(self):
+        result = generate_random_correlation_matrix(num_features=5, dtype=torch.float64)
+        assert result.dtype == torch.float64
+
+    def test_single_feature_returns_identity(self):
+        result = generate_random_correlation_matrix(num_features=1)
+        torch.testing.assert_close(result, torch.eye(1))
+
+    def test_zero_features_returns_empty(self):
+        result = generate_random_correlation_matrix(num_features=0)
+        assert result.shape == (0, 0)
+
+
+class TestGenerateRandomCorrelationMatrixStatistics:
+    def test_higher_positive_ratio_produces_more_positive_correlations(self):
+        num_features = 30
+        num_samples = 20
+
+        def avg_positive_fraction(positive_ratio: float) -> float:
+            total_positive = 0
+            total_pairs = num_features * (num_features - 1) // 2
+            for i in range(num_samples):
+                matrix = generate_random_correlation_matrix(
+                    num_features=num_features,
+                    positive_ratio=positive_ratio,
+                    uncorrelated_ratio=0.0,
+                    min_correlation_strength=0.05,
+                    max_correlation_strength=0.15,
+                    seed=i * 54321,
+                )
+                row_idx, col_idx = torch.triu_indices(
+                    num_features, num_features, offset=1
+                )
+                off_diag = matrix[row_idx, col_idx]
+                total_positive += (off_diag > 0).sum().item()
+            return total_positive / (num_samples * total_pairs)
+
+        low_positive = avg_positive_fraction(0.2)
+        high_positive = avg_positive_fraction(0.8)
+        assert high_positive > low_positive + 0.3
+
+    def test_higher_uncorrelated_ratio_produces_smaller_correlations(self):
+        num_features = 30
+        num_samples = 20
+
+        def avg_abs_correlation(uncorrelated_ratio: float) -> float:
+            total = 0.0
+            count = 0
+            for i in range(num_samples):
+                matrix = generate_random_correlation_matrix(
+                    num_features=num_features,
+                    uncorrelated_ratio=uncorrelated_ratio,
+                    min_correlation_strength=0.1,
+                    max_correlation_strength=0.2,
+                    seed=i * 12345,
+                )
+                row_idx, col_idx = torch.triu_indices(
+                    num_features, num_features, offset=1
+                )
+                off_diag = matrix[row_idx, col_idx]
+                total += off_diag.abs().sum().item()
+                count += off_diag.numel()
+            return total / count
+
+        low_uncorrelated = avg_abs_correlation(0.2)
+        high_uncorrelated = avg_abs_correlation(0.8)
+        assert low_uncorrelated > high_uncorrelated
+
+    def test_higher_strength_range_produces_larger_correlations(self):
+        num_features = 30
+        num_samples = 20
+
+        def avg_abs_correlation(min_s: float, max_s: float) -> float:
+            total = 0.0
+            count = 0
+            for i in range(num_samples):
+                matrix = generate_random_correlation_matrix(
+                    num_features=num_features,
+                    uncorrelated_ratio=0.0,
+                    min_correlation_strength=min_s,
+                    max_correlation_strength=max_s,
+                    seed=i * 11111,
+                )
+                row_idx, col_idx = torch.triu_indices(
+                    num_features, num_features, offset=1
+                )
+                off_diag = matrix[row_idx, col_idx]
+                total += off_diag.abs().sum().item()
+                count += off_diag.numel()
+            return total / count
+
+        low_strength = avg_abs_correlation(0.05, 0.1)
+        high_strength = avg_abs_correlation(0.2, 0.3)
+        assert high_strength > low_strength
+
+    def test_all_zero_correlations_when_uncorrelated_ratio_is_one(self):
+        matrix = generate_random_correlation_matrix(
+            num_features=20,
+            uncorrelated_ratio=1.0,
+        )
+        expected = torch.eye(20)
+        torch.testing.assert_close(matrix, expected)
+
+    def test_small_correlations_preserve_positive_ratio_exactly(self):
+        num_features = 20
+        matrix = generate_random_correlation_matrix(
+            num_features=num_features,
+            positive_ratio=1.0,
+            uncorrelated_ratio=0.0,
+            min_correlation_strength=0.01,
+            max_correlation_strength=0.02,
+        )
+        row_idx, col_idx = torch.triu_indices(num_features, num_features, offset=1)
+        off_diag = matrix[row_idx, col_idx]
+        assert torch.all(off_diag > 0)
+
+    def test_small_negative_correlations_preserve_sign(self):
+        num_features = 20
+        matrix = generate_random_correlation_matrix(
+            num_features=num_features,
+            positive_ratio=0.0,
+            uncorrelated_ratio=0.0,
+            min_correlation_strength=0.01,
+            max_correlation_strength=0.02,
+        )
+        row_idx, col_idx = torch.triu_indices(num_features, num_features, offset=1)
+        off_diag = matrix[row_idx, col_idx]
+        assert torch.all(off_diag < 0)
