@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from sae_lens.synthetic import ActivationGenerator, LowRankCorrelation
+from sae_lens.synthetic import ActivationGenerator, LowRankCorrelationMatrix
 from sae_lens.synthetic.activation_generator import (
     _normalize_modifiers,
     _to_tensor,
@@ -330,7 +330,7 @@ class TestActivationGeneratorCorrelationMatrixValidation:
             )
 
 
-class TestValidateLowRankCorrelation:
+class TestValidateLowRankCorrelationMatrix:
     def test_valid_low_rank_correlation(self):
         num_features = 5
         rank = 2
@@ -364,7 +364,7 @@ class TestValidateLowRankCorrelation:
             _validate_low_rank_correlation(factor, diag, num_features=5)
 
 
-class TestActivationGeneratorLowRankCorrelation:
+class TestActivationGeneratorLowRankCorrelationMatrix:
     def test_with_low_rank_correlation_tuple(self):
         """Test that low-rank correlation as tuple works."""
         num_features = 5
@@ -384,7 +384,7 @@ class TestActivationGeneratorLowRankCorrelation:
         assert torch.all(samples >= 0)
 
     def test_with_low_rank_correlation_named_tuple(self):
-        """Test that LowRankCorrelation NamedTuple works."""
+        """Test that LowRankCorrelationMatrix NamedTuple works."""
         num_features = 5
         rank = 2
         factor = torch.randn(num_features, rank) * 0.1
@@ -394,7 +394,7 @@ class TestActivationGeneratorLowRankCorrelation:
         generator = ActivationGenerator(
             num_features=num_features,
             firing_probabilities=0.5,
-            correlation_matrix=LowRankCorrelation(factor, diag),
+            correlation_matrix=LowRankCorrelationMatrix(factor, diag),
         )
 
         samples = generator.sample(batch_size=100)
@@ -547,7 +547,7 @@ class TestActivationGeneratorLowRankCorrelation:
                 )
 
 
-class TestActivationGeneratorLowRankCorrelationValidation:
+class TestActivationGeneratorLowRankCorrelationMatrixValidation:
     def test_raises_on_wrong_factor_shape(self):
         """Test that ActivationGenerator raises on wrong factor shape."""
         factor = torch.randn(3, 2)

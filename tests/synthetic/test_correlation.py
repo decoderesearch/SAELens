@@ -1,11 +1,14 @@
 import pytest
 import torch
 
+from sae_lens.synthetic.activation_generator import ActivationGenerator
 from sae_lens.synthetic.correlation import (
+    LowRankCorrelationMatrix,
     _fix_correlation_matrix,
     create_correlation_matrix_from_correlations,
     generate_random_correlation_matrix,
     generate_random_correlations,
+    generate_random_low_rank_correlation_matrix,
 )
 
 
@@ -320,3 +323,175 @@ class TestGenerateRandomCorrelationMatrixStatistics:
         row_idx, col_idx = torch.triu_indices(num_features, num_features, offset=1)
         off_diag = matrix[row_idx, col_idx]
         assert torch.all(off_diag < 0)
+
+
+class TestGenerateRandomLowRankCorrelationMatrix:
+    def test_returns_low_rank_correlation_matrix(self):
+        result = generate_random_low_rank_correlation_matrix(
+            num_features=100, rank=10, seed=42
+        )
+        assert isinstance(result, LowRankCorrelationMatrix)
+
+    def test_factor_has_correct_shape(self):
+        num_features = 100
+        rank = 10
+        result = generate_random_low_rank_correlation_matrix(
+            num_features=num_features, rank=rank
+        )
+        assert result.correlation_factor.shape == (num_features, rank)
+
+    def test_diag_has_correct_shape(self):
+        num_features = 100
+        result = generate_random_low_rank_correlation_matrix(
+            num_features=num_features, rank=10
+        )
+        assert result.correlation_diag.shape == (num_features,)
+
+    def test_diag_is_positive(self):
+        result = generate_random_low_rank_correlation_matrix(num_features=100, rank=10)
+        assert torch.all(result.correlation_diag > 0)
+
+    def test_implied_diagonal_is_ones(self):
+        result = generate_random_low_rank_correlation_matrix(num_features=100, rank=10)
+        factor = result.correlation_factor
+        diag = result.correlation_diag
+        implied_diag = (factor**2).sum(dim=1) + diag
+        torch.testing.assert_close(implied_diag, torch.ones(100), atol=1e-5, rtol=0)
+
+    def test_seed_reproducibility(self):
+        result1 = generate_random_low_rank_correlation_matrix(
+            num_features=100, rank=10, seed=42
+        )
+        result2 = generate_random_low_rank_correlation_matrix(
+            num_features=100, rank=10, seed=42
+        )
+        torch.testing.assert_close(
+            result1.correlation_factor, result2.correlation_factor
+        )
+        torch.testing.assert_close(result1.correlation_diag, result2.correlation_diag)
+
+    def test_respects_dtype_parameter(self):
+        result = generate_random_low_rank_correlation_matrix(
+            num_features=100, rank=10, dtype=torch.float64
+        )
+        assert result.correlation_factor.dtype == torch.float64
+        assert result.correlation_diag.dtype == torch.float64
+
+    def test_raises_on_non_positive_rank(self):
+        with pytest.raises(ValueError, match="rank must be positive"):
+            generate_random_low_rank_correlation_matrix(num_features=100, rank=0)
+
+    def test_raises_on_negative_correlation_scale(self):
+        with pytest.raises(ValueError, match="correlation_scale must be non-negative"):
+            generate_random_low_rank_correlation_matrix(
+                num_features=100, rank=10, correlation_scale=-0.1
+            )
+
+    def test_zero_correlation_scale_produces_identity(self):
+        result = generate_random_low_rank_correlation_matrix(
+            num_features=50, rank=10, correlation_scale=0
+        )
+        # Factor should be all zeros
+        torch.testing.assert_close(
+            result.correlation_factor, torch.zeros(50, 10), atol=1e-7, rtol=0
+        )
+        # Diagonal should be all ones
+        torch.testing.assert_close(
+            result.correlation_diag, torch.ones(50), atol=1e-7, rtol=0
+        )
+        # Implied correlation matrix should be identity
+        full_matrix = (
+            result.correlation_factor @ result.correlation_factor.T
+            + torch.diag(result.correlation_diag)
+        )
+        torch.testing.assert_close(full_matrix, torch.eye(50), atol=1e-7, rtol=0)
+
+    def test_produces_mix_of_positive_and_negative_correlations(self):
+        num_samples = 20
+        total_positive = 0
+        total_count = 0
+
+        for i in range(num_samples):
+            result = generate_random_low_rank_correlation_matrix(
+                num_features=50, rank=10, correlation_scale=0.1, seed=i * 789
+            )
+            full_matrix = (
+                result.correlation_factor @ result.correlation_factor.T
+                + torch.diag(result.correlation_diag)
+            )
+            row_idx, col_idx = torch.triu_indices(50, 50, offset=1)
+            off_diag = full_matrix[row_idx, col_idx]
+            total_positive += (off_diag > 0).sum().item()
+            total_count += off_diag.numel()
+
+        positive_ratio = total_positive / total_count
+        assert 0.4 < positive_ratio < 0.6
+
+    def test_larger_correlation_scale_produces_stronger_correlations(self):
+        num_samples = 10
+
+        def avg_off_diag_correlation(scale: float) -> float:
+            total = 0.0
+            count = 0
+            for i in range(num_samples):
+                result = generate_random_low_rank_correlation_matrix(
+                    num_features=50, rank=5, correlation_scale=scale, seed=i * 123
+                )
+                full_matrix = (
+                    result.correlation_factor @ result.correlation_factor.T
+                    + torch.diag(result.correlation_diag)
+                )
+                row_idx, col_idx = torch.triu_indices(50, 50, offset=1)
+                off_diag = full_matrix[row_idx, col_idx]
+                total += off_diag.abs().mean().item()
+                count += 1
+            return total / count
+
+        small_scale = avg_off_diag_correlation(0.05)
+        large_scale = avg_off_diag_correlation(0.2)
+        assert large_scale > small_scale
+
+    def test_higher_rank_allows_more_variance_in_correlations(self):
+        num_samples = 10
+
+        def correlation_variance(rank: int) -> float:
+            total_var = 0.0
+            for i in range(num_samples):
+                result = generate_random_low_rank_correlation_matrix(
+                    num_features=50, rank=rank, correlation_scale=0.1, seed=i * 456
+                )
+                full_matrix = (
+                    result.correlation_factor @ result.correlation_factor.T
+                    + torch.diag(result.correlation_diag)
+                )
+                row_idx, col_idx = torch.triu_indices(50, 50, offset=1)
+                off_diag = full_matrix[row_idx, col_idx]
+                total_var += off_diag.var().item()
+            return total_var / num_samples
+
+        low_rank_var = correlation_variance(2)
+        high_rank_var = correlation_variance(20)
+        assert high_rank_var > low_rank_var
+
+    def test_auto_scales_factor_when_correlation_scale_too_large(self):
+        result = generate_random_low_rank_correlation_matrix(
+            num_features=100, rank=50, correlation_scale=0.5, seed=42
+        )
+        assert torch.all(result.correlation_diag > 0)
+        implied_diag = (result.correlation_factor**2).sum(
+            dim=1
+        ) + result.correlation_diag
+        torch.testing.assert_close(implied_diag, torch.ones(100), atol=1e-5, rtol=0)
+
+    def test_works_with_activation_generator(self):
+        low_rank = generate_random_low_rank_correlation_matrix(
+            num_features=20, rank=5, correlation_scale=0.1
+        )
+        generator = ActivationGenerator(
+            num_features=20,
+            firing_probabilities=0.3,
+            correlation_matrix=low_rank,
+        )
+        samples = generator.sample(batch_size=100)
+        assert samples.shape == (100, 20)
+        assert torch.all(samples >= 0)

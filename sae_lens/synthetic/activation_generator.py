@@ -9,13 +9,13 @@ from scipy.stats import norm
 from torch import nn
 from torch.distributions import LowRankMultivariateNormal, MultivariateNormal
 
-from sae_lens.synthetic.correlation import LowRankCorrelation
+from sae_lens.synthetic.correlation import LowRankCorrelationMatrix
 from sae_lens.util import str_to_dtype
 
 ActivationsModifier = Callable[[torch.Tensor], torch.Tensor]
 ActivationsModifierInput = ActivationsModifier | Sequence[ActivationsModifier] | None
 CorrelationMatrixInput = (
-    torch.Tensor | LowRankCorrelation | tuple[torch.Tensor, torch.Tensor]
+    torch.Tensor | LowRankCorrelationMatrix | tuple[torch.Tensor, torch.Tensor]
 )
 
 
@@ -68,7 +68,7 @@ class ActivationGenerator(nn.Module):
                 _validate_correlation_matrix(correlation_matrix, num_features)
                 self.correlation_matrix = correlation_matrix
             else:
-                # Low-rank correlation (tuple or LowRankCorrelation)
+                # Low-rank correlation (tuple or LowRankCorrelationMatrix)
                 correlation_factor, correlation_diag = (
                     correlation_matrix[0],
                     correlation_matrix[1],

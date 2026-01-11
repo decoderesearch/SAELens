@@ -6,7 +6,7 @@ import torch
 from sae_lens.util import str_to_dtype
 
 
-class LowRankCorrelation(NamedTuple):
+class LowRankCorrelationMatrix(NamedTuple):
     """
     Low-rank representation of a correlation matrix for scalable correlated sampling.
 
@@ -262,3 +262,80 @@ def generate_random_correlation_matrix(
         matrix = _fix_correlation_matrix(matrix)
 
     return matrix
+
+
+def generate_random_low_rank_correlation_matrix(
+    num_features: int,
+    rank: int,
+    correlation_scale: float = 0.1,
+    seed: int | None = None,
+    device: torch.device | str = "cpu",
+    dtype: torch.dtype | str = torch.float32,
+) -> LowRankCorrelationMatrix:
+    """
+    Generate a random low-rank correlation structure for scalable correlated sampling.
+
+    The correlation structure is represented as:
+        correlation = factor @ factor.T + diag(diag_term)
+
+    This requires O(num_features * rank) storage instead of O(num_features^2),
+    making it suitable for very large numbers of features (e.g., 1M+).
+
+    The factor matrix is initialized with random values scaled by correlation_scale,
+    and the diagonal term is computed to ensure the implied correlation matrix has
+    unit diagonal.
+
+    Args:
+        num_features: Number of features
+        rank: Rank of the low-rank approximation. Higher rank allows more complex
+            correlation structures but uses more memory. Typical values: 10-100.
+        correlation_scale: Scale factor for random correlations. Larger values produce
+            stronger correlations between features. Use 0 for no correlations (identity
+            matrix). Should be small enough that rank * correlation_scale^2 < 1 to
+            ensure valid diagonal terms.
+        seed: Random seed for reproducibility
+        device: Device to create tensors on
+        dtype: Data type for tensors
+
+    Returns:
+        LowRankCorrelationMatrix containing the factor matrix and diagonal term
+    """
+    dtype = str_to_dtype(dtype)
+    device = torch.device(device)
+
+    if rank <= 0:
+        raise ValueError("rank must be positive")
+    if correlation_scale < 0:
+        raise ValueError("correlation_scale must be non-negative")
+
+    # Set random seed if provided
+    generator = torch.Generator(device=device)
+    if seed is not None:
+        generator.manual_seed(seed)
+
+    # Generate random factor matrix
+    # Each row has norm roughly sqrt(rank) * correlation_scale
+    factor = (
+        torch.randn(num_features, rank, generator=generator, device=device, dtype=dtype)
+        * correlation_scale
+    )
+
+    # Compute diagonal term to ensure unit diagonal in implied correlation matrix
+    # diag(factor @ factor.T) + diag_term = 1
+    # diag_term = 1 - sum(factor[i, :]^2)
+    factor_sq_sum = (factor**2).sum(dim=1)
+    diag_term = 1 - factor_sq_sum
+
+    # Clamp to ensure positive values (required for valid covariance)
+    # If factor_sq_sum > 1, we need to scale down the factor
+    if torch.any(diag_term <= 0):
+        # Scale factor so max row norm squared is at most 0.99
+        max_sq_sum = factor_sq_sum.max()
+        scale = torch.sqrt(torch.tensor(0.99, device=device, dtype=dtype) / max_sq_sum)
+        factor = factor * scale
+        factor_sq_sum = (factor**2).sum(dim=1)
+        diag_term = 1 - factor_sq_sum
+
+    return LowRankCorrelationMatrix(
+        correlation_factor=factor, correlation_diag=diag_term
+    )
