@@ -300,6 +300,10 @@ def generate_random_low_rank_correlation_matrix(
     Returns:
         LowRankCorrelationMatrix containing the factor matrix and diagonal term
     """
+    # Minimum diagonal value to ensure numerical stability in the covariance matrix.
+    # This limits how much variance can come from the low-rank factor.
+    _MIN_DIAG = 0.01
+
     dtype = str_to_dtype(dtype)
     device = torch.device(device)
 
@@ -326,12 +330,17 @@ def generate_random_low_rank_correlation_matrix(
     factor_sq_sum = (factor**2).sum(dim=1)
     diag_term = 1 - factor_sq_sum
 
-    # Clamp to ensure positive values (required for valid covariance)
-    # If factor_sq_sum > 1, we need to scale down the factor
-    if torch.any(diag_term <= 0):
-        # Scale factor so max row norm squared is at most 0.99
+    # Ensure diagonal terms are at least _MIN_DIAG for numerical stability
+    # If any diagonal term is too small, scale down the factor matrix
+    if torch.any(diag_term < _MIN_DIAG):
+        # Scale factor so max row norm squared is at most (1 - _MIN_DIAG)
+        # This ensures all diagonal terms are >= _MIN_DIAG
+        max_factor_contribution = 1 - _MIN_DIAG
         max_sq_sum = factor_sq_sum.max()
-        scale = torch.sqrt(torch.tensor(0.99, device=device, dtype=dtype) / max_sq_sum)
+        scale = torch.sqrt(
+            torch.tensor(max_factor_contribution, device=device, dtype=dtype)
+            / max_sq_sum
+        )
         factor = factor * scale
         factor_sq_sum = (factor**2).sum(dim=1)
         diag_term = 1 - factor_sq_sum

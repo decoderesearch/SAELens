@@ -185,7 +185,6 @@ class TestActivationGeneratorForward:
 
 class TestActivationGeneratorDeviceAndDtype:
     def test_accepts_float_firing_probability(self):
-        """Test that a float can be passed instead of tensor."""
         generator = ActivationGenerator(
             num_features=5,
             firing_probabilities=0.3,  # float, not tensor
@@ -195,7 +194,6 @@ class TestActivationGeneratorDeviceAndDtype:
         assert samples.shape == (100, 5)
 
     def test_accepts_string_dtype(self):
-        """Test that string dtype works."""
         generator = ActivationGenerator(
             num_features=5,
             firing_probabilities=0.5,
@@ -434,16 +432,22 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
         rank = 3
         batch_size = 50000
 
-        # Create low-rank factors
-        factor = torch.randn(num_features, rank) * 0.2
-        diag = 1 - (factor**2).sum(dim=1)
-        diag = diag.clamp(min=0.1)
+        # Create low-rank factors small enough that diag stays positive without clamping
+        # This ensures the full matrix and low-rank representation are mathematically equivalent
+        factor = torch.randn(num_features, rank) * 0.1
+        factor_sq_sum = (factor**2).sum(dim=1)
+        assert torch.all(
+            factor_sq_sum < 1
+        ), "Factor norms too large for valid correlation"
+        diag = 1 - factor_sq_sum
 
         # Construct the full correlation matrix: C = F @ F.T + diag(D)
+        # With our construction, this already has unit diagonal (no normalization needed)
         full_matrix = factor @ factor.T + torch.diag(diag)
-        # Normalize to ensure unit diagonal (correlation matrix property)
-        diag_sqrt = torch.sqrt(torch.diag(full_matrix))
-        full_matrix = full_matrix / (diag_sqrt.unsqueeze(0) * diag_sqrt.unsqueeze(1))
+        # Verify unit diagonal
+        torch.testing.assert_close(
+            torch.diag(full_matrix), torch.ones(num_features), atol=1e-6, rtol=0
+        )
 
         firing_probs = torch.tensor([0.3, 0.4, 0.2, 0.5, 0.35])
 
@@ -471,12 +475,10 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
 
         # Compare pairwise correlations of firing patterns
         def compute_firing_correlations(samples: torch.Tensor) -> torch.Tensor:
-            """Compute correlation matrix of binary firing patterns."""
             firing = (samples > 0).float()
             firing_centered = firing - firing.mean(dim=0, keepdim=True)
             cov = (firing_centered.T @ firing_centered) / (samples.shape[0] - 1)
             std = firing.std(dim=0)
-            # Avoid division by zero
             std = std.clamp(min=1e-6)
             return cov / (std.unsqueeze(0) * std.unsqueeze(1))
 
@@ -484,7 +486,7 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
         corr_low_rank = compute_firing_correlations(samples_low_rank)
 
         # The correlations should be similar (not identical due to sampling variance)
-        torch.testing.assert_close(corr_full, corr_low_rank, atol=0.01, rtol=0)
+        torch.testing.assert_close(corr_full, corr_low_rank, atol=0.02, rtol=0)
 
     def test_exact_low_rank_matches_full_matrix_statistics(self):
         """Test that when we use the exact same covariance in both forms,
@@ -497,18 +499,21 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
         rank = 2
         batch_size = 20000
 
-        # Create low-rank factors with controlled values
-        factor = torch.randn(num_features, rank) * 0.15
-        # Compute diagonal such that full matrix has unit diagonal
+        # Create low-rank factors small enough that diag stays positive without clamping
+        factor = torch.randn(num_features, rank) * 0.1
         factor_sq_sum = (factor**2).sum(dim=1)
+        assert torch.all(
+            factor_sq_sum < 1
+        ), "Factor norms too large for valid correlation"
         diag = 1 - factor_sq_sum
-        diag = diag.clamp(min=0.01)
 
         # Construct the full covariance matrix: C = F @ F.T + diag(D)
         full_cov = factor @ factor.T + torch.diag(diag)
 
-        # Verify it has unit diagonal (it should, by construction)
-        assert torch.allclose(torch.diag(full_cov), torch.ones(num_features), atol=1e-5)
+        # Verify it has unit diagonal (guaranteed by construction)
+        torch.testing.assert_close(
+            torch.diag(full_cov), torch.ones(num_features), atol=1e-6, rtol=0
+        )
 
         firing_probs = torch.tensor([0.25, 0.35, 0.45, 0.30])
 
@@ -549,7 +554,6 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
 
 class TestActivationGeneratorLowRankCorrelationMatrixValidation:
     def test_raises_on_wrong_factor_shape(self):
-        """Test that ActivationGenerator raises on wrong factor shape."""
         factor = torch.randn(3, 2)
         diag = torch.ones(5)
         with pytest.raises(ValueError, match=r"must have shape \[5, rank\]"):

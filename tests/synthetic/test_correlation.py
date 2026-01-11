@@ -495,3 +495,65 @@ class TestGenerateRandomLowRankCorrelationMatrix:
         samples = generator.sample(batch_size=100)
         assert samples.shape == (100, 20)
         assert torch.all(samples >= 0)
+
+    def test_rank_equal_to_num_features(self):
+        num_features = 20
+        result = generate_random_low_rank_correlation_matrix(
+            num_features=num_features, rank=num_features, correlation_scale=0.1
+        )
+        assert result.correlation_factor.shape == (num_features, num_features)
+        assert result.correlation_diag.shape == (num_features,)
+        assert torch.all(result.correlation_diag > 0)
+        implied_diag = (result.correlation_factor**2).sum(
+            dim=1
+        ) + result.correlation_diag
+        torch.testing.assert_close(
+            implied_diag, torch.ones(num_features), atol=1e-5, rtol=0
+        )
+
+    def test_rank_greater_than_num_features(self):
+        num_features = 10
+        rank = 20
+        result = generate_random_low_rank_correlation_matrix(
+            num_features=num_features, rank=rank, correlation_scale=0.1
+        )
+        assert result.correlation_factor.shape == (num_features, rank)
+        assert result.correlation_diag.shape == (num_features,)
+        assert torch.all(result.correlation_diag > 0)
+
+    def test_large_num_features_scalability(self):
+        num_features = 100_000
+        rank = 10
+        result = generate_random_low_rank_correlation_matrix(
+            num_features=num_features, rank=rank, correlation_scale=0.1
+        )
+        assert result.correlation_factor.shape == (num_features, rank)
+        assert result.correlation_diag.shape == (num_features,)
+        assert torch.all(result.correlation_diag > 0)
+        implied_diag = (result.correlation_factor**2).sum(
+            dim=1
+        ) + result.correlation_diag
+        torch.testing.assert_close(
+            implied_diag, torch.ones(num_features), atol=1e-5, rtol=0
+        )
+
+    def test_very_small_correlation_scale(self):
+        result = generate_random_low_rank_correlation_matrix(
+            num_features=50, rank=10, correlation_scale=1e-10
+        )
+        assert torch.all(result.correlation_diag > 0)
+        full_matrix = (
+            result.correlation_factor @ result.correlation_factor.T
+            + torch.diag(result.correlation_diag)
+        )
+        torch.testing.assert_close(full_matrix, torch.eye(50), atol=1e-9, rtol=0)
+
+    def test_very_large_correlation_scale_is_clamped(self):
+        result = generate_random_low_rank_correlation_matrix(
+            num_features=50, rank=20, correlation_scale=10.0
+        )
+        assert torch.all(result.correlation_diag > 0)
+        implied_diag = (result.correlation_factor**2).sum(
+            dim=1
+        ) + result.correlation_diag
+        torch.testing.assert_close(implied_diag, torch.ones(50), atol=1e-5, rtol=0)

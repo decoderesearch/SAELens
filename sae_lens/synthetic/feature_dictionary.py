@@ -9,7 +9,7 @@ from typing import Callable
 
 import torch
 from torch import nn
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 FeatureDictionaryInitializer = Callable[["FeatureDictionary"], None]
 
