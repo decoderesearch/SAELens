@@ -1,6 +1,29 @@
 import random
+from typing import NamedTuple
 
 import torch
+
+
+class LowRankCorrelation(NamedTuple):
+    """
+    Low-rank representation of a correlation matrix for scalable correlated sampling.
+
+    The correlation structure is represented as:
+        correlation = correlation_factor @ correlation_factor.T + diag(correlation_diag)
+
+    This requires O(num_features * rank) storage instead of O(num_features^2),
+    making it suitable for very large numbers of features (e.g., 1M+).
+
+    Attributes:
+        correlation_factor: Factor matrix of shape [num_features, rank] that captures
+            correlations through shared latent factors.
+        correlation_diag: Diagonal variance term of shape [num_features]. Should be
+            chosen such that the diagonal of the full correlation matrix equals 1.
+            Typically: correlation_diag[i] = 1 - sum(correlation_factor[i, :]^2)
+    """
+
+    correlation_factor: torch.Tensor
+    correlation_diag: torch.Tensor
 
 
 def create_correlation_matrix_from_correlations(

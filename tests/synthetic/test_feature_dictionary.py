@@ -98,22 +98,18 @@ def test_FeatureDictionary_overcomplete_minimizes_cosine_similarity(chunk_size: 
 
 def test_orthogonalize_embeddings_identical_results_across_chunk_sizes():
     """Test that different chunk sizes produce identical results."""
-    torch.manual_seed(42)
     embeddings = torch.randn(16, 8)
     embeddings = embeddings / embeddings.norm(dim=1, keepdim=True)
 
     # Run with different chunk sizes using same initial embeddings
-    torch.manual_seed(0)  # Reset seed for optimizer randomness
     result_large_chunk = orthogonalize_embeddings(
         embeddings.clone(), num_steps=10, chunk_size=1024
     )
 
-    torch.manual_seed(0)
     result_small_chunk = orthogonalize_embeddings(
         embeddings.clone(), num_steps=10, chunk_size=3
     )
 
-    torch.manual_seed(0)
     result_tiny_chunk = orthogonalize_embeddings(
         embeddings.clone(), num_steps=10, chunk_size=1
     )

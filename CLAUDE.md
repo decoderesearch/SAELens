@@ -20,3 +20,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Each test file should mirror a file in the `sae_lens` package.
 - When writing tests, focus on testing the core logic and meat of the code rather than just superficial things like tensor shapes.
 - Do not relax assertion tolerances in tests unless absolutely necessary. Never relax tolerances to mask an underlying bug. Ask for input if you are unsure.
+- Never set random seeds in tests. If you want to check something random that runs fast, generate large number of samples and check the statistics.
+- For statistical tests, don't be afraid to use large number of samples to allow for tight bounds. Please make bounds as tight as possible too.
+- Do not add doc comments to test functions. The test name should be self-explanatory.

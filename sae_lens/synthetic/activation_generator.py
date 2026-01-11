@@ -7,12 +7,16 @@ from collections.abc import Callable, Sequence
 import torch
 from scipy.stats import norm
 from torch import nn
-from torch.distributions import MultivariateNormal
+from torch.distributions import LowRankMultivariateNormal, MultivariateNormal
 
+from sae_lens.synthetic.correlation import LowRankCorrelation
 from sae_lens.util import str_to_dtype
 
 ActivationsModifier = Callable[[torch.Tensor], torch.Tensor]
 ActivationsModifierInput = ActivationsModifier | Sequence[ActivationsModifier] | None
+CorrelationMatrixInput = (
+    torch.Tensor | LowRankCorrelation | tuple[torch.Tensor, torch.Tensor]
+)
 
 
 class ActivationGenerator(nn.Module):
@@ -28,6 +32,7 @@ class ActivationGenerator(nn.Module):
     mean_firing_magnitudes: torch.Tensor
     modify_activations: ActivationsModifier | None
     correlation_matrix: torch.Tensor | None
+    low_rank_correlation: tuple[torch.Tensor, torch.Tensor] | None
     correlation_thresholds: torch.Tensor | None
 
     def __init__(
@@ -37,7 +42,7 @@ class ActivationGenerator(nn.Module):
         std_firing_magnitudes: torch.Tensor | float = 0.0,
         mean_firing_magnitudes: torch.Tensor | float = 1.0,
         modify_activations: ActivationsModifierInput = None,
-        correlation_matrix: torch.Tensor | None = None,
+        correlation_matrix: CorrelationMatrixInput | None = None,
         device: torch.device | str = "cpu",
         dtype: torch.dtype | str = "float32",
     ):
@@ -54,14 +59,30 @@ class ActivationGenerator(nn.Module):
         )
         self.modify_activations = _normalize_modifiers(modify_activations)
         self.correlation_thresholds = None
+        self.correlation_matrix = None
+        self.low_rank_correlation = None
+
         if correlation_matrix is not None:
-            _validate_correlation_matrix(correlation_matrix, num_features)
+            if isinstance(correlation_matrix, torch.Tensor):
+                # Full correlation matrix
+                _validate_correlation_matrix(correlation_matrix, num_features)
+                self.correlation_matrix = correlation_matrix
+            else:
+                # Low-rank correlation (tuple or LowRankCorrelation)
+                correlation_factor, correlation_diag = (
+                    correlation_matrix[0],
+                    correlation_matrix[1],
+                )
+                _validate_low_rank_correlation(
+                    correlation_factor, correlation_diag, num_features
+                )
+                self.low_rank_correlation = (correlation_factor, correlation_diag)
+
             self.correlation_thresholds = torch.tensor(
                 [norm.ppf(1 - p.item()) for p in self.firing_probabilities],
                 device=device,
                 dtype=self.firing_probabilities.dtype,
             )
-        self.correlation_matrix = correlation_matrix
 
     @torch.no_grad()
     def sample(self, batch_size: int) -> torch.Tensor:
@@ -87,6 +108,15 @@ class ActivationGenerator(nn.Module):
             firing_features = _generate_correlated_features(
                 batch_size,
                 self.correlation_matrix,
+                self.correlation_thresholds,
+                device,
+            )
+        elif self.low_rank_correlation is not None:
+            assert self.correlation_thresholds is not None
+            firing_features = _generate_low_rank_correlated_features(
+                batch_size,
+                self.low_rank_correlation[0],
+                self.low_rank_correlation[1],
                 self.correlation_thresholds,
                 device,
             )
@@ -140,6 +170,41 @@ def _generate_correlated_features(
     mvn = MultivariateNormal(
         loc=torch.zeros(num_features, device=device, dtype=thresholds.dtype),
         covariance_matrix=correlation_matrix.to(device=device, dtype=thresholds.dtype),
+    )
+
+    gaussian_samples = mvn.sample((batch_size,))
+    return (gaussian_samples > thresholds.unsqueeze(0)).float()
+
+
+def _generate_low_rank_correlated_features(
+    batch_size: int,
+    correlation_factor: torch.Tensor,
+    correlation_diag: torch.Tensor,
+    thresholds: torch.Tensor,
+    device: torch.device,
+) -> torch.Tensor:
+    """
+    Generate correlated binary features using low-rank multivariate Gaussian sampling.
+
+    Uses the Gaussian copula approach with a low-rank covariance structure for scalability.
+    The covariance is represented as: cov = factor @ factor.T + diag(diag_term)
+
+    Args:
+        batch_size: Number of samples to generate
+        correlation_factor: Factor matrix of shape [num_features, rank]
+        correlation_diag: Diagonal term of shape [num_features]
+        thresholds: Pre-computed thresholds for each feature (from inverse normal CDF)
+        device: Device to generate samples on
+
+    Returns:
+        Binary feature matrix of shape [batch_size, num_features]
+    """
+    mvn = LowRankMultivariateNormal(
+        loc=torch.zeros(
+            correlation_factor.shape[0], device=device, dtype=thresholds.dtype
+        ),
+        cov_factor=correlation_factor.to(device=device, dtype=thresholds.dtype),
+        cov_diag=correlation_diag.to(device=device, dtype=thresholds.dtype),
     )
 
     gaussian_samples = mvn.sample((batch_size,))
@@ -214,3 +279,36 @@ def _validate_correlation_matrix(
         torch.linalg.cholesky(correlation_matrix)
     except RuntimeError as e:
         raise ValueError("Correlation matrix must be positive definite") from e
+
+
+def _validate_low_rank_correlation(
+    correlation_factor: torch.Tensor,
+    correlation_diag: torch.Tensor,
+    num_features: int,
+) -> None:
+    """Validate that low-rank correlation parameters have correct properties.
+
+    Args:
+        correlation_factor: Factor matrix of shape [num_features, rank]
+        correlation_diag: Diagonal term of shape [num_features]
+        num_features: Expected number of features
+
+    Raises:
+        ValueError: If shapes are incorrect or diagonal terms are not positive
+    """
+    if correlation_factor.ndim != 2:
+        raise ValueError(
+            f"correlation_factor must be 2D, got {correlation_factor.ndim}D"
+        )
+    if correlation_factor.shape[0] != num_features:
+        raise ValueError(
+            f"correlation_factor must have shape [{num_features}, rank], "
+            f"got {tuple(correlation_factor.shape)}"
+        )
+    if correlation_diag.shape != (num_features,):
+        raise ValueError(
+            f"correlation_diag must have shape ({num_features},), "
+            f"got {tuple(correlation_diag.shape)}"
+        )
+    if torch.any(correlation_diag <= 0):
+        raise ValueError("correlation_diag must have all positive values")
