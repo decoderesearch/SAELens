@@ -119,13 +119,7 @@ def test_benchmark_hierarchical_synthetic_pipeline():
     )
 
     setup_start = perf_counter()
-    device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
-    )
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     feature_dict, generator, actual_features = create_hierarchical_synthetic_setup(
         num_features=num_features,
         hidden_dim=hidden_dim,
@@ -147,8 +141,6 @@ def test_benchmark_hierarchical_synthetic_pipeline():
     # hidden = torch.zeros(batch_size, hidden_dim, device=device)
     if device == "cuda":
         torch.cuda.synchronize()
-    elif device == "mps":
-        torch.mps.synchronize()
 
     # Benchmark sample generation
     gen_start = perf_counter()
@@ -156,8 +148,7 @@ def test_benchmark_hierarchical_synthetic_pipeline():
         samples = generator.sample(batch_size)
     if device == "cuda":
         torch.cuda.synchronize()
-    elif device == "mps":
-        torch.mps.synchronize()
+
     gen_duration = perf_counter() - gen_start
     print(f"Sample generation time per call: {gen_duration / num_iterations:.4f}s")
 
@@ -169,8 +160,7 @@ def test_benchmark_hierarchical_synthetic_pipeline():
         # hidden = torch.zeros(batch_size, hidden_dim, device=device) # feature_dict(samples)
     if device == "cuda":
         torch.cuda.synchronize()
-    elif device == "mps":
-        torch.mps.synchronize()
+
     full_duration = perf_counter() - full_start
     print(
         f"Full pipeline for {num_iterations * batch_size} samples time: {full_duration:.4f}s"
