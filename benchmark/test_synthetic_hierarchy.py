@@ -1,3 +1,4 @@
+from collections import deque
 from time import perf_counter
 
 import torch
@@ -37,34 +38,44 @@ def create_hierarchical_synthetic_setup(
     Returns:
         Tuple of (FeatureDictionary, ActivationGenerator, actual_num_features)
     """
-    depth = 0
-    while True:
-        total = (branching_factor ** (depth + 1) - 1) // (branching_factor - 1)
-        if total >= num_features:
-            break
-        depth += 1
+    # Build tree structure BFS: branching_factor roots, each with branching_factor children
+    roots_count = min(branching_factor, num_features)
+    parent_to_children: dict[int, list[int]] = {}
 
-    def build_tree(current_depth: int, start_idx: int) -> tuple[HierarchyNode, int]:
-        if current_depth == depth:
-            return HierarchyNode(feature_index=start_idx), start_idx + 1
+    queue: deque[int] = deque(range(roots_count))
+    child_idx = roots_count
 
-        children = []
-        next_idx = start_idx + 1
+    while queue and child_idx < num_features:
+        parent_idx = queue.popleft()
+        children_indices = []
         for _ in range(branching_factor):
-            child, next_idx = build_tree(current_depth + 1, next_idx)
-            children.append(child)
+            if child_idx >= num_features:
+                break
+            children_indices.append(child_idx)
+            queue.append(child_idx)
+            child_idx += 1
+        if children_indices:
+            parent_to_children[parent_idx] = children_indices
 
-        return HierarchyNode(
-            feature_index=start_idx,
-            children=children,
-            mutually_exclusive_children=mutual_exclusion and len(children) >= 2,
-        ), next_idx
+    # Build nodes bottom-up so children exist when parent is created
+    nodes: dict[int, HierarchyNode] = {}
+    for idx in range(num_features - 1, -1, -1):
+        if idx in parent_to_children:
+            children = [nodes[c] for c in parent_to_children[idx]]
+            nodes[idx] = HierarchyNode(
+                feature_index=idx,
+                children=children,
+                mutually_exclusive_children=mutual_exclusion and len(children) >= 2,
+            )
+        else:
+            nodes[idx] = HierarchyNode(feature_index=idx)
 
-    root, actual_num_features = build_tree(0, 0)
-    modifier = hierarchy_modifier([root])
+    roots = [nodes[i] for i in range(roots_count)]
+    actual_num_features = num_features
+    modifier = hierarchy_modifier(roots)
 
     firing_probabilities = zipfian_firing_probabilities(
-        actual_num_features, min_prob=0.05
+        actual_num_features, min_prob=0.1
     )
 
     lr_correlation_matrix = generate_random_low_rank_correlation_matrix(
@@ -99,8 +110,8 @@ def create_hierarchical_synthetic_setup(
 def test_benchmark_hierarchical_synthetic_pipeline():
     num_features = 10_000
     hidden_dim = 1024
-    batch_size = 2048
-    num_iterations = 5
+    batch_size = 50_000
+    num_iterations = 20
 
     torch.set_grad_enabled(True)
     print(
@@ -108,12 +119,19 @@ def test_benchmark_hierarchical_synthetic_pipeline():
     )
 
     setup_start = perf_counter()
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
     feature_dict, generator, actual_features = create_hierarchical_synthetic_setup(
         num_features=num_features,
         hidden_dim=hidden_dim,
-        branching_factor=4,
+        branching_factor=100,
         mutual_exclusion=True,
-        device="cpu",
+        device=device,
         correlation_rank=1000,
         correlation_scale=0.1,
     )
@@ -126,11 +144,20 @@ def test_benchmark_hierarchical_synthetic_pipeline():
     # Warmup
     samples = generator.sample(batch_size)
     hidden = feature_dict(samples)
+    # hidden = torch.zeros(batch_size, hidden_dim, device=device)
+    if device == "cuda":
+        torch.cuda.synchronize()
+    elif device == "mps":
+        torch.mps.synchronize()
 
     # Benchmark sample generation
     gen_start = perf_counter()
     for _ in range(num_iterations):
         samples = generator.sample(batch_size)
+    if device == "cuda":
+        torch.cuda.synchronize()
+    elif device == "mps":
+        torch.mps.synchronize()
     gen_duration = perf_counter() - gen_start
     print(f"Sample generation time per call: {gen_duration / num_iterations:.4f}s")
 
@@ -139,7 +166,15 @@ def test_benchmark_hierarchical_synthetic_pipeline():
     for _ in range(num_iterations):
         samples = generator.sample(batch_size)
         hidden = feature_dict(samples)
+        # hidden = torch.zeros(batch_size, hidden_dim, device=device) # feature_dict(samples)
+    if device == "cuda":
+        torch.cuda.synchronize()
+    elif device == "mps":
+        torch.mps.synchronize()
     full_duration = perf_counter() - full_start
+    print(
+        f"Full pipeline for {num_iterations * batch_size} samples time: {full_duration:.4f}s"
+    )
     print(f"Full pipeline time per call: {full_duration / num_iterations:.4f}s")
 
     # Verify outputs
