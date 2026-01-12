@@ -99,7 +99,7 @@ def create_hierarchical_synthetic_setup(
         modify_activations=modifier,
         correlation_matrix=lr_correlation_matrix,
         device=device,
-        sparse=use_sparse_tensors,
+        use_sparse_tensors=use_sparse_tensors,
     )
 
     generator_end_time = perf_counter()

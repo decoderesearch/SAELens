@@ -23,6 +23,8 @@ def train_toy_sae(
     device: str | torch.device = "cpu",
     n_snapshots: int = 0,
     snapshot_fn: Callable[[SAETrainer[Any, Any]], None] | None = None,
+    autocast_sae: bool = False,
+    autocast_data: bool = False,
 ) -> None:
     """
     Train an SAE on synthetic activations from a feature dictionary.
@@ -46,6 +48,8 @@ def train_toy_sae(
         snapshot_fn: Callback function called at each snapshot point. Receives
             the SAETrainer instance, allowing access to the SAE, training step,
             and other training state. Required if n_snapshots > 0.
+        autocast_sae: Whether to autocast the SAE to bfloat16. Only recommend for large SAEs on CUDA
+        autocast_data: Whether to autocast the activations generator and feature dictionary to bfloat16. Only recommend for large data on CUDA.
     """
 
     device_str = str(device) if isinstance(device, torch.device) else device
@@ -55,6 +59,7 @@ def train_toy_sae(
         feature_dict=feature_dict,
         activations_generator=activations_generator,
         batch_size=batch_size,
+        autocast=autocast_data,
     )
 
     # Create trainer config
@@ -64,7 +69,7 @@ def train_toy_sae(
         save_final_checkpoint=False,
         total_training_samples=training_samples,
         device=device_str,
-        autocast=False,
+        autocast=autocast_sae,
         lr=lr,
         lr_end=lr,
         lr_scheduler_name="constant",
@@ -119,6 +124,7 @@ class SyntheticActivationIterator(Iterator[torch.Tensor]):
         feature_dict: FeatureDictionary,
         activations_generator: ActivationGenerator,
         batch_size: int,
+        autocast: bool = False,
     ):
         """
         Create a new SyntheticActivationIterator.
@@ -127,16 +133,23 @@ class SyntheticActivationIterator(Iterator[torch.Tensor]):
             feature_dict: The feature dictionary to use for generating hidden activations
             activations_generator: Generator that produces feature activations
             batch_size: Number of samples per batch
+            autocast: Whether to autocast the activations generator and feature dictionary to bfloat16.
         """
         self.feature_dict = feature_dict
         self.activations_generator = activations_generator
         self.batch_size = batch_size
+        self.autocast = autocast
 
     @torch.no_grad()
     def next_batch(self) -> torch.Tensor:
         """Generate the next batch of hidden activations."""
-        features = self.activations_generator(self.batch_size)
-        return self.feature_dict(features)
+        with torch.autocast(
+            device_type=self.feature_dict.feature_vectors.device.type,
+            dtype=torch.bfloat16,
+            enabled=self.autocast,
+        ):
+            features = self.activations_generator(self.batch_size)
+            return self.feature_dict(features)
 
     def __iter__(self) -> "SyntheticActivationIterator":
         return self

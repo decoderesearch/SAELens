@@ -32,21 +32,23 @@ def test_HierarchyNode_with_children():
     assert child2.feature_index == 2
 
 
-@pytest.mark.parametrize("sparse", [False, True])
-def test_hierarchy_modifier_returns_correct_shape(sparse: bool):
+@pytest.mark.parametrize("use_sparse_tensors", [False, True])
+def test_hierarchy_modifier_returns_correct_shape(use_sparse_tensors: bool):
     child = HierarchyNode(feature_index=1)
     root = HierarchyNode(feature_index=0, children=[child])
     modifier = hierarchy_modifier([root])
 
     activations = torch.rand(100, 3)
-    if sparse:
+    if use_sparse_tensors:
         activations = to_sparse(activations)
     result = to_dense(modifier(activations))
     assert result.shape == (100, 3)
 
 
-@pytest.mark.parametrize("sparse", [False, True])
-def test_hierarchy_modifier_deactivates_children_when_parent_inactive(sparse: bool):
+@pytest.mark.parametrize("use_sparse_tensors", [False, True])
+def test_hierarchy_modifier_deactivates_children_when_parent_inactive(
+    use_sparse_tensors: bool,
+):
     child = HierarchyNode(feature_index=1)
     root = HierarchyNode(feature_index=0, children=[child])
     modifier = hierarchy_modifier([root])
@@ -58,7 +60,7 @@ def test_hierarchy_modifier_deactivates_children_when_parent_inactive(sparse: bo
             [0.0, 0.8, 0.3],
         ]
     )
-    if sparse:
+    if use_sparse_tensors:
         activations = to_sparse(activations)
     result = to_dense(modifier(activations))
 
@@ -66,8 +68,8 @@ def test_hierarchy_modifier_deactivates_children_when_parent_inactive(sparse: bo
     assert torch.all(result[:, 1] == 0)
 
 
-@pytest.mark.parametrize("sparse", [False, True])
-def test_hierarchy_modifier_keeps_children_when_parent_active(sparse: bool):
+@pytest.mark.parametrize("use_sparse_tensors", [False, True])
+def test_hierarchy_modifier_keeps_children_when_parent_active(use_sparse_tensors: bool):
     child = HierarchyNode(feature_index=1)
     root = HierarchyNode(feature_index=0, children=[child])
     modifier = hierarchy_modifier([root])
@@ -80,7 +82,7 @@ def test_hierarchy_modifier_keeps_children_when_parent_active(sparse: bool):
         ]
     )
     original_child_vals = activations[:, 1].clone()
-    if sparse:
+    if use_sparse_tensors:
         activations = to_sparse(activations)
     result = to_dense(modifier(activations))
 
@@ -88,8 +90,8 @@ def test_hierarchy_modifier_keeps_children_when_parent_active(sparse: bool):
     assert torch.allclose(result[:, 1], original_child_vals)
 
 
-@pytest.mark.parametrize("sparse", [False, True])
-def test_hierarchy_modifier_mixed_parent_states(sparse: bool):
+@pytest.mark.parametrize("use_sparse_tensors", [False, True])
+def test_hierarchy_modifier_mixed_parent_states(use_sparse_tensors: bool):
     child = HierarchyNode(feature_index=1)
     root = HierarchyNode(feature_index=0, children=[child])
     modifier = hierarchy_modifier([root])
@@ -101,7 +103,7 @@ def test_hierarchy_modifier_mixed_parent_states(sparse: bool):
             [0.5, 0.0, 0.1],  # Parent active, child already inactive
         ]
     )
-    if sparse:
+    if use_sparse_tensors:
         activations = to_sparse(activations)
     result = to_dense(modifier(activations))
 
@@ -110,8 +112,8 @@ def test_hierarchy_modifier_mixed_parent_states(sparse: bool):
     assert result[2, 1] == 0.0  # Already inactive
 
 
-@pytest.mark.parametrize("sparse", [False, True])
-def test_hierarchy_modifier_mutually_exclusive_children(sparse: bool):
+@pytest.mark.parametrize("use_sparse_tensors", [False, True])
+def test_hierarchy_modifier_mutually_exclusive_children(use_sparse_tensors: bool):
     child1 = HierarchyNode(feature_index=1)
     child2 = HierarchyNode(feature_index=2)
     root = HierarchyNode(
@@ -128,7 +130,7 @@ def test_hierarchy_modifier_mutually_exclusive_children(sparse: bool):
             [1.0, 0.8, 0.6],
         ]
     )
-    if sparse:
+    if use_sparse_tensors:
         activations = to_sparse(activations)
 
     result = to_dense(modifier(activations))
@@ -142,8 +144,10 @@ def test_hierarchy_modifier_mutually_exclusive_children(sparse: bool):
     assert torch.all(either_active)
 
 
-@pytest.mark.parametrize("sparse", [False, True])
-def test_hierarchy_modifier_mutually_exclusive_allows_single_child(sparse: bool):
+@pytest.mark.parametrize("use_sparse_tensors", [False, True])
+def test_hierarchy_modifier_mutually_exclusive_allows_single_child(
+    use_sparse_tensors: bool,
+):
     child1 = HierarchyNode(feature_index=1)
     child2 = HierarchyNode(feature_index=2)
     root = HierarchyNode(
@@ -160,7 +164,7 @@ def test_hierarchy_modifier_mutually_exclusive_allows_single_child(sparse: bool)
             [1.0, 0.0, 0.3],
         ]
     )
-    if sparse:
+    if use_sparse_tensors:
         activations = to_sparse(activations)
 
     result = to_dense(modifier(activations))

@@ -34,7 +34,7 @@ class ActivationGenerator(nn.Module):
     correlation_matrix: torch.Tensor | None
     low_rank_correlation: tuple[torch.Tensor, torch.Tensor] | None
     correlation_thresholds: torch.Tensor | None
-    sparse: bool
+    use_sparse_tensors: bool
 
     def __init__(
         self,
@@ -46,7 +46,7 @@ class ActivationGenerator(nn.Module):
         correlation_matrix: CorrelationMatrixInput | None = None,
         device: torch.device | str = "cpu",
         dtype: torch.dtype | str = "float32",
-        sparse: bool = False,
+        use_sparse_tensors: bool = False,
     ):
         super().__init__()
         self.num_features = num_features
@@ -63,7 +63,7 @@ class ActivationGenerator(nn.Module):
         self.correlation_thresholds = None
         self.correlation_matrix = None
         self.low_rank_correlation = None
-        self.sparse = sparse
+        self.use_sparse_tensors = use_sparse_tensors
 
         if correlation_matrix is not None:
             if isinstance(correlation_matrix, torch.Tensor):
@@ -144,7 +144,7 @@ class ActivationGenerator(nn.Module):
         )
         activations_at_firing = (mean_at_firing + random_deltas).relu()
 
-        if self.sparse:
+        if self.use_sparse_tensors:
             # Return sparse COO tensor
             indices = torch.stack(firing_indices)  # [2, nnz]
             feature_activations = torch.sparse_coo_tensor(

@@ -39,15 +39,15 @@ def test_FeatureDictionary_creates_unit_norm_features():
     assert torch.allclose(norms, torch.ones(10), atol=1e-5)
 
 
-@pytest.mark.parametrize("sparse", [False, True])
-def test_FeatureDictionary_forward_pass(sparse: bool):
+@pytest.mark.parametrize("use_sparse_tensors", [False, True])
+def test_FeatureDictionary_forward_pass(use_sparse_tensors: bool):
     feature_dict = FeatureDictionary(num_features=5, hidden_dim=4)
     feature_activations = torch.zeros(3, 5)
     feature_activations[0, 0] = 1.0
     feature_activations[1, 2] = 0.5
     feature_activations[2, [0, 3]] = torch.tensor([1.0, 0.8])
 
-    if sparse:
+    if use_sparse_tensors:
         feature_activations = to_sparse(feature_activations)
 
     hidden = feature_dict(feature_activations)
@@ -55,20 +55,22 @@ def test_FeatureDictionary_forward_pass(sparse: bool):
     assert not hidden.is_sparse
 
 
-@pytest.mark.parametrize("sparse", [False, True])
-def test_FeatureDictionary_forward_produces_linear_combination(sparse: bool):
+@pytest.mark.parametrize("use_sparse_tensors", [False, True])
+def test_FeatureDictionary_forward_produces_linear_combination(
+    use_sparse_tensors: bool,
+):
     feature_dict = FeatureDictionary(num_features=3, hidden_dim=4)
     features = feature_dict.feature_vectors
 
     activations = torch.tensor([[1.0, 0.0, 0.0]])
-    if sparse:
+    if use_sparse_tensors:
         activations = to_sparse(activations)
     hidden = feature_dict(activations)
     expected = features[0].unsqueeze(0)
     assert torch.allclose(hidden, expected, atol=1e-5)
 
     activations = torch.tensor([[1.0, 1.0, 0.0]])
-    if sparse:
+    if use_sparse_tensors:
         activations = to_sparse(activations)
     hidden = feature_dict(activations)
     expected = (features[0] + features[1]).unsqueeze(0)

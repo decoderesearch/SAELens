@@ -17,22 +17,22 @@ def to_dense(tensor: torch.Tensor) -> torch.Tensor:
 
 
 class TestActivationGeneratorBasic:
-    @pytest.mark.parametrize("sparse", [False, True])
-    def test_respects_firing_probabilities(self, sparse: bool):
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_respects_firing_probabilities(self, use_sparse_tensors: bool):
         firing_probs = torch.tensor([0.3, 0.2, 0.1])
         batch_size = 2000
         generator = ActivationGenerator(
             num_features=3,
             firing_probabilities=firing_probs,
-            sparse=sparse,
+            use_sparse_tensors=use_sparse_tensors,
         )
         activations = to_dense(generator.sample(batch_size))
 
         actual_probs = (activations > 0).float().mean(dim=0)
         torch.testing.assert_close(actual_probs, firing_probs, atol=0.05, rtol=0)
 
-    @pytest.mark.parametrize("sparse", [False, True])
-    def test_respects_std_magnitudes(self, sparse: bool):
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_respects_std_magnitudes(self, use_sparse_tensors: bool):
         firing_probs = torch.tensor([1.0, 1.0, 1.0])
         std_magnitudes = torch.tensor([0.1, 0.2, 0.3])
         batch_size = 2000
@@ -40,15 +40,15 @@ class TestActivationGeneratorBasic:
             num_features=3,
             firing_probabilities=firing_probs,
             std_firing_magnitudes=std_magnitudes,
-            sparse=sparse,
+            use_sparse_tensors=use_sparse_tensors,
         )
         activations = to_dense(generator.sample(batch_size))
 
         actual_stds = activations.std(dim=0)
         torch.testing.assert_close(actual_stds, std_magnitudes, atol=0.05, rtol=0)
 
-    @pytest.mark.parametrize("sparse", [False, True])
-    def test_respects_mean_magnitudes(self, sparse: bool):
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_respects_mean_magnitudes(self, use_sparse_tensors: bool):
         firing_probs = torch.tensor([0.5, 0.5, 1.0])
         mean_magnitudes = torch.tensor([1.5, 2.5, 3.5])
         batch_size = 2000
@@ -56,7 +56,7 @@ class TestActivationGeneratorBasic:
             num_features=3,
             firing_probabilities=firing_probs,
             mean_firing_magnitudes=mean_magnitudes,
-            sparse=sparse,
+            use_sparse_tensors=use_sparse_tensors,
         )
         activations = to_dense(generator.sample(batch_size))
 
@@ -64,8 +64,8 @@ class TestActivationGeneratorBasic:
         assert set(activations[:, 1].tolist()) == {0, 2.5}
         assert set(activations[:, 2].tolist()) == {3.5}
 
-    @pytest.mark.parametrize("sparse", [False, True])
-    def test_never_returns_negative(self, sparse: bool):
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_never_returns_negative(self, use_sparse_tensors: bool):
         firing_probs = torch.tensor([1.0, 1.0, 1.0])
         std_magnitudes = torch.tensor([0.5, 1.0, 2.0])
         batch_size = 2000
@@ -73,7 +73,7 @@ class TestActivationGeneratorBasic:
             num_features=3,
             firing_probabilities=firing_probs,
             std_firing_magnitudes=std_magnitudes,
-            sparse=sparse,
+            use_sparse_tensors=use_sparse_tensors,
         )
         activations = to_dense(generator.sample(batch_size))
 
@@ -81,21 +81,21 @@ class TestActivationGeneratorBasic:
 
 
 class TestActivationGeneratorModifiers:
-    @pytest.mark.parametrize("sparse", [False, True])
-    def test_with_empty_list_of_modifiers(self, sparse: bool):
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_with_empty_list_of_modifiers(self, use_sparse_tensors: bool):
         generator = ActivationGenerator(
             num_features=3,
             firing_probabilities=0.5,
             modify_activations=[],
-            sparse=sparse,
+            use_sparse_tensors=use_sparse_tensors,
         )
 
         assert generator.modify_activations is None
         samples = generator.sample(batch_size=10)
         assert samples.shape == (10, 3)
 
-    @pytest.mark.parametrize("sparse", [False, True])
-    def test_with_single_modifier(self, sparse: bool):
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_with_single_modifier(self, use_sparse_tensors: bool):
         def double_activations(x: torch.Tensor) -> torch.Tensor:
             if x.is_sparse:
                 x = x.coalesce()
@@ -110,15 +110,15 @@ class TestActivationGeneratorModifiers:
             mean_firing_magnitudes=1.0,
             std_firing_magnitudes=0.0,
             modify_activations=double_activations,
-            sparse=sparse,
+            use_sparse_tensors=use_sparse_tensors,
         )
 
         samples = to_dense(generator.sample(batch_size=10))
         # After doubling, values should be 2.0 (and then relu keeps them positive)
         assert torch.allclose(samples, torch.ones_like(samples) * 2.0)
 
-    @pytest.mark.parametrize("sparse", [False, True])
-    def test_with_multiple_modifiers(self, sparse: bool):
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_with_multiple_modifiers(self, use_sparse_tensors: bool):
         def add_one(x: torch.Tensor) -> torch.Tensor:
             if x.is_sparse:
                 x = x.coalesce()
@@ -141,15 +141,15 @@ class TestActivationGeneratorModifiers:
             mean_firing_magnitudes=1.0,
             std_firing_magnitudes=0.0,
             modify_activations=[add_one, multiply_two],
-            sparse=sparse,
+            use_sparse_tensors=use_sparse_tensors,
         )
 
         samples = to_dense(generator.sample(batch_size=10))
         # (1 + 1) * 2 = 4
         assert torch.allclose(samples, torch.ones_like(samples) * 4.0)
 
-    @pytest.mark.parametrize("sparse", [False, True])
-    def test_modifier_result_is_relu_applied(self, sparse: bool):
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_modifier_result_is_relu_applied(self, use_sparse_tensors: bool):
         def make_negative(x: torch.Tensor) -> torch.Tensor:
             if x.is_sparse:
                 x = x.coalesce()
@@ -164,7 +164,7 @@ class TestActivationGeneratorModifiers:
             mean_firing_magnitudes=1.0,
             std_firing_magnitudes=0.0,
             modify_activations=make_negative,
-            sparse=sparse,
+            use_sparse_tensors=use_sparse_tensors,
         )
 
         samples = to_dense(generator.sample(batch_size=10))
@@ -173,23 +173,25 @@ class TestActivationGeneratorModifiers:
 
 
 class TestActivationGeneratorCorrelatedFeatures:
-    @pytest.mark.parametrize("sparse", [False, True])
-    def test_with_correlation_matrix(self, sparse: bool):
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_with_correlation_matrix(self, use_sparse_tensors: bool):
         correlation_matrix = generate_random_correlation_matrix(num_features=5, seed=42)
 
         generator = ActivationGenerator(
             num_features=5,
             firing_probabilities=0.5,
             correlation_matrix=correlation_matrix,
-            sparse=sparse,
+            use_sparse_tensors=use_sparse_tensors,
         )
 
         samples = to_dense(generator.sample(batch_size=100))
         assert samples.shape == (100, 5)
         assert torch.all(samples >= 0)
 
-    @pytest.mark.parametrize("sparse", [False, True])
-    def test_correlated_features_preserve_marginal_probabilities(self, sparse: bool):
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_correlated_features_preserve_marginal_probabilities(
+        self, use_sparse_tensors: bool
+    ):
         correlation_matrix = generate_random_correlation_matrix(
             num_features=5,
             min_correlation_strength=0.3,
@@ -202,7 +204,7 @@ class TestActivationGeneratorCorrelatedFeatures:
             num_features=5,
             firing_probabilities=firing_probs,
             correlation_matrix=correlation_matrix,
-            sparse=sparse,
+            use_sparse_tensors=use_sparse_tensors,
         )
 
         samples = to_dense(generator.sample(batch_size=5000))
@@ -634,7 +636,7 @@ class TestActivationGeneratorSparseOutput:
         generator = ActivationGenerator(
             num_features=10,
             firing_probabilities=0.3,
-            sparse=True,
+            use_sparse_tensors=True,
         )
         samples = generator.sample(batch_size=100)
 
@@ -652,14 +654,14 @@ class TestActivationGeneratorSparseOutput:
             firing_probabilities=firing_probs,
             std_firing_magnitudes=0.0,
             mean_firing_magnitudes=1.0,
-            sparse=False,
+            use_sparse_tensors=False,
         )
         generator_sparse = ActivationGenerator(
             num_features=num_features,
             firing_probabilities=firing_probs,
             std_firing_magnitudes=0.0,
             mean_firing_magnitudes=1.0,
-            sparse=True,
+            use_sparse_tensors=True,
         )
 
         # Generate samples (different random state, so we compare shapes and statistics)
@@ -696,7 +698,7 @@ class TestActivationGeneratorSparseOutput:
             num_features=num_features,
             firing_probabilities=firing_probs,
             correlation_matrix=(factor, diag),
-            sparse=True,
+            use_sparse_tensors=True,
         )
 
         samples = generator.sample(batch_size=2000)
@@ -713,7 +715,7 @@ class TestActivationGeneratorSparseOutput:
         generator = ActivationGenerator(
             num_features=10,
             firing_probabilities=0.0,  # Nothing fires
-            sparse=True,
+            use_sparse_tensors=True,
         )
         samples = generator.sample(batch_size=100)
 
@@ -727,7 +729,7 @@ class TestActivationGeneratorSparseOutput:
             firing_probabilities=1.0,  # Everything fires
             mean_firing_magnitudes=2.0,
             std_firing_magnitudes=0.0,
-            sparse=True,
+            use_sparse_tensors=True,
         )
         samples = generator.sample(batch_size=10)
 
