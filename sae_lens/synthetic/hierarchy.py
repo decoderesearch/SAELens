@@ -125,6 +125,13 @@ class _LevelData:
     # ME must be applied here before processing next level's parent deactivation
     me_group_indices: torch.Tensor  # [num_groups_at_level], may be empty
 
+    # Optimization data for parent deactivation (None if not applicable)
+    # When features are contiguous and grouped uniformly by parent, we can use reshape
+    opt_child_start: int | None = None  # Start index of contiguous children
+    opt_child_end: int | None = None  # End index of contiguous children
+    opt_unique_parents: torch.Tensor | None = None  # Unique parents in order
+    opt_children_per_parent: int | None = None  # Children per parent (if uniform)
+
 
 @dataclass
 class _SparseHierarchyData:
@@ -146,6 +153,10 @@ class _SparseHierarchyData:
 
     # Total number of ME groups
     num_groups: int
+
+    # ME optimization data (for chunked processing when siblings are contiguous)
+    # Maps level -> (child_start, num_groups, siblings_per_group, chunk_size)
+    me_opt_levels: dict[int, tuple[int, int, int, int]] | None = None
 
 
 def _build_sparse_hierarchy(
@@ -231,8 +242,44 @@ def _build_sparse_hierarchy(
         else:
             me_indices = torch.empty(0, dtype=torch.long)
 
+        # Check if parent deactivation can be optimized using reshape
+        # Requirements: features are contiguous, parents are sorted, uniform group sizes
+        opt_child_start = None
+        opt_child_end = None
+        opt_unique_parents = None
+        opt_children_per_parent = None
+
+        if feats.numel() > 0:
+            # Check if features are contiguous
+            expected = torch.arange(feats[0].item(), feats[-1].item() + 1)
+            features_contiguous = feats.numel() == expected.numel() and torch.equal(
+                feats, expected
+            )
+
+            if features_contiguous:
+                # Check if parents are sorted and have uniform group sizes
+                unique, counts = parents.unique_consecutive(return_counts=True)
+                parents_sorted = unique.numel() == parents.unique().numel()
+                uniform_groups = (
+                    counts.min().item() == counts.max().item() and counts[0].item() > 0
+                )
+
+                if parents_sorted and uniform_groups:
+                    opt_child_start = feats[0].item()
+                    opt_child_end = feats[-1].item() + 1
+                    opt_unique_parents = unique
+                    opt_children_per_parent = counts[0].item()
+
         level_data.append(
-            _LevelData(features=feats, parents=parents, me_group_indices=me_indices)
+            _LevelData(
+                features=feats,
+                parents=parents,
+                me_group_indices=me_indices,
+                opt_child_start=opt_child_start,
+                opt_child_end=opt_child_end,
+                opt_unique_parents=opt_unique_parents,
+                opt_children_per_parent=opt_children_per_parent,
+            )
         )
 
     # Build group siblings and parents tensors
@@ -254,12 +301,69 @@ def _build_sparse_hierarchy(
         me_group_parents = torch.empty(0, dtype=torch.long)
         num_groups = 0
 
+    # Check for ME optimization opportunities per level
+    # Requirements: all groups at level have same size, siblings are contiguous
+    me_opt_levels: dict[int, tuple[int, int, int, int]] | None = None
+
+    if me_groups:
+        me_opt_levels = {}
+        for level, group_indices in me_groups_by_level.items():
+            if len(group_indices) == 0:
+                continue
+
+            # Check if all groups at this level have the same size
+            sizes = [len(me_groups[g_idx][2]) for g_idx in group_indices]
+            if min(sizes) != max(sizes):
+                continue
+            siblings_per_group = sizes[0]
+
+            # Check if siblings within each group are contiguous
+            siblings_contiguous = True
+            for g_idx in group_indices:
+                sibs = me_groups[g_idx][2]
+                if len(sibs) > 1:
+                    for i in range(1, len(sibs)):
+                        if sibs[i] != sibs[i - 1] + 1:
+                            siblings_contiguous = False
+                            break
+                if not siblings_contiguous:
+                    break
+
+            if not siblings_contiguous:
+                continue
+
+            # Check if groups are laid out contiguously
+            # (group 0's siblings, then group 1's siblings, etc.)
+            first_sibling_per_group = [
+                me_groups[g_idx][2][0] for g_idx in group_indices
+            ]
+            expected_starts = [
+                first_sibling_per_group[0] + i * siblings_per_group
+                for i in range(len(group_indices))
+            ]
+            groups_contiguous = first_sibling_per_group == expected_starts
+
+            if groups_contiguous:
+                child_start = first_sibling_per_group[0]
+                num_groups_at_level = len(group_indices)
+                # Choose chunk size based on memory constraints
+                # Each chunk uses [batch, chunk_groups, siblings] memory
+                # Aim for ~100MB intermediate tensors
+                chunk_size = min(200, num_groups_at_level)
+                me_opt_levels[level] = (
+                    child_start,
+                    num_groups_at_level,
+                    siblings_per_group,
+                    chunk_size,
+                )
+
     return _SparseHierarchyData(
         level_data=level_data,
         me_group_siblings=me_group_siblings,
         me_group_sizes=me_group_sizes,
         me_group_parents=me_group_parents,
         num_groups=num_groups,
+        me_opt_levels=me_opt_levels if me_opt_levels else None,
     )
 
 
@@ -284,24 +388,176 @@ def _apply_hierarchy_sparse(
     me_group_sizes = sparse_data.me_group_sizes
     me_group_parents = sparse_data.me_group_parents
 
-    for level_data in sparse_data.level_data:
+    for level_idx, level_data in enumerate(sparse_data.level_data):
         # Step 1: Deactivate children where parent is inactive
         if level_data.features.numel() > 0:
-            parent_vals = result[:, level_data.parents]
-            child_vals = result[:, level_data.features]
-            result[:, level_data.features] = child_vals * (parent_vals > 0)
+            # Check if we can use the optimized reshape path
+            if level_data.opt_unique_parents is not None:
+                _apply_parent_deactivation_optimized(
+                    result,
+                    level_data.opt_child_start,  # type: ignore
+                    level_data.opt_child_end,  # type: ignore
+                    level_data.opt_unique_parents,
+                    level_data.opt_children_per_parent,  # type: ignore
+                )
+            else:
+                parent_vals = result[:, level_data.parents]
+                child_vals = result[:, level_data.features]
+                result[:, level_data.features] = child_vals * (parent_vals > 0)
 
         # Step 2: Apply ME for groups whose parent is at this level
         if level_data.me_group_indices.numel() > 0:
-            _apply_me_for_groups(
-                result,
-                level_data.me_group_indices,
-                me_group_siblings,
-                me_group_sizes,
-                me_group_parents,
-            )
+            # Check if we can use the optimized chunked ME path
+            if (
+                sparse_data.me_opt_levels is not None
+                and level_idx in sparse_data.me_opt_levels
+            ):
+                child_start, num_groups, siblings_per_group, chunk_size = (
+                    sparse_data.me_opt_levels[level_idx]
+                )
+                _apply_me_optimized(
+                    result,
+                    me_group_parents,
+                    level_data.me_group_indices,
+                    child_start,
+                    num_groups,
+                    siblings_per_group,
+                    chunk_size,
+                )
+            else:
+                _apply_me_for_groups(
+                    result,
+                    level_data.me_group_indices,
+                    me_group_siblings,
+                    me_group_sizes,
+                    me_group_parents,
+                )
 
     return result
+
+
+def _apply_parent_deactivation_optimized(
+    result: torch.Tensor,
+    child_start: int,
+    child_end: int,
+    unique_parents: torch.Tensor,
+    children_per_parent: int,
+) -> None:
+    """
+    Apply parent deactivation using reshape optimization.
+
+    This is faster when children are contiguous and uniformly grouped by parent.
+    Instead of indexing each child's parent individually, we reshape and broadcast.
+    """
+    batch_size = result.shape[0]
+    num_parents = unique_parents.numel()
+
+    # Get parent activations: [batch, num_parents]
+    parent_active = result[:, unique_parents] > 0
+
+    # Get children slice: [batch, num_children]
+    children_flat = result[:, child_start:child_end]
+
+    # Apply mask by expanding parent_active to match children
+    # Each parent's mask applies to children_per_parent consecutive children
+    # Shape: [batch, num_parents, 1] -> [batch, num_parents, children_per_parent] -> [batch, num_children]
+    mask = parent_active.unsqueeze(2).expand(
+        batch_size, num_parents, children_per_parent
+    )
+    mask_flat = mask.reshape(batch_size, -1)
+
+    # Apply mask in-place
+    result[:, child_start:child_end] = children_flat * mask_flat
+
+
+def _apply_me_optimized(
+    result: torch.Tensor,
+    me_group_parents: torch.Tensor,
+    me_group_indices: torch.Tensor,
+    child_start: int,
+    num_groups: int,
+    siblings_per_group: int,
+    chunk_size: int,
+) -> None:
+    """
+    Apply ME using chunked reshape optimization.
+
+    This is faster when ME siblings are contiguous and groups have uniform size.
+    Processing in chunks avoids large intermediate tensors.
+    """
+    batch_size = result.shape[0]
+    device = result.device
+
+    # Get ME parents for groups at this level
+    me_parents = me_group_parents[me_group_indices]
+    has_parent = me_parents >= 0
+
+    if has_parent.any():
+        safe_parents = me_parents.clamp(min=0)
+        parent_active = result[:, safe_parents] > 0
+        if not has_parent.all():
+            parent_active = parent_active | ~has_parent
+    else:
+        parent_active = torch.ones(
+            batch_size, num_groups, dtype=torch.bool, device=device
+        )
+
+    # Process groups in chunks to limit memory usage
+    for group_start in range(0, num_groups, chunk_size):
+        group_end = min(group_start + chunk_size, num_groups)
+        chunk_groups = group_end - group_start
+
+        # Get child indices for this chunk
+        child_chunk_start = child_start + group_start * siblings_per_group
+        child_chunk_end = child_start + group_end * siblings_per_group
+
+        # Get children for this chunk: [batch, chunk_groups, siblings]
+        children = result[:, child_chunk_start:child_chunk_end].view(
+            batch_size, chunk_groups, siblings_per_group
+        )
+
+        # Parent active for this chunk
+        parent_active_chunk = parent_active[:, group_start:group_end]
+
+        # Find active siblings
+        sibling_active = (children > 0) & parent_active_chunk.unsqueeze(2)
+
+        # Count active per group
+        active_counts = sibling_active.sum(dim=2)
+        needs_exclusion = active_counts > 1
+
+        if not needs_exclusion.any():
+            continue
+
+        # Get conflicting (batch, group) pairs
+        batch_idx, group_idx = torch.where(needs_exclusion)
+        num_conflicts = batch_idx.numel()
+
+        if num_conflicts == 0:
+            continue
+
+        # Get active mask for conflicts: [num_conflicts, siblings]
+        conflict_active = sibling_active[batch_idx, group_idx]
+
+        # Random winner selection
+        random_scores = torch.rand(num_conflicts, siblings_per_group, device=device)
+        random_scores[~conflict_active] = -1e9
+        winner_idx = random_scores.argmax(dim=1)
+
+        # Create loser mask
+        sibling_range = torch.arange(siblings_per_group, device=device)
+        is_winner = sibling_range == winner_idx.unsqueeze(1)
+        should_deactivate = conflict_active & ~is_winner
+
+        # Get loser positions and deactivate directly in result
+        conflict_idx, sib_idx = torch.where(should_deactivate)
+
+        if conflict_idx.numel() > 0:
+            deact_batch = batch_idx[conflict_idx]
+            deact_group = group_idx[conflict_idx]
+            # Calculate absolute feature indices
+            deact_feat = child_chunk_start + deact_group * siblings_per_group + sib_idx
+            result[deact_batch, deact_feat] = 0
 
 
 def _apply_me_for_groups(
@@ -468,6 +724,14 @@ def hierarchy_modifier(
                         features=ld.features.to(device),
                         parents=ld.parents.to(device),
                         me_group_indices=ld.me_group_indices.to(device),
+                        opt_child_start=ld.opt_child_start,
+                        opt_child_end=ld.opt_child_end,
+                        opt_unique_parents=(
+                            ld.opt_unique_parents.to(device)
+                            if ld.opt_unique_parents is not None
+                            else None
+                        ),
+                        opt_children_per_parent=ld.opt_children_per_parent,
                     )
                     for ld in sparse_data.level_data
                 ],
@@ -475,6 +739,7 @@ def hierarchy_modifier(
                 me_group_sizes=sparse_data.me_group_sizes.to(device),
                 me_group_parents=sparse_data.me_group_parents.to(device),
                 num_groups=sparse_data.num_groups,
+                me_opt_levels=sparse_data.me_opt_levels,
             )
         return device_cache[device]
 

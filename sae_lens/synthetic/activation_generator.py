@@ -2,12 +2,12 @@
 Functions for generating synthetic feature activations.
 """
 
+import math
 from collections.abc import Callable, Sequence
 
 import torch
-from scipy.stats import norm
 from torch import nn
-from torch.distributions import LowRankMultivariateNormal, MultivariateNormal
+from torch.distributions import MultivariateNormal
 
 from sae_lens.synthetic.correlation import LowRankCorrelationMatrix
 from sae_lens.util import str_to_dtype
@@ -76,12 +76,15 @@ class ActivationGenerator(nn.Module):
                 _validate_low_rank_correlation(
                     correlation_factor, correlation_diag, num_features
                 )
-                self.low_rank_correlation = (correlation_factor, correlation_diag)
+                # Pre-compute sqrt for efficiency (used every sample call)
+                self.low_rank_correlation = (
+                    correlation_factor,
+                    correlation_diag.sqrt(),
+                )
 
-            self.correlation_thresholds = torch.tensor(
-                [norm.ppf(1 - p.item()) for p in self.firing_probabilities],
-                device=device,
-                dtype=self.firing_probabilities.dtype,
+            # Vectorized inverse normal CDF: norm.ppf(1-p) = sqrt(2) * erfinv(1 - 2*p)
+            self.correlation_thresholds = math.sqrt(2) * torch.erfinv(
+                1 - 2 * self.firing_probabilities
             )
 
     @torch.no_grad()
@@ -105,7 +108,7 @@ class ActivationGenerator(nn.Module):
 
         if self.correlation_matrix is not None:
             assert self.correlation_thresholds is not None
-            firing_features = _generate_correlated_features(
+            firing_indices = _generate_correlated_features(
                 batch_size,
                 self.correlation_matrix,
                 self.correlation_thresholds,
@@ -113,7 +116,7 @@ class ActivationGenerator(nn.Module):
             )
         elif self.low_rank_correlation is not None:
             assert self.correlation_thresholds is not None
-            firing_features = _generate_low_rank_correlated_features(
+            firing_indices = _generate_low_rank_correlated_features(
                 batch_size,
                 self.low_rank_correlation[0],
                 self.low_rank_correlation[1],
@@ -121,23 +124,33 @@ class ActivationGenerator(nn.Module):
                 device,
             )
         else:
-            firing_features = torch.bernoulli(
+            firing_indices = torch.bernoulli(
                 self.firing_probabilities.unsqueeze(0).expand(batch_size, -1)
-            )
+            ).nonzero(as_tuple=True)
 
-        firing_magnitude_delta = torch.normal(
-            torch.zeros_like(self.firing_probabilities)
-            .unsqueeze(0)
-            .expand(batch_size, -1),
-            self.std_firing_magnitudes.unsqueeze(0).expand(batch_size, -1),
+        # Compute activations only at firing positions (sparse optimization)
+        feature_indices = firing_indices[1]
+        num_firing = feature_indices.shape[0]
+        mean_at_firing = self.mean_firing_magnitudes[feature_indices]
+        std_at_firing = self.std_firing_magnitudes[feature_indices]
+        random_deltas = (
+            torch.randn(
+                num_firing, device=device, dtype=self.mean_firing_magnitudes.dtype
+            )
+            * std_at_firing
         )
-        firing_magnitude_delta[firing_features == 0] = 0
-        feature_activations = (
-            firing_features * self.mean_firing_magnitudes + firing_magnitude_delta
-        ).relu()
+        activations_at_firing = (mean_at_firing + random_deltas).relu()
+        feature_activations = torch.zeros(
+            batch_size,
+            self.num_features,
+            device=device,
+            dtype=self.mean_firing_magnitudes.dtype,
+        )
+        feature_activations[firing_indices] = activations_at_firing
 
         if self.modify_activations is not None:
             feature_activations = self.modify_activations(feature_activations).relu()
+
         return feature_activations
 
     def forward(self, batch_size: int) -> torch.Tensor:
@@ -149,7 +162,7 @@ def _generate_correlated_features(
     correlation_matrix: torch.Tensor,
     thresholds: torch.Tensor,
     device: torch.device,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Generate correlated binary features using multivariate Gaussian sampling.
 
@@ -163,7 +176,7 @@ def _generate_correlated_features(
         device: Device to generate samples on
 
     Returns:
-        Binary feature matrix of shape (batch_size, num_features)
+        Tuple of (row_indices, col_indices) for firing features
     """
     num_features = correlation_matrix.shape[0]
 
@@ -173,16 +186,17 @@ def _generate_correlated_features(
     )
 
     gaussian_samples = mvn.sample((batch_size,))
-    return (gaussian_samples > thresholds.unsqueeze(0)).float()
+    indices = (gaussian_samples > thresholds.unsqueeze(0)).nonzero(as_tuple=True)
+    return indices[0], indices[1]
 
 
 def _generate_low_rank_correlated_features(
     batch_size: int,
     correlation_factor: torch.Tensor,
-    correlation_diag: torch.Tensor,
+    cov_diag_sqrt: torch.Tensor,
     thresholds: torch.Tensor,
     device: torch.device,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Generate correlated binary features using low-rank multivariate Gaussian sampling.
 
@@ -192,23 +206,27 @@ def _generate_low_rank_correlated_features(
     Args:
         batch_size: Number of samples to generate
         correlation_factor: Factor matrix of shape (num_features, rank)
-        correlation_diag: Diagonal term of shape (num_features,)
+        cov_diag_sqrt: Pre-computed sqrt of diagonal term, shape (num_features,)
         thresholds: Pre-computed thresholds for each feature (from inverse normal CDF)
         device: Device to generate samples on
 
     Returns:
-        Binary feature matrix of shape (batch_size, num_features)
+        Tuple of (row_indices, col_indices) for firing features
     """
-    mvn = LowRankMultivariateNormal(
-        loc=torch.zeros(
-            correlation_factor.shape[0], device=device, dtype=thresholds.dtype
-        ),
-        cov_factor=correlation_factor.to(device=device, dtype=thresholds.dtype),
-        cov_diag=correlation_diag.to(device=device, dtype=thresholds.dtype),
-    )
+    # Manual low-rank MVN sampling to enable autocast for the expensive matmul
+    # samples = eps @ cov_factor.T + eta * sqrt(cov_diag)
+    # where eps ~ N(0, I_rank) and eta ~ N(0, I_n)
 
-    gaussian_samples = mvn.sample((batch_size,))
-    return (gaussian_samples > thresholds.unsqueeze(0)).float()
+    num_features, rank = correlation_factor.shape
+
+    # Generate random samples in float32 for numerical stability
+    eps = torch.randn(batch_size, rank, device=device, dtype=torch.float32)
+    eta = torch.randn(batch_size, num_features, device=device, dtype=torch.float32)
+
+    gaussian_samples = eps @ correlation_factor.T + eta * cov_diag_sqrt
+
+    indices = (gaussian_samples > thresholds.unsqueeze(0)).nonzero(as_tuple=True)
+    return indices[0], indices[1]
 
 
 def _to_tensor(

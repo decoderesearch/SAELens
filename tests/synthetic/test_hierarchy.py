@@ -856,6 +856,375 @@ def test_mutual_exclusion_mixed_root_and_nested_groups():
     ), "Nested ME: one of 3 or 4 should be active when parent 2 is active"
 
 
+def test_me_fallback_path_variable_sibling_counts_single_level():
+    """ME groups with different sizes at same level use fallback path.
+
+    When ME groups at the same level have different numbers of siblings,
+    the optimized reshape path cannot be used and _apply_me_for_groups is called.
+    """
+    # Level 0: Two parents, each with ME children of different sizes
+    # Parent A (feature 0): 2 ME children (features 1, 2)
+    # Parent B (feature 3): 3 ME children (features 4, 5, 6)
+    # At level 1, ME groups have sizes [2, 3] -> fallback path
+
+    child_a1 = HierarchyNode(feature_index=1)
+    child_a2 = HierarchyNode(feature_index=2)
+    parent_a = HierarchyNode(
+        feature_index=0,
+        children=[child_a1, child_a2],
+        mutually_exclusive_children=True,
+    )
+
+    child_b1 = HierarchyNode(feature_index=4)
+    child_b2 = HierarchyNode(feature_index=5)
+    child_b3 = HierarchyNode(feature_index=6)
+    parent_b = HierarchyNode(
+        feature_index=3,
+        children=[child_b1, child_b2, child_b3],
+        mutually_exclusive_children=True,
+    )
+
+    modifier = hierarchy_modifier([parent_a, parent_b])
+
+    n_samples = 1000
+    activations = torch.ones(n_samples, 7)
+    result = modifier(activations)
+
+    # Parent A's children should be mutually exclusive
+    both_a_active = (result[:, 1] > 0) & (result[:, 2] > 0)
+    assert both_a_active.sum() == 0, "Parent A's children should be exclusive"
+    either_a_active = (result[:, 1] > 0) | (result[:, 2] > 0)
+    assert either_a_active.all(), "One of Parent A's children should be active"
+
+    # Parent B's children should be mutually exclusive
+    all_b_active = (
+        (result[:, 4] > 0).int() + (result[:, 5] > 0).int() + (result[:, 6] > 0).int()
+    )
+    assert (
+        all_b_active <= 1
+    ).all(), "At most one of Parent B's children should be active"
+    assert (
+        all_b_active == 1
+    ).all(), "Exactly one of Parent B's children should be active"
+
+    # Statistical check: all children should be selected sometimes
+    for idx in [1, 2]:
+        count = (result[:, idx] > 0).sum().item()
+        assert count > 100, f"Child {idx} selected only {count} times, expected ~500"
+
+    for idx in [4, 5, 6]:
+        count = (result[:, idx] > 0).sum().item()
+        assert count > 100, f"Child {idx} selected only {count} times, expected ~333"
+
+
+def test_me_fallback_path_variable_sibling_counts_multi_level():
+    """ME groups with different sizes across multiple levels use fallback path.
+
+    Tests a 3-level hierarchy where each level has ME groups of varying sizes.
+    """
+    # Level 0: Root with 2 ME children
+    # Level 1: Child A has 2 ME grandchildren, Child B has 4 ME grandchildren
+    # Level 2: Mixed grandchildren counts
+
+    # Grandchildren for Child A (2 grandchildren)
+    gc_a1 = HierarchyNode(feature_index=3)
+    gc_a2 = HierarchyNode(feature_index=4)
+
+    # Grandchildren for Child B (4 grandchildren)
+    gc_b1 = HierarchyNode(feature_index=5)
+    gc_b2 = HierarchyNode(feature_index=6)
+    gc_b3 = HierarchyNode(feature_index=7)
+    gc_b4 = HierarchyNode(feature_index=8)
+
+    child_a = HierarchyNode(
+        feature_index=1,
+        children=[gc_a1, gc_a2],
+        mutually_exclusive_children=True,
+    )
+    child_b = HierarchyNode(
+        feature_index=2,
+        children=[gc_b1, gc_b2, gc_b3, gc_b4],
+        mutually_exclusive_children=True,
+    )
+
+    root = HierarchyNode(
+        feature_index=0,
+        children=[child_a, child_b],
+        mutually_exclusive_children=True,
+    )
+
+    modifier = hierarchy_modifier([root])
+
+    n_samples = 2000
+    activations = torch.ones(n_samples, 9)
+    result = modifier(activations)
+
+    # Level 0 ME: children 1 and 2 should be exclusive
+    both_children = (result[:, 1] > 0) & (result[:, 2] > 0)
+    assert both_children.sum() == 0, "Root's children should be exclusive"
+
+    # When Child A is active, its grandchildren (3, 4) should be exclusive
+    child_a_active = result[:, 1] > 0
+    if child_a_active.any():
+        gc_a_both = (result[child_a_active, 3] > 0) & (result[child_a_active, 4] > 0)
+        assert gc_a_both.sum() == 0, "Child A's grandchildren should be exclusive"
+        gc_a_either = (result[child_a_active, 3] > 0) | (result[child_a_active, 4] > 0)
+        assert gc_a_either.all(), "One of Child A's grandchildren should be active"
+
+    # When Child B is active, its grandchildren (5, 6, 7, 8) should be exclusive
+    child_b_active = result[:, 2] > 0
+    if child_b_active.any():
+        gc_b_count = (
+            (result[child_b_active, 5] > 0).int()
+            + (result[child_b_active, 6] > 0).int()
+            + (result[child_b_active, 7] > 0).int()
+            + (result[child_b_active, 8] > 0).int()
+        )
+        assert (gc_b_count <= 1).all(), "At most one of Child B's grandchildren active"
+        assert (gc_b_count == 1).all(), "Exactly one of Child B's grandchildren active"
+
+    # When Child A is inactive, its grandchildren should be 0
+    child_a_inactive = result[:, 1] == 0
+    assert (result[child_a_inactive, 3] == 0).all()
+    assert (result[child_a_inactive, 4] == 0).all()
+
+    # When Child B is inactive, its grandchildren should be 0
+    child_b_inactive = result[:, 2] == 0
+    assert (result[child_b_inactive, 5] == 0).all()
+    assert (result[child_b_inactive, 6] == 0).all()
+    assert (result[child_b_inactive, 7] == 0).all()
+    assert (result[child_b_inactive, 8] == 0).all()
+
+
+def test_me_fallback_path_non_contiguous_siblings():
+    """ME with non-contiguous sibling indices uses fallback path.
+
+    When ME siblings don't have consecutive feature indices, the optimized
+    path cannot use reshape and must fall back to _apply_me_for_groups.
+    """
+    # ME children at non-contiguous indices: 0, 5 (gap of 4)
+    child1 = HierarchyNode(feature_index=0)
+    child2 = HierarchyNode(feature_index=5)
+    root = HierarchyNode(
+        feature_index=None,  # organizational root
+        children=[child1, child2],
+        mutually_exclusive_children=True,
+    )
+
+    modifier = hierarchy_modifier([root])
+
+    n_samples = 1000
+    activations = torch.ones(n_samples, 6)
+    result = modifier(activations)
+
+    # ME should still be enforced
+    both_active = (result[:, 0] > 0) & (result[:, 5] > 0)
+    assert both_active.sum() == 0, "Non-contiguous ME siblings should be exclusive"
+
+    either_active = (result[:, 0] > 0) | (result[:, 5] > 0)
+    assert either_active.all(), "One ME sibling should always be active"
+
+    # Features in the gap should be unchanged
+    assert (result[:, 1] == 1.0).all()
+    assert (result[:, 2] == 1.0).all()
+    assert (result[:, 3] == 1.0).all()
+    assert (result[:, 4] == 1.0).all()
+
+
+def test_me_fallback_path_non_contiguous_multi_level():
+    """Non-contiguous ME siblings across multiple levels use fallback path."""
+    # Level 1: Parent with ME children at indices 1, 10 (non-contiguous)
+    # Level 2: Each child has ME grandchildren, also non-contiguous
+
+    # Grandchildren for child at index 1 (non-contiguous: 2, 7)
+    gc_1a = HierarchyNode(feature_index=2)
+    gc_1b = HierarchyNode(feature_index=7)
+
+    # Grandchildren for child at index 10 (non-contiguous: 11, 15)
+    gc_2a = HierarchyNode(feature_index=11)
+    gc_2b = HierarchyNode(feature_index=15)
+
+    child1 = HierarchyNode(
+        feature_index=1,
+        children=[gc_1a, gc_1b],
+        mutually_exclusive_children=True,
+    )
+    child2 = HierarchyNode(
+        feature_index=10,
+        children=[gc_2a, gc_2b],
+        mutually_exclusive_children=True,
+    )
+
+    root = HierarchyNode(
+        feature_index=0,
+        children=[child1, child2],
+        mutually_exclusive_children=True,
+    )
+
+    modifier = hierarchy_modifier([root])
+
+    n_samples = 1000
+    activations = torch.ones(n_samples, 16)
+    result = modifier(activations)
+
+    # Level 1 ME: children at 1 and 10 should be exclusive
+    both_children = (result[:, 1] > 0) & (result[:, 10] > 0)
+    assert both_children.sum() == 0, "Children 1 and 10 should be exclusive"
+
+    # When child 1 is active, grandchildren 2 and 7 should be exclusive
+    child1_active = result[:, 1] > 0
+    if child1_active.any():
+        gc1_both = (result[child1_active, 2] > 0) & (result[child1_active, 7] > 0)
+        assert gc1_both.sum() == 0, "Grandchildren 2 and 7 should be exclusive"
+
+    # When child 10 is active, grandchildren 11 and 15 should be exclusive
+    child2_active = result[:, 10] > 0
+    if child2_active.any():
+        gc2_both = (result[child2_active, 11] > 0) & (result[child2_active, 15] > 0)
+        assert gc2_both.sum() == 0, "Grandchildren 11 and 15 should be exclusive"
+
+    # When child 1 is inactive, its grandchildren should be 0
+    child1_inactive = result[:, 1] == 0
+    assert (result[child1_inactive, 2] == 0).all()
+    assert (result[child1_inactive, 7] == 0).all()
+
+    # When child 10 is inactive, its grandchildren should be 0
+    child2_inactive = result[:, 10] == 0
+    assert (result[child2_inactive, 11] == 0).all()
+    assert (result[child2_inactive, 15] == 0).all()
+
+
+def test_me_mixed_optimized_and_fallback_paths():
+    """Hierarchy where some levels use optimized path and others use fallback.
+
+    Level 1: Uniform ME groups (2 children each) -> optimized path
+    Level 2: Variable ME groups (2 vs 3 children) -> fallback path
+    """
+    # Level 2 grandchildren
+    # Group under child_a: 2 grandchildren (contiguous)
+    gc_a1 = HierarchyNode(feature_index=3)
+    gc_a2 = HierarchyNode(feature_index=4)
+
+    # Group under child_b: 3 grandchildren (contiguous)
+    gc_b1 = HierarchyNode(feature_index=5)
+    gc_b2 = HierarchyNode(feature_index=6)
+    gc_b3 = HierarchyNode(feature_index=7)
+
+    # Level 1 children (uniform: 2 children each for root)
+    child_a = HierarchyNode(
+        feature_index=1,
+        children=[gc_a1, gc_a2],
+        mutually_exclusive_children=True,
+    )
+    child_b = HierarchyNode(
+        feature_index=2,
+        children=[gc_b1, gc_b2, gc_b3],
+        mutually_exclusive_children=True,
+    )
+
+    # Root with uniform ME at level 1
+    root = HierarchyNode(
+        feature_index=0,
+        children=[child_a, child_b],
+        mutually_exclusive_children=True,
+    )
+
+    modifier = hierarchy_modifier([root])
+
+    n_samples = 2000
+    activations = torch.ones(n_samples, 8)
+    result = modifier(activations)
+
+    # Level 1: uniform ME should work (optimized path)
+    both_level1 = (result[:, 1] > 0) & (result[:, 2] > 0)
+    assert both_level1.sum() == 0, "Level 1 ME should be enforced"
+
+    # Level 2: variable ME should work (fallback path)
+    child_a_active = result[:, 1] > 0
+    child_b_active = result[:, 2] > 0
+
+    # Child A's grandchildren (size 2)
+    if child_a_active.any():
+        gc_a_both = (result[child_a_active, 3] > 0) & (result[child_a_active, 4] > 0)
+        assert gc_a_both.sum() == 0
+
+    # Child B's grandchildren (size 3)
+    if child_b_active.any():
+        gc_b_count = (
+            (result[child_b_active, 5] > 0).int()
+            + (result[child_b_active, 6] > 0).int()
+            + (result[child_b_active, 7] > 0).int()
+        )
+        assert (gc_b_count <= 1).all()
+
+    # Verify cascading deactivation still works
+    root_inactive = result[:, 0] == 0
+    for idx in range(1, 8):
+        assert (
+            result[root_inactive, idx] == 0
+        ).all(), f"Feature {idx} should be 0 when root inactive"
+
+
+def test_me_fallback_non_contiguous_groups():
+    """ME groups that are not laid out contiguously use fallback path.
+
+    Even if each group has the same size and contiguous siblings within,
+    if the groups themselves are not contiguous, fallback is used.
+    """
+    # Two ME groups at same level, each with 2 contiguous siblings
+    # But groups are not contiguous: group 1 at [1,2], group 2 at [5,6]
+
+    # Parent A with children at 1, 2
+    child_a1 = HierarchyNode(feature_index=1)
+    child_a2 = HierarchyNode(feature_index=2)
+    parent_a = HierarchyNode(
+        feature_index=0,
+        children=[child_a1, child_a2],
+        mutually_exclusive_children=True,
+    )
+
+    # Parent B with children at 5, 6 (gap from parent A's children)
+    child_b1 = HierarchyNode(feature_index=5)
+    child_b2 = HierarchyNode(feature_index=6)
+    parent_b = HierarchyNode(
+        feature_index=4,
+        children=[child_b1, child_b2],
+        mutually_exclusive_children=True,
+    )
+
+    # Organizational root to put both at same level
+    root = HierarchyNode(
+        feature_index=None,
+        children=[parent_a, parent_b],
+    )
+
+    modifier = hierarchy_modifier([root])
+
+    n_samples = 1000
+    activations = torch.ones(n_samples, 7)
+    result = modifier(activations)
+
+    # Parent A's children should be exclusive
+    both_a = (result[:, 1] > 0) & (result[:, 2] > 0)
+    assert both_a.sum() == 0
+
+    # Parent B's children should be exclusive
+    both_b = (result[:, 5] > 0) & (result[:, 6] > 0)
+    assert both_b.sum() == 0
+
+    # Features 3 (in gap) should be unchanged
+    assert (result[:, 3] == 1.0).all()
+
+    # Verify parent deactivation still works
+    parent_a_inactive = result[:, 0] == 0
+    assert (result[parent_a_inactive, 1] == 0).all()
+    assert (result[parent_a_inactive, 2] == 0).all()
+
+    parent_b_inactive = result[:, 4] == 0
+    assert (result[parent_b_inactive, 5] == 0).all()
+    assert (result[parent_b_inactive, 6] == 0).all()
+
+
 def test_hierarchy_modifier_large_hierarchy_performance():
     """Test hierarchy modifier performance with a large hierarchy (50k nodes).
 

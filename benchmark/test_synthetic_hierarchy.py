@@ -9,7 +9,6 @@ from sae_lens.synthetic import (
     HierarchyNode,
     generate_random_low_rank_correlation_matrix,
     hierarchy_modifier,
-    orthogonal_initializer,
     zipfian_firing_probabilities,
 )
 
@@ -72,18 +71,24 @@ def create_hierarchical_synthetic_setup(
 
     roots = [nodes[i] for i in range(roots_count)]
     actual_num_features = num_features
+    modifier_start_time = perf_counter()
     modifier = hierarchy_modifier(roots)
+    modifier_end_time = perf_counter()
+    print(f"Modifier time: {modifier_end_time - modifier_start_time:.4f}s")
 
     firing_probabilities = zipfian_firing_probabilities(
-        actual_num_features, min_prob=0.1
+        actual_num_features, min_prob=0.05
     )
 
+    correlation_start_time = perf_counter()
     lr_correlation_matrix = generate_random_low_rank_correlation_matrix(
         num_features=actual_num_features,
         rank=correlation_rank,
         correlation_scale=correlation_scale,
         device=device,
     )
+    correlation_end_time = perf_counter()
+    print(f"Correlation time: {correlation_end_time - correlation_start_time:.4f}s")
 
     generator = ActivationGenerator(
         num_features=actual_num_features,
@@ -95,23 +100,31 @@ def create_hierarchical_synthetic_setup(
         device=device,
     )
 
+    generator_end_time = perf_counter()
+    print(f"Generator time: {generator_end_time - correlation_end_time:.4f}s")
+
     feature_dict = FeatureDictionary(
         num_features=actual_num_features,
         hidden_dim=hidden_dim,
         bias=False,
         device=device,
-        initializer=orthogonal_initializer(show_progress=False, num_steps=50),
+        # initializer=orthogonal_initializer(show_progress=True, num_steps=10),
+        initializer=None,
     )
+
+    feature_dict_end_time = perf_counter()
+    print(f"Feature dictionary time: {feature_dict_end_time - generator_end_time:.4f}s")
 
     return feature_dict, generator, actual_num_features
 
 
 # Run with: poetry run pytest benchmark/test_synthetic_hierarchy.py -v -s
 def test_benchmark_hierarchical_synthetic_pipeline():
-    num_features = 10_000
+    num_features = 1_000_000
     hidden_dim = 1024
-    batch_size = 50_000
-    num_iterations = 20
+    batch_size = 2500
+    # we want to see how long 1M samples takes to generate
+    num_iterations = 1_000_000 // batch_size
 
     torch.set_grad_enabled(True)
     print(
@@ -123,10 +136,10 @@ def test_benchmark_hierarchical_synthetic_pipeline():
     feature_dict, generator, actual_features = create_hierarchical_synthetic_setup(
         num_features=num_features,
         hidden_dim=hidden_dim,
-        branching_factor=100,
+        branching_factor=1000,
         mutual_exclusion=True,
         device=device,
-        correlation_rank=1000,
+        correlation_rank=100,
         correlation_scale=0.1,
     )
     setup_duration = perf_counter() - setup_start
@@ -136,16 +149,18 @@ def test_benchmark_hierarchical_synthetic_pipeline():
     assert actual_features >= num_features
 
     # Warmup
-    samples = generator.sample(batch_size)
-    hidden = feature_dict(samples)
-    # hidden = torch.zeros(batch_size, hidden_dim, device=device)
+    with torch.autocast(device_type=device, dtype=torch.bfloat16):
+        samples = generator.sample(batch_size)
+        hidden = feature_dict(samples)
+        # hidden = torch.zeros(batch_size, hidden_dim, device=device)
     if device == "cuda":
         torch.cuda.synchronize()
 
     # Benchmark sample generation
     gen_start = perf_counter()
-    for _ in range(num_iterations):
-        samples = generator.sample(batch_size)
+    with torch.autocast(device_type=device, dtype=torch.bfloat16):
+        for _ in range(num_iterations):
+            samples = generator.sample(batch_size)
     if device == "cuda":
         torch.cuda.synchronize()
 
@@ -154,10 +169,11 @@ def test_benchmark_hierarchical_synthetic_pipeline():
 
     # Benchmark full pipeline
     full_start = perf_counter()
-    for _ in range(num_iterations):
-        samples = generator.sample(batch_size)
-        hidden = feature_dict(samples)
-        # hidden = torch.zeros(batch_size, hidden_dim, device=device) # feature_dict(samples)
+    with torch.autocast(device_type=device, dtype=torch.bfloat16):
+        for _ in range(num_iterations):
+            samples = generator.sample(batch_size)
+            hidden = feature_dict(samples)
+            # hidden = torch.zeros(batch_size, hidden_dim, device=device) # feature_dict(samples)
     if device == "cuda":
         torch.cuda.synchronize()
 
