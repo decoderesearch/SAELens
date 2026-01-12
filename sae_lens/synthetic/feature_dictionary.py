@@ -174,10 +174,10 @@ class FeatureDictionary(nn.Module):
             Tensor of shape [batch, hidden_dim] containing dense hidden activations
         """
         if feature_activations.is_sparse:
+            # autocast is disabled here because sparse matmul is not supported with bfloat16
             with torch.autocast(
                 device_type=feature_activations.device.type, enabled=False
             ):
-                # Sparse-dense matmul: (batch, num_features) @ (num_features, hidden_dim)
                 return (
                     torch.sparse.mm(feature_activations, self.feature_vectors)
                     + self.bias

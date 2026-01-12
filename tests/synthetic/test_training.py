@@ -233,3 +233,29 @@ def test_train_toy_sae_snapshot_fn_required_when_n_snapshots_positive(
             n_snapshots=2,
             snapshot_fn=None,
         )
+
+
+@pytest.mark.parametrize(
+    "autocast_sae,autocast_data",
+    [
+        (True, False),
+        (False, True),
+        (True, True),
+    ],
+)
+def test_train_toy_sae_with_autocast(
+    synthetic_training_setup: SyntheticSetup,
+    autocast_sae: bool,
+    autocast_data: bool,
+) -> None:
+    sae, feature_dict, activations_gen = synthetic_training_setup
+
+    train_toy_sae(
+        sae=sae,
+        feature_dict=feature_dict,
+        activations_generator=activations_gen,
+        training_samples=1024,
+        batch_size=128,
+        autocast_sae=autocast_sae,
+        autocast_data=autocast_data,
+    )

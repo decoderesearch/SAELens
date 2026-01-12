@@ -2,16 +2,7 @@ import pytest
 import torch
 
 from sae_lens.synthetic import HierarchyNode, hierarchy_modifier
-
-
-def to_sparse(tensor: torch.Tensor) -> torch.Tensor:
-    """Convert tensor to sparse COO format."""
-    return tensor.to_sparse_coo()
-
-
-def to_dense(tensor: torch.Tensor) -> torch.Tensor:
-    """Convert tensor to dense if sparse."""
-    return tensor.to_dense() if tensor.is_sparse else tensor
+from tests.helpers import to_dense, to_sparse
 
 
 def test_HierarchyNode_simple_construction():
@@ -1502,3 +1493,71 @@ class TestHierarchyModifierSparseCOO:
         assert dense_result[0, 3] == 1.0
         assert dense_result[0, 4] == 0.5
         assert dense_result[1, 3] == 0.8
+
+    def test_sparse_all_features_deactivated(self):
+        # Create hierarchy: parent (0) -> children (1, 2)
+        # Only children are active, parent is inactive
+        # All children should be deactivated, resulting in empty tensor
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        root = HierarchyNode(feature_index=0, children=[child1, child2])
+        modifier = hierarchy_modifier([root])
+
+        # Only children active (parent inactive) - all should be deactivated
+        indices = torch.tensor([[0, 0, 1, 1], [1, 2, 1, 2]])
+        values = torch.tensor([1.0, 0.5, 0.8, 0.3])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(2, 3))
+
+        result = modifier(sparse_input)
+
+        assert result.is_sparse
+        # All features should be deactivated since parent is inactive
+        assert result._nnz() == 0
+        dense_result = result.to_dense()
+        assert torch.all(dense_result == 0)
+
+    def test_sparse_all_features_deactivated_multi_level(self):
+        # Multi-level hierarchy: grandparent (0) -> parent (1) -> child (2)
+        # Only child is active - should propagate up and deactivate everything
+        grandchild = HierarchyNode(feature_index=2)
+        child = HierarchyNode(feature_index=1, children=[grandchild])
+        root = HierarchyNode(feature_index=0, children=[child])
+        modifier = hierarchy_modifier([root])
+
+        # Only grandchild active (parent and grandparent inactive)
+        indices = torch.tensor([[0, 1], [2, 2]])
+        values = torch.tensor([1.0, 0.5])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(2, 3))
+
+        result = modifier(sparse_input)
+
+        assert result.is_sparse
+        # Grandchild should be deactivated because parent (1) is inactive
+        assert result._nnz() == 0
+        dense_result = result.to_dense()
+        assert torch.all(dense_result == 0)
+
+    def test_sparse_partial_deactivation_then_empty(self):
+        # Test that processing continues correctly after partial deactivation
+        # at one level leads to empty tensor at next level
+        # Level 0: root (0) -> child1 (1), child2 (2)
+        # Level 1: child1 (1) -> grandchild (3)
+        # If only grandchild and child2 are active:
+        # - child2 gets deactivated (root inactive)
+        # - grandchild gets deactivated (child1 inactive)
+        grandchild = HierarchyNode(feature_index=3)
+        child1 = HierarchyNode(feature_index=1, children=[grandchild])
+        child2 = HierarchyNode(feature_index=2)
+        root = HierarchyNode(feature_index=0, children=[child1, child2])
+        modifier = hierarchy_modifier([root])
+
+        # Only child2 and grandchild active (root and child1 inactive)
+        indices = torch.tensor([[0, 0], [2, 3]])
+        values = torch.tensor([1.0, 0.5])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(1, 4))
+
+        result = modifier(sparse_input)
+
+        assert result.is_sparse
+        # Both should be deactivated due to inactive parents
+        assert result._nnz() == 0

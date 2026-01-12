@@ -9,11 +9,7 @@ from sae_lens.synthetic.activation_generator import (
     _validate_low_rank_correlation,
 )
 from sae_lens.synthetic.correlation import generate_random_correlation_matrix
-
-
-def to_dense(tensor: torch.Tensor) -> torch.Tensor:
-    """Convert tensor to dense if sparse."""
-    return tensor.to_dense() if tensor.is_sparse else tensor
+from tests.helpers import to_dense
 
 
 class TestActivationGeneratorBasic:

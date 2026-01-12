@@ -6,6 +6,17 @@ import pytest
 import torch
 from transformer_lens import HookedTransformer
 
+
+def to_sparse(tensor: torch.Tensor) -> torch.Tensor:
+    """Convert a dense tensor to sparse COO format."""
+    return tensor.to_sparse_coo()
+
+
+def to_dense(tensor: torch.Tensor) -> torch.Tensor:
+    """Convert a tensor to dense format if sparse."""
+    return tensor.to_dense() if tensor.is_sparse else tensor
+
+
 from sae_lens.config import LanguageModelSAERunnerConfig, LoggingConfig
 from sae_lens.saes.batchtopk_sae import BatchTopKTrainingSAEConfig
 from sae_lens.saes.gated_sae import GatedSAEConfig, GatedTrainingSAEConfig

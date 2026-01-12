@@ -6,16 +6,7 @@ from sae_lens.synthetic import (
     orthogonal_initializer,
     orthogonalize_embeddings,
 )
-
-
-def to_sparse(tensor: torch.Tensor) -> torch.Tensor:
-    """Convert a dense tensor to sparse COO format."""
-    return tensor.to_sparse_coo()
-
-
-def to_dense(tensor: torch.Tensor) -> torch.Tensor:
-    """Convert a tensor to dense format if sparse."""
-    return tensor.to_dense() if tensor.is_sparse else tensor
+from tests.helpers import to_sparse
 
 
 def test_FeatureDictionary_creates_correct_shape():

@@ -426,8 +426,9 @@ def _apply_me_for_groups(
     # Random selection for winner
     # Use -1e9 instead of -inf to avoid creating a tensor (torch.tensor(-float("inf")))
     # on every call. Since random scores are in [0,1], -1e9 is effectively -inf for argmax.
+    _INACTIVE_SCORE = -1e9
     random_scores = torch.rand(num_conflicts, max_siblings, device=device)
-    random_scores[~conflict_active] = -1e9
+    random_scores[~conflict_active] = _INACTIVE_SCORE
 
     winner_idx = random_scores.argmax(dim=1)
 

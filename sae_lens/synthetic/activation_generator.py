@@ -48,6 +48,32 @@ class ActivationGenerator(nn.Module):
         dtype: torch.dtype | str = "float32",
         use_sparse_tensors: bool = False,
     ):
+        """
+        Create a new ActivationGenerator.
+
+        Args:
+            num_features: Number of features to generate activations for.
+            firing_probabilities: Probability of each feature firing. Can be a single
+                float (applied to all features) or a tensor of shape (num_features,).
+            std_firing_magnitudes: Standard deviation of firing magnitudes. Can be a
+                single float or a tensor of shape (num_features,). Defaults to 0.0
+                (deterministic magnitudes).
+            mean_firing_magnitudes: Mean firing magnitude when a feature fires. Can be
+                a single float or a tensor of shape (num_features,). Defaults to 1.0.
+            modify_activations: Optional function(s) to modify activations after
+                generation. Can be a single callable, a sequence of callables (applied
+                in order), or None. Useful for applying hierarchy constraints.
+            correlation_matrix: Optional correlation structure between features. Can be:
+
+                - A full correlation matrix tensor of shape (num_features, num_features)
+                - A LowRankCorrelationMatrix for memory-efficient large-scale correlations
+                - A tuple of (factor, diag) tensors representing low-rank structure
+
+            device: Device to place tensors on. Defaults to "cpu".
+            dtype: Data type for tensors. Defaults to "float32".
+            use_sparse_tensors: If True, return sparse COO tensors from sample().
+                Only recommended when using massive numbers of features. Defaults to False.
+        """
         super().__init__()
         self.num_features = num_features
         self.firing_probabilities = _to_tensor(
@@ -248,8 +274,10 @@ def _generate_low_rank_correlated_features(
     num_features, rank = correlation_factor.shape
 
     # Generate random samples in float32 for numerical stability
-    eps = torch.randn(batch_size, rank, device=device, dtype=torch.float32)
-    eta = torch.randn(batch_size, num_features, device=device, dtype=torch.float32)
+    eps = torch.randn(batch_size, rank, device=device, dtype=correlation_factor.dtype)
+    eta = torch.randn(
+        batch_size, num_features, device=device, dtype=cov_diag_sqrt.dtype
+    )
 
     gaussian_samples = eps @ correlation_factor.T + eta * cov_diag_sqrt
 
