@@ -853,15 +853,8 @@ def _apply_me_coo(
         feat_indices[in_hierarchy]
     ]
 
-    # Create a set of relevant group indices for fast lookup
-    group_set = set(group_indices.tolist())
-
-    # Find entries that belong to ME groups we're processing
-    in_relevant_group = torch.tensor(
-        [g.item() in group_set for g in me_group_of_feat],
-        dtype=torch.bool,
-        device=device,
-    )
+    # Find entries that belong to ME groups we're processing (vectorized)
+    in_relevant_group = torch.isin(me_group_of_feat, group_indices)
 
     if not in_relevant_group.any():
         return sparse_tensor
@@ -940,28 +933,35 @@ def _apply_me_coo(
     conflict_inverse = inverse[conflict_entries_mask]
     conflict_dense_idx = bg_to_dense[conflict_inverse]
 
-    # Find winner for each conflict group (entry with max random score)
-    num_conflict_groups = int(has_conflict.sum().item())
-    max_scores = torch.full((num_conflict_groups,), -1.0, device=device)
-    winner_positions = torch.full(
-        (num_conflict_groups,), -1, dtype=torch.long, device=device
+    # Vectorized winner selection using sorting
+    # Sort entries by (group_idx, -random_score) so highest score comes first per group
+    # Use group * 2 - score to sort by group ascending, then score descending
+    sort_keys = conflict_dense_idx.float() * 2.0 - conflict_random_scores
+    sorted_order = sort_keys.argsort()
+    sorted_dense_idx = conflict_dense_idx[sorted_order]
+
+    # Find first entry of each group in sorted order (these are winners)
+    group_starts = torch.cat(
+        [
+            torch.tensor([True], device=device),
+            sorted_dense_idx[1:] != sorted_dense_idx[:-1],
+        ]
     )
 
-    # Scatter max to find winner
-    for i in range(conflict_entry_indices.numel()):
-        dense_idx = int(conflict_dense_idx[i].item())
-        if conflict_random_scores[i] > max_scores[dense_idx]:
-            max_scores[dense_idx] = conflict_random_scores[i]
-            winner_positions[dense_idx] = i
+    # Winners are entries at group starts in sorted order
+    winner_positions_in_sorted = torch.where(group_starts)[0]
+    winner_original_positions = sorted_order[winner_positions_in_sorted]
 
-    # Mark winners in a set
-    winner_set = set(winner_positions.tolist())
+    # Create winner mask (vectorized)
+    is_winner = torch.zeros(
+        conflict_entry_indices.numel(), dtype=torch.bool, device=device
+    )
+    is_winner[winner_original_positions] = True
 
-    # Build keep mask
+    # Build keep mask (vectorized)
     keep_mask = torch.ones(nnz, dtype=torch.bool, device=device)
-    for i, entry_idx in enumerate(conflict_entry_indices.tolist()):
-        if i not in winner_set:
-            keep_mask[entry_idx] = False
+    loser_entry_indices = conflict_entry_indices[~is_winner]
+    keep_mask[loser_entry_indices] = False
 
     if keep_mask.all():
         return sparse_tensor

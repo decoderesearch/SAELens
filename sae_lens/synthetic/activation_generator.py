@@ -168,6 +168,7 @@ class ActivationGenerator(nn.Module):
             feature_activations = self.modify_activations(feature_activations)
             if feature_activations.is_sparse:
                 # Apply relu to sparse values
+                feature_activations = feature_activations.coalesce()
                 feature_activations = torch.sparse_coo_tensor(
                     feature_activations.indices(),
                     feature_activations.values().relu(),
