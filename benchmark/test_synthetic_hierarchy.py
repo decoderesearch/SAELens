@@ -21,6 +21,7 @@ def create_hierarchical_synthetic_setup(
     device: str = "cpu",
     correlation_rank: int = 1000,
     correlation_scale: float = 0.1,
+    use_sparse_tensors: bool = False,
 ):
     """
     Create a FeatureDictionary and ActivationGenerator with hierarchical features.
@@ -98,6 +99,7 @@ def create_hierarchical_synthetic_setup(
         modify_activations=modifier,
         correlation_matrix=lr_correlation_matrix,
         device=device,
+        sparse=use_sparse_tensors,
     )
 
     generator_end_time = perf_counter()
@@ -141,6 +143,7 @@ def test_benchmark_hierarchical_synthetic_pipeline():
         device=device,
         correlation_rank=100,
         correlation_scale=0.1,
+        use_sparse_tensors=True,
     )
     setup_duration = perf_counter() - setup_start
     print(f"Setup time: {setup_duration:.4f}s")

@@ -582,3 +582,110 @@ class TestActivationGeneratorLowRankCorrelationMatrixValidation:
                 firing_probabilities=0.5,
                 correlation_matrix=(factor, diag),
             )
+
+
+class TestActivationGeneratorSparseOutput:
+    def test_sparse_output_format(self):
+        generator = ActivationGenerator(
+            num_features=10,
+            firing_probabilities=0.3,
+            sparse=True,
+        )
+        samples = generator.sample(batch_size=100)
+
+        assert samples.is_sparse
+        assert samples.shape == (100, 10)
+        assert samples.layout == torch.sparse_coo
+
+    def test_sparse_values_match_dense(self):
+        num_features = 10
+        batch_size = 100
+        firing_probs = torch.tensor([0.5] * num_features)
+
+        generator_dense = ActivationGenerator(
+            num_features=num_features,
+            firing_probabilities=firing_probs,
+            std_firing_magnitudes=0.0,
+            mean_firing_magnitudes=1.0,
+            sparse=False,
+        )
+        generator_sparse = ActivationGenerator(
+            num_features=num_features,
+            firing_probabilities=firing_probs,
+            std_firing_magnitudes=0.0,
+            mean_firing_magnitudes=1.0,
+            sparse=True,
+        )
+
+        # Generate samples (different random state, so we compare shapes and statistics)
+        dense_samples = generator_dense.sample(batch_size)
+        sparse_samples = generator_sparse.sample(batch_size)
+
+        # Convert sparse to dense for comparison
+        sparse_as_dense = sparse_samples.to_dense()
+
+        # Both should have same shape
+        assert dense_samples.shape == sparse_as_dense.shape
+
+        # Values should be non-negative
+        assert torch.all(sparse_as_dense >= 0)
+
+        # Sparsity pattern should match firing probabilities approximately
+        dense_firing_rate = (dense_samples > 0).float().mean()
+        sparse_firing_rate = (sparse_as_dense > 0).float().mean()
+
+        # Both should be around 0.5
+        assert 0.3 < dense_firing_rate < 0.7
+        assert 0.3 < sparse_firing_rate < 0.7
+
+    def test_sparse_with_low_rank_correlation(self):
+        num_features = 5
+        rank = 2
+        factor = torch.randn(num_features, rank) * 0.3
+        diag = 1 - (factor**2).sum(dim=1)
+        diag = diag.clamp(min=0.1)
+
+        firing_probs = torch.tensor([0.3, 0.4, 0.2, 0.5, 0.35])
+
+        generator = ActivationGenerator(
+            num_features=num_features,
+            firing_probabilities=firing_probs,
+            correlation_matrix=(factor, diag),
+            sparse=True,
+        )
+
+        samples = generator.sample(batch_size=2000)
+
+        assert samples.is_sparse
+        assert samples.shape == (2000, num_features)
+
+        # Check marginal probabilities
+        dense_samples = samples.to_dense()
+        actual_probs = (dense_samples > 0).float().mean(dim=0)
+        torch.testing.assert_close(actual_probs, firing_probs, atol=0.05, rtol=0)
+
+    def test_sparse_empty_batch(self):
+        generator = ActivationGenerator(
+            num_features=10,
+            firing_probabilities=0.0,  # Nothing fires
+            sparse=True,
+        )
+        samples = generator.sample(batch_size=100)
+
+        assert samples.is_sparse
+        assert samples._nnz() == 0
+        assert samples.shape == (100, 10)
+
+    def test_sparse_all_firing(self):
+        generator = ActivationGenerator(
+            num_features=5,
+            firing_probabilities=1.0,  # Everything fires
+            mean_firing_magnitudes=2.0,
+            std_firing_magnitudes=0.0,
+            sparse=True,
+        )
+        samples = generator.sample(batch_size=10)
+
+        assert samples.is_sparse
+        dense = samples.to_dense()
+        assert torch.allclose(dense, torch.full((10, 5), 2.0))

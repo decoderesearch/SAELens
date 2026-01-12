@@ -34,6 +34,7 @@ class ActivationGenerator(nn.Module):
     correlation_matrix: torch.Tensor | None
     low_rank_correlation: tuple[torch.Tensor, torch.Tensor] | None
     correlation_thresholds: torch.Tensor | None
+    sparse: bool
 
     def __init__(
         self,
@@ -45,6 +46,7 @@ class ActivationGenerator(nn.Module):
         correlation_matrix: CorrelationMatrixInput | None = None,
         device: torch.device | str = "cpu",
         dtype: torch.dtype | str = "float32",
+        sparse: bool = False,
     ):
         super().__init__()
         self.num_features = num_features
@@ -61,6 +63,7 @@ class ActivationGenerator(nn.Module):
         self.correlation_thresholds = None
         self.correlation_matrix = None
         self.low_rank_correlation = None
+        self.sparse = sparse
 
         if correlation_matrix is not None:
             if isinstance(correlation_matrix, torch.Tensor):
@@ -140,16 +143,40 @@ class ActivationGenerator(nn.Module):
             * std_at_firing
         )
         activations_at_firing = (mean_at_firing + random_deltas).relu()
-        feature_activations = torch.zeros(
-            batch_size,
-            self.num_features,
-            device=device,
-            dtype=self.mean_firing_magnitudes.dtype,
-        )
-        feature_activations[firing_indices] = activations_at_firing
+
+        if self.sparse:
+            # Return sparse COO tensor
+            indices = torch.stack(firing_indices)  # [2, nnz]
+            feature_activations = torch.sparse_coo_tensor(
+                indices,
+                activations_at_firing,
+                size=(batch_size, self.num_features),
+                device=device,
+                dtype=self.mean_firing_magnitudes.dtype,
+            )
+        else:
+            # Dense tensor path
+            feature_activations = torch.zeros(
+                batch_size,
+                self.num_features,
+                device=device,
+                dtype=self.mean_firing_magnitudes.dtype,
+            )
+            feature_activations[firing_indices] = activations_at_firing
 
         if self.modify_activations is not None:
-            feature_activations = self.modify_activations(feature_activations).relu()
+            feature_activations = self.modify_activations(feature_activations)
+            if feature_activations.is_sparse:
+                # Apply relu to sparse values
+                feature_activations = torch.sparse_coo_tensor(
+                    feature_activations.indices(),
+                    feature_activations.values().relu(),
+                    feature_activations.shape,
+                    device=feature_activations.device,
+                    dtype=feature_activations.dtype,
+                )
+            else:
+                feature_activations = feature_activations.relu()
 
         return feature_activations
 

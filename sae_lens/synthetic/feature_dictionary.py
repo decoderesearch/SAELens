@@ -168,9 +168,14 @@ class FeatureDictionary(nn.Module):
 
         Args:
             feature_activations: Tensor of shape [batch, num_features] containing
-                sparse feature activation values
+                sparse feature activation values. Can be dense or sparse COO.
 
         Returns:
             Tensor of shape [batch, hidden_dim] containing dense hidden activations
         """
+        if feature_activations.is_sparse:
+            # Sparse-dense matmul: (batch, num_features) @ (num_features, hidden_dim)
+            return (
+                torch.sparse.mm(feature_activations, self.feature_vectors) + self.bias
+            )
         return feature_activations @ self.feature_vectors + self.bias

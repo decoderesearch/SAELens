@@ -158,6 +158,17 @@ class _SparseHierarchyData:
     # Maps level -> (child_start, num_groups, siblings_per_group, chunk_size)
     me_opt_levels: dict[int, tuple[int, int, int, int]] | None = None
 
+    # Sparse COO support: Feature-to-parent mapping
+    # feat_to_parent[f] = parent feature index, or -1 if root/no parent
+    feat_to_parent: torch.Tensor | None = None  # [num_features]
+
+    # Sparse COO support: Feature-to-ME-group mapping
+    # feat_to_me_group[f] = group index, or -1 if not in any ME group
+    feat_to_me_group: torch.Tensor | None = None  # [num_features]
+
+    # Total number of features in the hierarchy (needed for sparse tensor shapes)
+    num_features: int = 0
+
 
 def _build_sparse_hierarchy(
     roots: Sequence[HierarchyNode],
@@ -265,10 +276,10 @@ def _build_sparse_hierarchy(
                 )
 
                 if parents_sorted and uniform_groups:
-                    opt_child_start = feats[0].item()
-                    opt_child_end = feats[-1].item() + 1
+                    opt_child_start = int(feats[0].item())
+                    opt_child_end = int(feats[-1].item()) + 1
                     opt_unique_parents = unique
-                    opt_children_per_parent = counts[0].item()
+                    opt_children_per_parent = int(counts[0].item())
 
         level_data.append(
             _LevelData(
@@ -357,6 +368,22 @@ def _build_sparse_hierarchy(
                     chunk_size,
                 )
 
+    # Build sparse COO support: feat_to_parent and feat_to_me_group mappings
+    # First determine num_features (max feature index + 1)
+    all_features = [f for f, _, _ in feature_info]
+    num_features = max(all_features) + 1 if all_features else 0
+
+    # Build feature-to-parent mapping
+    feat_to_parent = torch.full((num_features,), -1, dtype=torch.long)
+    for feat, parent, _ in feature_info:
+        feat_to_parent[feat] = parent
+
+    # Build feature-to-ME-group mapping
+    feat_to_me_group = torch.full((num_features,), -1, dtype=torch.long)
+    for g_idx, (_, _, siblings) in enumerate(me_groups):
+        for sib in siblings:
+            feat_to_me_group[sib] = g_idx
+
     return _SparseHierarchyData(
         level_data=level_data,
         me_group_siblings=me_group_siblings,
@@ -364,6 +391,9 @@ def _build_sparse_hierarchy(
         me_group_parents=me_group_parents,
         num_groups=num_groups,
         me_opt_levels=me_opt_levels if me_opt_levels else None,
+        feat_to_parent=feat_to_parent,
+        feat_to_me_group=feat_to_me_group,
+        num_features=num_features,
     )
 
 
@@ -676,6 +706,275 @@ def _apply_me_for_groups(
     activations[deact_batch, deact_feat] = 0
 
 
+# ---------------------------------------------------------------------------
+# Sparse COO hierarchy implementation
+# ---------------------------------------------------------------------------
+
+
+def _apply_hierarchy_sparse_coo(
+    sparse_tensor: torch.Tensor,
+    sparse_data: _SparseHierarchyData,
+) -> torch.Tensor:
+    """
+    Apply hierarchy constraints to a sparse COO tensor.
+
+    This is the sparse analog of _apply_hierarchy_sparse. It processes
+    level-by-level, applying parent deactivation then mutual exclusion.
+    """
+    if sparse_tensor._nnz() == 0:
+        return sparse_tensor
+
+    sparse_tensor = sparse_tensor.coalesce()
+
+    for _, level_data in enumerate(sparse_data.level_data):
+        # Step 1: Apply parent deactivation for features at this level
+        if level_data.features.numel() > 0:
+            sparse_tensor = _apply_parent_deactivation_coo(
+                sparse_tensor, level_data, sparse_data
+            )
+
+        # Step 2: Apply ME for groups whose parent is at this level
+        if level_data.me_group_indices.numel() > 0:
+            sparse_tensor = _apply_me_coo(
+                sparse_tensor, level_data.me_group_indices, sparse_data
+            )
+
+    return sparse_tensor
+
+
+def _apply_parent_deactivation_coo(
+    sparse_tensor: torch.Tensor,
+    level_data: _LevelData,
+    sparse_data: _SparseHierarchyData,
+) -> torch.Tensor:
+    """
+    Remove children from sparse COO tensor when their parent is inactive.
+
+    Uses searchsorted for efficient membership testing of parent activity.
+    """
+    if sparse_tensor._nnz() == 0 or level_data.features.numel() == 0:
+        return sparse_tensor
+
+    sparse_tensor = sparse_tensor.coalesce()
+    indices = sparse_tensor.indices()  # [2, nnz]
+    values = sparse_tensor.values()  # [nnz]
+    batch_indices = indices[0]
+    feat_indices = indices[1]
+
+    _, num_features = sparse_tensor.shape
+    device = sparse_tensor.device
+    nnz = indices.shape[1]
+
+    # Build set of active (batch, feature) pairs for efficient lookup
+    # Encode as: batch_idx * num_features + feat_idx
+    active_pairs = batch_indices * num_features + feat_indices
+    active_pairs_sorted, _ = active_pairs.sort()
+
+    # Use the precomputed feat_to_parent mapping
+    assert sparse_data.feat_to_parent is not None
+    hierarchy_num_features = sparse_data.feat_to_parent.numel()
+
+    # Handle features outside the hierarchy (they have no parent, pass through)
+    in_hierarchy = feat_indices < hierarchy_num_features
+    parent_of_feat = torch.full((nnz,), -1, dtype=torch.long, device=device)
+    parent_of_feat[in_hierarchy] = sparse_data.feat_to_parent[
+        feat_indices[in_hierarchy]
+    ]
+
+    # Find entries that have a parent (parent >= 0 means this feature has a parent)
+    has_parent = parent_of_feat >= 0
+
+    if not has_parent.any():
+        return sparse_tensor
+
+    # For entries with parents, check if parent is active
+    child_entry_indices = torch.where(has_parent)[0]
+    child_batch = batch_indices[has_parent]
+    child_parents = parent_of_feat[has_parent]
+
+    # Look up parent activity using searchsorted
+    parent_pairs = child_batch * num_features + child_parents
+    search_pos = torch.searchsorted(active_pairs_sorted, parent_pairs)
+    search_pos = search_pos.clamp(max=active_pairs_sorted.numel() - 1)
+    parent_active = active_pairs_sorted[search_pos] == parent_pairs
+
+    # Handle empty case
+    if active_pairs_sorted.numel() == 0:
+        parent_active = torch.zeros_like(parent_pairs, dtype=torch.bool)
+
+    # Build keep mask: keep entry if it's a root OR its parent is active
+    keep_mask = torch.ones(nnz, dtype=torch.bool, device=device)
+    keep_mask[child_entry_indices[~parent_active]] = False
+
+    if keep_mask.all():
+        return sparse_tensor
+
+    return torch.sparse_coo_tensor(
+        indices[:, keep_mask],
+        values[keep_mask],
+        sparse_tensor.shape,
+        device=device,
+        dtype=sparse_tensor.dtype,
+    )
+
+
+def _apply_me_coo(
+    sparse_tensor: torch.Tensor,
+    group_indices: torch.Tensor,
+    sparse_data: _SparseHierarchyData,
+) -> torch.Tensor:
+    """
+    Apply mutual exclusion to sparse COO tensor.
+
+    For each ME group with multiple active siblings in the same batch,
+    randomly selects one winner and removes the rest.
+    """
+    if sparse_tensor._nnz() == 0 or group_indices.numel() == 0:
+        return sparse_tensor
+
+    sparse_tensor = sparse_tensor.coalesce()
+    indices = sparse_tensor.indices()  # [2, nnz]
+    values = sparse_tensor.values()  # [nnz]
+    batch_indices = indices[0]
+    feat_indices = indices[1]
+
+    _, num_features = sparse_tensor.shape
+    device = sparse_tensor.device
+    nnz = indices.shape[1]
+
+    # Use precomputed feat_to_me_group mapping
+    assert sparse_data.feat_to_me_group is not None
+    hierarchy_num_features = sparse_data.feat_to_me_group.numel()
+
+    # Handle features outside the hierarchy (they are not in any ME group)
+    in_hierarchy = feat_indices < hierarchy_num_features
+    me_group_of_feat = torch.full((nnz,), -1, dtype=torch.long, device=device)
+    me_group_of_feat[in_hierarchy] = sparse_data.feat_to_me_group[
+        feat_indices[in_hierarchy]
+    ]
+
+    # Create a set of relevant group indices for fast lookup
+    group_set = set(group_indices.tolist())
+
+    # Find entries that belong to ME groups we're processing
+    in_relevant_group = torch.tensor(
+        [g.item() in group_set for g in me_group_of_feat],
+        dtype=torch.bool,
+        device=device,
+    )
+
+    if not in_relevant_group.any():
+        return sparse_tensor
+
+    # Get the ME entries
+    me_entry_indices = torch.where(in_relevant_group)[0]
+    me_batch = batch_indices[in_relevant_group]
+    me_group = me_group_of_feat[in_relevant_group]
+
+    # Check parent activity for ME groups (only apply ME if parent is active)
+    me_group_parents = sparse_data.me_group_parents[me_group]
+    has_parent = me_group_parents >= 0
+
+    if has_parent.any():
+        # Build active pairs for parent lookup
+        active_pairs = batch_indices * num_features + feat_indices
+        active_pairs_sorted, _ = active_pairs.sort()
+
+        parent_pairs = (
+            me_batch[has_parent] * num_features + me_group_parents[has_parent]
+        )
+        search_pos = torch.searchsorted(active_pairs_sorted, parent_pairs)
+        search_pos = search_pos.clamp(max=active_pairs_sorted.numel() - 1)
+        parent_active_for_has_parent = active_pairs_sorted[search_pos] == parent_pairs
+
+        # Build full parent_active mask
+        parent_active = torch.ones(
+            me_entry_indices.numel(), dtype=torch.bool, device=device
+        )
+        parent_active[has_parent] = parent_active_for_has_parent
+
+        # Filter to only ME entries where parent is active
+        valid_me = parent_active
+        me_entry_indices = me_entry_indices[valid_me]
+        me_batch = me_batch[valid_me]
+        me_group = me_group[valid_me]
+
+    if me_entry_indices.numel() == 0:
+        return sparse_tensor
+
+    # Encode (batch, group) pairs
+    num_groups = sparse_data.num_groups
+    batch_group_pairs = me_batch * num_groups + me_group
+
+    # Find unique (batch, group) pairs and count occurrences
+    unique_bg, inverse, counts = torch.unique(
+        batch_group_pairs, return_inverse=True, return_counts=True
+    )
+
+    # Only process pairs with count > 1 (conflicts)
+    has_conflict = counts > 1
+
+    if not has_conflict.any():
+        return sparse_tensor
+
+    # For efficiency, we process all conflicts together
+    # Assign random scores to each ME entry
+    random_scores = torch.rand(me_entry_indices.numel(), device=device)
+
+    # For each (batch, group) pair, we want the entry with highest score to be winner
+    # Use scatter_reduce to find max score per (batch, group)
+    bg_to_dense = torch.zeros(unique_bg.numel(), dtype=torch.long, device=device)
+    bg_to_dense[has_conflict.nonzero(as_tuple=True)[0]] = torch.arange(
+        has_conflict.sum(), device=device
+    )
+
+    # Map each ME entry to its dense conflict index
+    entry_has_conflict = has_conflict[inverse]
+
+    if not entry_has_conflict.any():
+        return sparse_tensor
+
+    conflict_entries_mask = entry_has_conflict
+    conflict_entry_indices = me_entry_indices[conflict_entries_mask]
+    conflict_random_scores = random_scores[conflict_entries_mask]
+    conflict_inverse = inverse[conflict_entries_mask]
+    conflict_dense_idx = bg_to_dense[conflict_inverse]
+
+    # Find winner for each conflict group (entry with max random score)
+    num_conflict_groups = int(has_conflict.sum().item())
+    max_scores = torch.full((num_conflict_groups,), -1.0, device=device)
+    winner_positions = torch.full(
+        (num_conflict_groups,), -1, dtype=torch.long, device=device
+    )
+
+    # Scatter max to find winner
+    for i in range(conflict_entry_indices.numel()):
+        dense_idx = int(conflict_dense_idx[i].item())
+        if conflict_random_scores[i] > max_scores[dense_idx]:
+            max_scores[dense_idx] = conflict_random_scores[i]
+            winner_positions[dense_idx] = i
+
+    # Mark winners in a set
+    winner_set = set(winner_positions.tolist())
+
+    # Build keep mask
+    keep_mask = torch.ones(nnz, dtype=torch.bool, device=device)
+    for i, entry_idx in enumerate(conflict_entry_indices.tolist()):
+        if i not in winner_set:
+            keep_mask[entry_idx] = False
+
+    if keep_mask.all():
+        return sparse_tensor
+
+    return torch.sparse_coo_tensor(
+        indices[:, keep_mask],
+        values[keep_mask],
+        sparse_tensor.shape,
+        device=device,
+        dtype=sparse_tensor.dtype,
+    )
+
+
 @torch.no_grad()
 def hierarchy_modifier(
     roots: Sequence[HierarchyNode] | HierarchyNode,
@@ -740,12 +1039,25 @@ def hierarchy_modifier(
                 me_group_parents=sparse_data.me_group_parents.to(device),
                 num_groups=sparse_data.num_groups,
                 me_opt_levels=sparse_data.me_opt_levels,
+                feat_to_parent=(
+                    sparse_data.feat_to_parent.to(device)
+                    if sparse_data.feat_to_parent is not None
+                    else None
+                ),
+                feat_to_me_group=(
+                    sparse_data.feat_to_me_group.to(device)
+                    if sparse_data.feat_to_me_group is not None
+                    else None
+                ),
+                num_features=sparse_data.num_features,
             )
         return device_cache[device]
 
     def modifier(activations: torch.Tensor) -> torch.Tensor:
         device = activations.device
         cached = _get_sparse_for_device(device)
+        if activations.is_sparse:
+            return _apply_hierarchy_sparse_coo(activations, cached)
         return _apply_hierarchy_sparse(activations, cached)
 
     return modifier

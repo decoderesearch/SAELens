@@ -1337,3 +1337,135 @@ def test_hierarchy_modifier_large_hierarchy_performance():
     assert (
         apply_time < 2.0
     ), f"Modifier application took {apply_time:.2f}s, expected < 2s"
+
+
+class TestHierarchyModifierSparseCOO:
+    def test_sparse_parent_deactivation(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(feature_index=0, children=[child])
+        modifier = hierarchy_modifier([root])
+
+        # Create sparse COO tensor: parent inactive in all samples
+        # Features: 0 (parent), 1 (child), 2 (unrelated)
+        # Sample 0: child=1.0 active but parent=0 inactive -> child should be deactivated
+        # Sample 1: child=0.8 active but parent=0 inactive -> child should be deactivated
+        indices = torch.tensor([[0, 1], [1, 1]])  # (batch, feature) pairs
+        values = torch.tensor([1.0, 0.8])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(2, 3))
+
+        result = modifier(sparse_input)
+
+        # Result should be sparse and child should be deactivated
+        assert result.is_sparse
+        dense_result = result.to_dense()
+        assert torch.all(dense_result[:, 1] == 0)  # Child deactivated
+
+    def test_sparse_keeps_children_when_parent_active(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(feature_index=0, children=[child])
+        modifier = hierarchy_modifier([root])
+
+        # Parent active in both samples, child active
+        indices = torch.tensor(
+            [[0, 0, 1, 1], [0, 1, 0, 1]]
+        )  # both parent and child active
+        values = torch.tensor([1.0, 0.5, 0.8, 0.3])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(2, 3))
+
+        result = modifier(sparse_input)
+
+        assert result.is_sparse
+        dense_result = result.to_dense()
+        # Child should be preserved
+        assert dense_result[0, 1] == 0.5
+        assert dense_result[1, 1] == 0.3
+
+    def test_sparse_mutual_exclusion(self):
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        root = HierarchyNode(
+            feature_index=0,
+            children=[child1, child2],
+            mutually_exclusive_children=True,
+        )
+        modifier = hierarchy_modifier([root])
+
+        # Parent active, both children active -> ME should pick one
+        indices = torch.tensor([[0, 0, 0], [0, 1, 2]])
+        values = torch.tensor([1.0, 0.5, 0.3])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(1, 4))
+
+        result = modifier(sparse_input)
+
+        assert result.is_sparse
+        dense_result = result.to_dense()
+        # Exactly one of child1 or child2 should be active
+        active_children = (dense_result[0, 1:3] > 0).sum()
+        assert active_children == 1
+
+    def test_sparse_matches_dense_result(self):
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        grandchild = HierarchyNode(feature_index=3)
+        child1 = HierarchyNode(feature_index=1, children=[grandchild])
+        root = HierarchyNode(feature_index=0, children=[child1, child2])
+        modifier = hierarchy_modifier([root])
+
+        # Create dense activations
+        dense_input = torch.tensor(
+            [
+                [1.0, 0.5, 0.3, 0.2],  # All active
+                [0.0, 0.8, 0.4, 0.6],  # Root inactive
+                [
+                    1.0,
+                    0.0,
+                    0.5,
+                    0.7,
+                ],  # Child1 inactive (grandchild should be deactivated)
+            ]
+        )
+
+        # Convert to sparse
+        sparse_input = dense_input.to_sparse()
+
+        dense_result = modifier(dense_input)
+        sparse_result = modifier(sparse_input)
+
+        # Results should match (convert sparse to dense for comparison)
+        sparse_as_dense = sparse_result.to_dense()
+        torch.testing.assert_close(dense_result, sparse_as_dense)
+
+    def test_sparse_empty_tensor(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(feature_index=0, children=[child])
+        modifier = hierarchy_modifier([root])
+
+        # Empty sparse tensor
+        indices = torch.empty((2, 0), dtype=torch.long)
+        values = torch.empty(0)
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(10, 5))
+
+        result = modifier(sparse_input)
+
+        assert result.is_sparse
+        assert result._nnz() == 0
+        assert result.shape == (10, 5)
+
+    def test_sparse_no_hierarchy_features_active(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(feature_index=0, children=[child])
+        modifier = hierarchy_modifier([root])
+
+        # Only unrelated features active (index 3, 4)
+        indices = torch.tensor([[0, 0, 1], [3, 4, 3]])
+        values = torch.tensor([1.0, 0.5, 0.8])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(2, 5))
+
+        result = modifier(sparse_input)
+
+        assert result.is_sparse
+        dense_result = result.to_dense()
+        # Unrelated features should be unchanged
+        assert dense_result[0, 3] == 1.0
+        assert dense_result[0, 4] == 0.5
+        assert dense_result[1, 3] == 0.8
