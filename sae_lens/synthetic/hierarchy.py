@@ -11,6 +11,7 @@ https://github.com/noanabeshima/matryoshka-saes/blob/main/toy_model.py
 
 from __future__ import annotations
 
+import random
 from collections import deque
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -906,3 +907,261 @@ class HierarchyNode:
         for child in self.children:
             s += "\n" + child.__repr__(indent + 2)
         return s
+
+
+@dataclass
+class HierarchyConfig:
+    """
+    Configuration for automatic hierarchy generation.
+
+    Creates a forest of hierarchy trees with controlled structure.
+
+    Attributes:
+        total_parent_nodes: Number of non-leaf parent nodes to create.
+            These nodes will have children (hierarchy roots count as parents).
+        branching_factor: Number of children per parent. Can be:
+
+            - An int for fixed branching (e.g., 3 means exactly 3 children)
+            - A tuple (min, max) for random branching in that range
+
+        max_depth: Maximum depth of hierarchy trees. Depth 1 = parent with leaves.
+        mutually_exclusive_portion: Fraction of parent nodes whose children should
+            be mutually exclusive (0.0 to 1.0). Default 0.0.
+        seed: Random seed for reproducibility.
+    """
+
+    total_parent_nodes: int = 100
+    branching_factor: int | tuple[int, int] = 100
+    max_depth: int = 2
+    mutually_exclusive_portion: float = 0.0
+    seed: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.total_parent_nodes <= 0:
+            raise ValueError("total_parent_nodes must be positive")
+        if isinstance(self.branching_factor, int):
+            if self.branching_factor < 2:
+                raise ValueError("branching_factor must be at least 2")
+        else:
+            if self.branching_factor[0] < 2:
+                raise ValueError("branching_factor minimum must be at least 2")
+            if self.branching_factor[0] > self.branching_factor[1]:
+                raise ValueError("branching_factor[0] must be <= branching_factor[1]")
+        if self.max_depth < 1:
+            raise ValueError("max_depth must be at least 1")
+        if not 0.0 <= self.mutually_exclusive_portion <= 1.0:
+            raise ValueError("mutually_exclusive_portion must be between 0.0 and 1.0")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize config to dictionary."""
+        branching = (
+            self.branching_factor
+            if isinstance(self.branching_factor, int)
+            else list(self.branching_factor)
+        )
+        return {
+            "total_parent_nodes": self.total_parent_nodes,
+            "branching_factor": branching,
+            "max_depth": self.max_depth,
+            "mutually_exclusive_portion": self.mutually_exclusive_portion,
+            "seed": self.seed,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> HierarchyConfig:
+        """Deserialize config from dictionary."""
+        d = dict(d)  # Make a copy
+        # Convert list to tuple (JSON doesn't have tuples)
+        if "branching_factor" in d and isinstance(d["branching_factor"], list):
+            d["branching_factor"] = tuple(d["branching_factor"])
+        return cls(**d)
+
+
+@dataclass
+class Hierarchy:
+    """Result of hierarchy generation."""
+
+    roots: list[HierarchyNode]
+    modifier: ActivationsModifier | None
+
+    @property
+    def feature_indices_used(self) -> set[int]:
+        """Compute set of feature indices used in the hierarchy."""
+        indices: set[int] = set()
+
+        def collect_indices(nodes: list[HierarchyNode]) -> None:
+            for node in nodes:
+                if node.feature_index is not None:
+                    indices.add(node.feature_index)
+                collect_indices(list(node.children))
+
+        collect_indices(self.roots)
+        return indices
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize hierarchy to dict for persistence."""
+
+        def node_to_dict(node: HierarchyNode) -> dict[str, Any]:
+            return {
+                "feature_index": node.feature_index,
+                "mutually_exclusive_children": node.mutually_exclusive_children,
+                "feature_id": node.feature_id,
+                "children": [node_to_dict(c) for c in node.children],
+            }
+
+        return {
+            "roots": [node_to_dict(r) for r in self.roots],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> Hierarchy:
+        """Deserialize hierarchy from dict."""
+
+        def dict_to_node(node_dict: dict[str, Any]) -> HierarchyNode:
+            children = [dict_to_node(c) for c in node_dict.get("children", [])]
+            return HierarchyNode(
+                feature_index=node_dict.get("feature_index"),
+                children=children,
+                mutually_exclusive_children=node_dict.get(
+                    "mutually_exclusive_children", False
+                ),
+                feature_id=node_dict.get("feature_id"),
+            )
+
+        roots = [dict_to_node(r) for r in d["roots"]]
+        modifier = hierarchy_modifier(roots) if roots else None
+        return cls(roots=roots, modifier=modifier)
+
+
+def generate_hierarchy(
+    num_features: int,
+    config: HierarchyConfig,
+) -> Hierarchy:
+    """
+    Generate a hierarchy forest based on config using breadth-first construction.
+
+    Algorithm:
+        1. Create root parent nodes up to total_parent_nodes or max breadth
+        2. For each level, assign children to parents breadth-first
+        3. Continue until total_parent_nodes reached or max_depth exceeded
+        4. Apply mutually_exclusive flag to portion of parents
+
+    Args:
+        num_features: Total number of features available
+        config: Hierarchy configuration
+
+    Returns:
+        Hierarchy with roots and modifier function
+    """
+    if config.total_parent_nodes == 0:
+        return Hierarchy(roots=[], modifier=None)
+
+    rng = random.Random(config.seed)
+
+    # Estimate features needed: each parent needs at least 2 children
+    min_features_needed = config.total_parent_nodes * 3  # parent + 2 children minimum
+    if num_features < min_features_needed:
+        raise ValueError(
+            f"num_features ({num_features}) is too small for {config.total_parent_nodes} "
+            f"parent nodes. Need at least {min_features_needed}."
+        )
+
+    # Shuffle feature indices for random assignment
+    all_indices = list(range(num_features))
+    rng.shuffle(all_indices)
+
+    # Track which parents get ME
+    num_me_parents = int(config.total_parent_nodes * config.mutually_exclusive_portion)
+    me_parent_indices = set(
+        rng.sample(range(config.total_parent_nodes), num_me_parents)
+    )
+
+    feature_idx = 0
+    parent_count = 0
+    roots: list[HierarchyNode] = []
+
+    def get_branching() -> int:
+        if isinstance(config.branching_factor, int):
+            return config.branching_factor
+        return rng.randint(config.branching_factor[0], config.branching_factor[1])
+
+    def next_feature() -> int | None:
+        nonlocal feature_idx
+        if feature_idx >= num_features:
+            return None
+        idx = all_indices[feature_idx]
+        feature_idx += 1
+        return idx
+
+    # Build hierarchy breadth-first using a queue of (node, depth, parent_idx) tuples
+    # parent_idx is the index in me_parent_indices to check for ME assignment
+    # Start by creating roots
+    parents_at_current_level: list[tuple[HierarchyNode, int, int]] = []
+
+    # Create initial roots until we've used all parent slots or run out of features
+    while parent_count < config.total_parent_nodes:
+        feat_idx = next_feature()
+        if feat_idx is None:
+            break
+
+        current_parent_idx = parent_count
+        # Create with ME=False initially, will set to True after children are populated
+        node = HierarchyNode(
+            feature_index=feat_idx,
+            children=[],
+            mutually_exclusive_children=False,
+        )
+        roots.append(node)
+        parents_at_current_level.append((node, 0, current_parent_idx))
+        parent_count += 1
+
+    # Process level by level (breadth-first)
+    while parents_at_current_level:
+        next_level: list[tuple[HierarchyNode, int, int]] = []
+
+        for parent_node, depth, parent_idx in parents_at_current_level:
+            branching = get_branching()
+            children: list[HierarchyNode] = []
+
+            for _ in range(branching):
+                feat_idx = next_feature()
+                if feat_idx is None:
+                    break
+
+                # Decide if this child should be a parent (has its own children)
+                child_is_parent = (
+                    parent_count < config.total_parent_nodes
+                    and depth + 1 < config.max_depth
+                )
+
+                if child_is_parent:
+                    current_parent_idx = parent_count
+                    # Create with ME=False initially
+                    child = HierarchyNode(
+                        feature_index=feat_idx,
+                        children=[],
+                        mutually_exclusive_children=False,
+                    )
+                    next_level.append((child, depth + 1, current_parent_idx))
+                    parent_count += 1
+                else:
+                    # Leaf node
+                    child = HierarchyNode(feature_index=feat_idx)
+
+                children.append(child)
+
+            # Update parent's children
+            parent_node.children = children
+
+            # Set ME flag if this parent was selected and has enough children
+            if parent_idx in me_parent_indices and len(children) >= 2:
+                parent_node.mutually_exclusive_children = True
+
+        parents_at_current_level = next_level
+
+    modifier = hierarchy_modifier(roots) if roots else None
+
+    return Hierarchy(
+        roots=roots,
+        modifier=modifier,
+    )

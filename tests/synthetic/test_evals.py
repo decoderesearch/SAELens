@@ -6,9 +6,12 @@ import torch
 from sae_lens.saes.sae import TrainingSAE
 from sae_lens.synthetic import (
     ActivationGenerator,
+    ClassificationMetrics,
     FeatureDictionary,
     SyntheticDataEvalResult,
+    compute_classification_metrics,
     eval_sae_on_synthetic_data,
+    feature_uniqueness,
     mean_correlation_coefficient,
 )
 
@@ -162,6 +165,8 @@ class TestEvalSaeOnSyntheticData:
         assert hasattr(result, "dead_latents")
         assert hasattr(result, "shrinkage")
         assert hasattr(result, "mcc")
+        assert hasattr(result, "uniqueness")
+        assert hasattr(result, "classification")
 
     def test_true_l0_matches_firing_probability(self, eval_setup: EvalSetup) -> None:
         """true_l0 should be close to num_features * firing_prob."""
@@ -316,3 +321,271 @@ class TestEvalSaeOnSyntheticData:
         # Both should return valid results
         assert isinstance(result_small, SyntheticDataEvalResult)
         assert isinstance(result_large, SyntheticDataEvalResult)
+
+    def test_uniqueness_in_valid_range(self, eval_setup: EvalSetup) -> None:
+        sae, feature_dict, activations_gen = eval_setup
+
+        result = eval_sae_on_synthetic_data(
+            sae=sae,
+            feature_dict=feature_dict,
+            activations_generator=activations_gen,
+            num_samples=1000,
+        )
+
+        assert 0.0 <= result.uniqueness <= 1.0
+
+    def test_classification_metrics_in_valid_range(self, eval_setup: EvalSetup) -> None:
+        sae, feature_dict, activations_gen = eval_setup
+
+        result = eval_sae_on_synthetic_data(
+            sae=sae,
+            feature_dict=feature_dict,
+            activations_generator=activations_gen,
+            num_samples=1000,
+        )
+
+        assert isinstance(result.classification, ClassificationMetrics)
+        assert 0.0 <= result.classification.precision <= 1.0
+        assert 0.0 <= result.classification.recall <= 1.0
+        assert 0.0 <= result.classification.f1_score <= 1.0
+        assert 0.0 <= result.classification.accuracy <= 1.0
+
+    def test_batch_size_produces_valid_results(self, eval_setup: EvalSetup) -> None:
+        sae, feature_dict, activations_gen = eval_setup
+
+        result = eval_sae_on_synthetic_data(
+            sae=sae,
+            feature_dict=feature_dict,
+            activations_generator=activations_gen,
+            num_samples=1000,
+            batch_size=100,
+        )
+
+        assert isinstance(result, SyntheticDataEvalResult)
+        assert 0.0 <= result.mcc <= 1.0
+        assert 0.0 <= result.uniqueness <= 1.0
+        assert 0.0 <= result.classification.precision <= 1.0
+
+    def test_batch_size_matches_unbatched_statistically(self) -> None:
+        hidden_dim = 8
+        num_features = 10
+
+        feature_dict = FeatureDictionary(
+            num_features=num_features, hidden_dim=hidden_dim
+        )
+
+        activations_gen = ActivationGenerator(
+            num_features=num_features,
+            firing_probabilities=0.2,
+        )
+
+        sae = TrainingSAE.from_dict(
+            {
+                "architecture": "standard",
+                "d_in": hidden_dim,
+                "d_sae": num_features,
+                "activation_fn_str": "relu",
+                "normalize_sae_decoder": False,
+                "apply_b_dec_to_input": True,
+                "dtype": "float32",
+                "device": "cpu",
+                "model_name": "test",
+                "hook_name": "test",
+                "hook_layer": 0,
+            }
+        )
+
+        # Run multiple times and check statistical consistency
+        num_samples = 10000
+        batch_sizes = [None, 100, 500, 1000]
+        results = []
+
+        for batch_size in batch_sizes:
+            result = eval_sae_on_synthetic_data(
+                sae=sae,
+                feature_dict=feature_dict,
+                activations_generator=activations_gen,
+                num_samples=num_samples,
+                batch_size=batch_size,
+            )
+            results.append(result)
+
+        # All results should have similar true_l0 (expected: num_features * prob = 2.0)
+        for result in results:
+            assert abs(result.true_l0 - 2.0) < 0.2
+
+        # MCC and uniqueness should be identical (only depend on decoder weights)
+        for result in results:
+            assert result.mcc == results[0].mcc
+            assert result.uniqueness == results[0].uniqueness
+
+
+class TestFeatureUniqueness:
+    def test_identical_features_returns_one(self) -> None:
+        features = torch.randn(10, 8)
+        score = feature_uniqueness(features, features)
+        assert abs(score - 1.0) < 1e-5
+
+    def test_all_same_feature_returns_one_over_n(self) -> None:
+        gt_features = torch.randn(10, 8)
+        # All SAE features are the same (copies of first GT feature)
+        sae_features = gt_features[0:1].expand(5, -1).clone()
+        score = feature_uniqueness(sae_features, gt_features)
+        # All 5 SAE latents match the same GT feature, so uniqueness = 1/5
+        assert abs(score - 0.2) < 1e-5
+
+    def test_empty_sae_features_returns_zero(self) -> None:
+        gt_features = torch.randn(10, 8)
+        sae_features = torch.empty(0, 8)
+        score = feature_uniqueness(sae_features, gt_features)
+        assert score == 0.0
+
+    def test_partial_uniqueness(self) -> None:
+        gt_features = torch.eye(8)  # 8 orthogonal features
+        # 4 SAE latents: 2 unique, 2 duplicates
+        sae_features = torch.stack(
+            [
+                gt_features[0],  # matches GT 0
+                gt_features[1],  # matches GT 1
+                gt_features[0],  # matches GT 0 (duplicate)
+                gt_features[2],  # matches GT 2
+            ]
+        )
+        score = feature_uniqueness(sae_features, gt_features)
+        # 3 unique GT features matched / 4 SAE latents = 0.75
+        assert abs(score - 0.75) < 1e-5
+
+    def test_negated_features_still_match(self) -> None:
+        gt_features = torch.randn(10, 8)
+        sae_features = -gt_features  # Negated but should still match
+        score = feature_uniqueness(sae_features, gt_features)
+        assert abs(score - 1.0) < 1e-5
+
+    def test_scaled_features_still_match(self) -> None:
+        gt_features = torch.randn(10, 8)
+        sae_features = gt_features * 5.0  # Scaled but should still match
+        score = feature_uniqueness(sae_features, gt_features)
+        assert abs(score - 1.0) < 1e-5
+
+    def test_returns_float(self) -> None:
+        features = torch.randn(5, 4)
+        score = feature_uniqueness(features, features)
+        assert isinstance(score, float)
+
+
+class TestComputeClassificationMetrics:
+    def test_perfect_classifier_has_perfect_metrics(self) -> None:
+        gt_features = torch.eye(4)  # 4 orthogonal features
+        sae_decoder = gt_features.clone()  # SAE decoder matches GT perfectly
+        num_samples = 1000
+
+        # Generate samples where SAE latents perfectly predict GT features
+        gt_feature_acts = torch.zeros(num_samples, 4)
+        sae_latents = torch.zeros(num_samples, 4)
+        for i in range(num_samples):
+            # Randomly activate one feature
+            active_feature = i % 4
+            gt_feature_acts[i, active_feature] = 1.0
+            sae_latents[i, active_feature] = 1.0
+
+        metrics = compute_classification_metrics(
+            sae_latents=sae_latents,
+            gt_feature_acts=gt_feature_acts,
+            sae_decoder=sae_decoder,
+            gt_features=gt_features,
+        )
+
+        assert abs(metrics.precision - 1.0) < 1e-5
+        assert abs(metrics.recall - 1.0) < 1e-5
+        assert abs(metrics.f1_score - 1.0) < 1e-5
+        assert abs(metrics.accuracy - 1.0) < 1e-5
+
+    def test_no_true_positives_has_zero_precision_recall_f1(self) -> None:
+        gt_features = torch.eye(4)
+        sae_decoder = gt_features.clone()
+        num_samples = 100
+
+        # SAE fires but GT never does (all false positives)
+        gt_feature_acts = torch.zeros(num_samples, 4)
+        sae_latents = torch.ones(num_samples, 4)
+
+        metrics = compute_classification_metrics(
+            sae_latents=sae_latents,
+            gt_feature_acts=gt_feature_acts,
+            sae_decoder=sae_decoder,
+            gt_features=gt_features,
+        )
+
+        assert metrics.precision == 0.0
+        assert metrics.recall == 0.0
+        assert metrics.f1_score == 0.0
+
+    def test_empty_sae_latents_returns_zeros(self) -> None:
+        gt_features = torch.eye(4)
+        sae_decoder = torch.empty(0, 4)
+        gt_feature_acts = torch.zeros(100, 4)
+        sae_latents = torch.empty(100, 0)
+
+        metrics = compute_classification_metrics(
+            sae_latents=sae_latents,
+            gt_feature_acts=gt_feature_acts,
+            sae_decoder=sae_decoder,
+            gt_features=gt_features,
+        )
+
+        assert metrics.precision == 0.0
+        assert metrics.recall == 0.0
+        assert metrics.f1_score == 0.0
+        assert metrics.accuracy == 0.0
+
+    def test_returns_classification_metrics(self) -> None:
+        gt_features = torch.randn(4, 8)
+        sae_decoder = torch.randn(4, 8)
+        gt_feature_acts = torch.rand(100, 4) > 0.5
+        sae_latents = torch.rand(100, 4) > 0.5
+
+        metrics = compute_classification_metrics(
+            sae_latents=sae_latents.float(),
+            gt_feature_acts=gt_feature_acts.float(),
+            sae_decoder=sae_decoder,
+            gt_features=gt_features,
+        )
+
+        assert isinstance(metrics, ClassificationMetrics)
+        assert isinstance(metrics.precision, float)
+        assert isinstance(metrics.recall, float)
+        assert isinstance(metrics.f1_score, float)
+        assert isinstance(metrics.accuracy, float)
+
+    def test_partial_overlap_gives_intermediate_metrics(self) -> None:
+        gt_features = torch.eye(2)
+        sae_decoder = gt_features.clone()
+        num_samples = 100
+
+        # Half the samples: perfect match. Other half: SAE fires but GT doesn't
+        gt_feature_acts = torch.zeros(num_samples, 2)
+        sae_latents = torch.zeros(num_samples, 2)
+
+        # First half: both fire for feature 0
+        gt_feature_acts[:50, 0] = 1.0
+        sae_latents[:50, 0] = 1.0
+
+        # Second half: SAE fires but GT doesn't (false positive)
+        sae_latents[50:, 0] = 1.0
+
+        metrics = compute_classification_metrics(
+            sae_latents=sae_latents,
+            gt_feature_acts=gt_feature_acts,
+            sae_decoder=sae_decoder,
+            gt_features=gt_features,
+        )
+
+        # For feature 0: TP=50, FP=50, FN=0, TN=0
+        # Precision = 50/100 = 0.5, Recall = 50/50 = 1.0
+        # F1 = 2 * 0.5 * 1.0 / (0.5 + 1.0) = 2/3
+        # For feature 1: TP=0, FP=0, FN=0, TN=100
+        # Precision = 0 (undefined, treated as 0), Recall = 0, F1 = 0, Accuracy = 1.0
+        # Mean precision = (0.5 + 0) / 2 = 0.25
+        # Mean recall = (1.0 + 0) / 2 = 0.5
+        assert 0.2 < metrics.precision < 0.3
+        assert 0.4 < metrics.recall < 0.6
