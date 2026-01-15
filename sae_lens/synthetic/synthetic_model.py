@@ -117,7 +117,8 @@ class SyntheticModelConfig:
     Complete configuration for a SyntheticModel.
 
     This config encapsulates all settings needed to create a synthetic data
-    generator for SAE training experiments.
+    generator for SAE training experiments. It contains only model-defining
+    parameters, not runtime options like device or sparse tensor usage.
 
     Attributes:
         num_features: Number of ground-truth features in the model.
@@ -132,9 +133,7 @@ class SyntheticModelConfig:
         mean_firing_magnitudes: Mean firing magnitude when active. Can be a float
             for constant value, or MagnitudeConfig for per-feature values.
         feature_dict_bias: Whether feature dictionary has a bias term.
-        device: Device for tensors.
-        dtype: Data type for tensors.
-        use_sparse_tensors: Whether to use sparse COO tensors for activations.
+        dtype: Data type for model tensors.
         seed: Global random seed for reproducibility.
     """
 
@@ -151,9 +150,7 @@ class SyntheticModelConfig:
     std_firing_magnitudes: float | MagnitudeConfig = 0.0
     mean_firing_magnitudes: float | MagnitudeConfig = 1.0
     feature_dict_bias: bool = False
-    device: str = "cpu"
     dtype: str = "float32"
-    use_sparse_tensors: bool = False
     seed: int | None = None
 
     def __post_init__(self) -> None:
@@ -190,9 +187,7 @@ class SyntheticModelConfig:
                 else self.mean_firing_magnitudes
             ),
             "feature_dict_bias": self.feature_dict_bias,
-            "device": self.device,
             "dtype": self.dtype,
-            "use_sparse_tensors": self.use_sparse_tensors,
             "seed": self.seed,
         }
 
@@ -233,9 +228,7 @@ class SyntheticModelConfig:
                 d.get("mean_firing_magnitudes", 1.0)
             ),
             feature_dict_bias=d.get("feature_dict_bias", False),
-            device=d.get("device", "cpu"),
             dtype=d.get("dtype", "float32"),
-            use_sparse_tensors=d.get("use_sparse_tensors", False),
             seed=d.get("seed"),
         )
 
@@ -259,6 +252,9 @@ class SyntheticModel(nn.Module):
 
     Main method is `sample(batch_size)` which returns hidden activations
     ready for SAE training.
+
+    Runtime options (device, use_sparse_tensors) are stored as instance
+    attributes, not in the config, since they don't define the model itself.
     """
 
     cfg: SyntheticModelConfig
@@ -266,6 +262,8 @@ class SyntheticModel(nn.Module):
     activation_generator: ActivationGenerator
     hierarchy: Hierarchy | None
     correlation_matrix: LowRankCorrelationMatrix | None
+    device: str
+    use_sparse_tensors: bool
 
     def __init__(
         self,
@@ -274,6 +272,8 @@ class SyntheticModel(nn.Module):
         activation_generator: ActivationGenerator | None = None,
         hierarchy: Hierarchy | None = None,
         correlation_matrix: LowRankCorrelationMatrix | None = None,
+        device: str = "cpu",
+        use_sparse_tensors: bool = False,
     ):
         """
         Create a SyntheticModel.
@@ -283,9 +283,20 @@ class SyntheticModel(nn.Module):
 
         Direct initialization is mainly for advanced use cases like loading
         with custom components.
+
+        Args:
+            cfg: Model configuration (defines the model structure)
+            feature_dict: Optional pre-created feature dictionary
+            activation_generator: Optional pre-created activation generator
+            hierarchy: Optional hierarchy structure
+            correlation_matrix: Optional correlation matrix
+            device: Device for tensors (runtime option, not saved)
+            use_sparse_tensors: Whether to use sparse tensors (runtime option, not saved)
         """
         super().__init__()
         self.cfg = cfg
+        self.device = device
+        self.use_sparse_tensors = use_sparse_tensors
 
         # Store correlation matrix (may be None)
         self.correlation_matrix = correlation_matrix
@@ -304,7 +315,12 @@ class SyntheticModel(nn.Module):
         self.activation_generator = activation_generator
 
     @classmethod
-    def from_config(cls, cfg: SyntheticModelConfig) -> "SyntheticModel":
+    def from_config(
+        cls,
+        cfg: SyntheticModelConfig,
+        device: str = "cpu",
+        use_sparse_tensors: bool = False,
+    ) -> "SyntheticModel":
         """
         Create a new SyntheticModel from configuration.
 
@@ -317,6 +333,8 @@ class SyntheticModel(nn.Module):
 
         Args:
             cfg: Complete model configuration
+            device: Device for tensors (runtime option)
+            use_sparse_tensors: Whether to use sparse COO tensors (runtime option)
 
         Returns:
             Fully initialized SyntheticModel
@@ -338,7 +356,7 @@ class SyntheticModel(nn.Module):
                 rank=cfg.correlation.rank,
                 correlation_scale=cfg.correlation.correlation_scale,
                 seed=cfg.correlation.seed,
-                device=cfg.device,
+                device=device,
                 dtype=str_to_dtype(cfg.dtype),
             )
 
@@ -348,6 +366,8 @@ class SyntheticModel(nn.Module):
             activation_generator=None,  # Will be created in __init__
             hierarchy=hierarchy,
             correlation_matrix=correlation_matrix,
+            device=device,
+            use_sparse_tensors=use_sparse_tensors,
         )
 
     def _create_feature_dict(self) -> FeatureDictionary:
@@ -365,7 +385,7 @@ class SyntheticModel(nn.Module):
             hidden_dim=self.cfg.hidden_dim,
             bias=self.cfg.feature_dict_bias,
             initializer=initializer,
-            device=self.cfg.device,
+            device=self.device,
         )
 
     def _create_activation_generator(self) -> ActivationGenerator:
@@ -402,9 +422,9 @@ class SyntheticModel(nn.Module):
             mean_firing_magnitudes=mean_magnitudes,
             modify_activations=modifier,
             correlation_matrix=correlation_input,
-            device=self.cfg.device,
+            device=self.device,
             dtype=self.cfg.dtype,
-            use_sparse_tensors=self.cfg.use_sparse_tensors,
+            use_sparse_tensors=self.use_sparse_tensors,
         )
 
     @torch.no_grad()
@@ -499,13 +519,19 @@ class SyntheticModel(nn.Module):
                 json.dump(self.hierarchy.to_dict(), f, indent=2)
 
     @classmethod
-    def load(cls, path: str | Path, device: str | None = None) -> "SyntheticModel":
+    def load(
+        cls,
+        path: str | Path,
+        device: str = "cpu",
+        use_sparse_tensors: bool = False,
+    ) -> "SyntheticModel":
         """
         Load a SyntheticModel from disk.
 
         Args:
             path: Directory containing saved model
-            device: Override device (uses saved config device if None)
+            device: Device for tensors (runtime option)
+            use_sparse_tensors: Whether to use sparse tensors (runtime option)
 
         Returns:
             Loaded SyntheticModel
@@ -518,12 +544,10 @@ class SyntheticModel(nn.Module):
             cfg_dict = json.load(f)
 
         cfg = SyntheticModelConfig.from_dict(cfg_dict)
-        if device is not None:
-            cfg.device = device
 
         # Load weights
         weights_path = path / SYNTHETIC_MODEL_WEIGHTS_FILENAME
-        weights = load_file(weights_path, device=cfg.device)
+        weights = load_file(weights_path, device=device)
 
         # Reconstruct correlation matrix if present
         correlation_matrix = None
@@ -547,7 +571,7 @@ class SyntheticModel(nn.Module):
             hidden_dim=cfg.hidden_dim,
             bias=cfg.feature_dict_bias,
             initializer=None,  # Don't re-orthogonalize
-            device=cfg.device,
+            device=device,
         )
         feature_dict.feature_vectors.data = weights["feature_vectors"]
         feature_dict.bias.data = weights["bias"]
@@ -559,6 +583,8 @@ class SyntheticModel(nn.Module):
             activation_generator=None,  # Will be created
             hierarchy=hierarchy,
             correlation_matrix=correlation_matrix,
+            device=device,
+            use_sparse_tensors=use_sparse_tensors,
         )
 
         # Override firing probabilities with saved values
@@ -573,7 +599,8 @@ class SyntheticModel(nn.Module):
         cls,
         repo_id: str,
         model_path: str | None = None,
-        device: str | None = None,
+        device: str = "cpu",
+        use_sparse_tensors: bool = False,
         force_download: bool = False,
     ) -> "SyntheticModel":
         """
@@ -582,7 +609,8 @@ class SyntheticModel(nn.Module):
         Args:
             repo_id: The Hugging Face repository ID (e.g., "username/repo-name")
             model_path: Optional subfolder within the repo. If None, loads from repo root.
-            device: Override device (uses saved config device if None)
+            device: Device for tensors (runtime option)
+            use_sparse_tensors: Whether to use sparse tensors (runtime option)
             force_download: Whether to force re-download even if cached
 
         Returns:
@@ -625,7 +653,9 @@ class SyntheticModel(nn.Module):
             except EntryNotFoundError:
                 pass  # No hierarchy file
 
-            return cls.load(tmp_path, device=device)
+            return cls.load(
+                tmp_path, device=device, use_sparse_tensors=use_sparse_tensors
+            )
 
     def to(  # type: ignore[override]
         self,
@@ -640,7 +670,7 @@ class SyntheticModel(nn.Module):
         """
         if device is not None:
             device_str = str(device) if isinstance(device, torch.device) else device
-            self.cfg.device = device_str
+            self.device = device_str
             self.feature_dict = self.feature_dict.to(device)
 
             # Recreate activation generator on new device
@@ -652,7 +682,8 @@ class SyntheticModel(nn.Module):
     def load_from_source(
         cls,
         source: "SyntheticModelConfig | str",
-        device: str | None = None,
+        device: str = "cpu",
+        use_sparse_tensors: bool = False,
     ) -> "SyntheticModel":
         """
         Load a SyntheticModel from various sources with smart detection.
@@ -669,19 +700,22 @@ class SyntheticModel(nn.Module):
                 - HuggingFace string: Load from HuggingFace Hub. Format is
                   "repo_id" or "repo_id:model_path" for models in subfolders
 
-            device: Override device (uses saved config device if None)
+            device: Device for tensors (runtime option)
+            use_sparse_tensors: Whether to use sparse tensors (runtime option)
 
         Returns:
             Loaded or created SyntheticModel
         """
         if isinstance(source, SyntheticModelConfig):
-            if device is not None:
-                source.device = device
-            return cls.from_config(source)
+            return cls.from_config(
+                source, device=device, use_sparse_tensors=use_sparse_tensors
+            )
 
         # String source - determine if local path or HuggingFace
         if _is_local_path(source):
-            return cls.load(source, device=device)
+            return cls.load(
+                source, device=device, use_sparse_tensors=use_sparse_tensors
+            )
 
         # Parse HuggingFace format: "repo_id" or "repo_id:model_path"
         if ":" in source:
@@ -689,7 +723,12 @@ class SyntheticModel(nn.Module):
         else:
             repo_id, model_path = source, None
 
-        return cls.from_pretrained(repo_id, model_path=model_path, device=device)
+        return cls.from_pretrained(
+            repo_id,
+            model_path=model_path,
+            device=device,
+            use_sparse_tensors=use_sparse_tensors,
+        )
 
 
 def _is_local_path(path: str) -> bool:

@@ -221,7 +221,7 @@ def test_synthetic_model_to_device():
 
     # Test moving to same device (cpu)
     model.to("cpu")
-    assert model.cfg.device == "cpu"
+    assert model.device == "cpu"
     samples = model.sample(10)
     assert samples.device.type == "cpu"
 

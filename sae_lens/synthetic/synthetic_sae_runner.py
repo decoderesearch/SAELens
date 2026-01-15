@@ -86,6 +86,7 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     device: str = "cpu"
     autocast_sae: bool = False
     autocast_data: bool = False
+    use_sparse_tensors: bool = False
 
     # Checkpoints/outputs
     n_checkpoints: int = 0
@@ -141,6 +142,7 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
             "device": self.device,
             "autocast_sae": self.autocast_sae,
             "autocast_data": self.autocast_data,
+            "use_sparse_tensors": self.use_sparse_tensors,
             "n_checkpoints": self.n_checkpoints,
             "checkpoint_path": self.checkpoint_path,
             "output_path": self.output_path,
@@ -202,6 +204,7 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
             device=d.get("device", "cpu"),
             autocast_sae=d.get("autocast_sae", False),
             autocast_data=d.get("autocast_data", False),
+            use_sparse_tensors=d.get("use_sparse_tensors", False),
             n_checkpoints=d.get("n_checkpoints", 0),
             checkpoint_path=d.get("checkpoint_path", "checkpoints"),
             output_path=d.get("output_path", "output"),
@@ -299,7 +302,9 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
             self.synthetic_model = override_synthetic_model
         else:
             self.synthetic_model = SyntheticModel.load_from_source(
-                cfg.synthetic_model, device=cfg.device
+                cfg.synthetic_model,
+                device=cfg.device,
+                use_sparse_tensors=cfg.use_sparse_tensors,
             )
 
         # Ensure SAE dimensions match synthetic model
