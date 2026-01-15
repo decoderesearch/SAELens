@@ -930,8 +930,7 @@ class HierarchyConfig:
     Creates a forest of hierarchy trees with controlled structure.
 
     Attributes:
-        total_parent_nodes: Number of non-leaf parent nodes to create.
-            These nodes will have children (hierarchy roots count as parents).
+        total_root_nodes: Number of root nodes (trees).
         branching_factor: Number of children per parent. Can be:
 
             - An int for fixed branching (e.g., 3 means exactly 3 children)
@@ -943,15 +942,15 @@ class HierarchyConfig:
         seed: Random seed for reproducibility.
     """
 
-    total_parent_nodes: int = 100
+    total_root_nodes: int = 100
     branching_factor: int | tuple[int, int] = 100
     max_depth: int = 2
     mutually_exclusive_portion: float = 0.0
     seed: int | None = None
 
     def __post_init__(self) -> None:
-        if self.total_parent_nodes <= 0:
-            raise ValueError("total_parent_nodes must be positive")
+        if self.total_root_nodes <= 0:
+            raise ValueError("total_root_nodes must be positive")
         if isinstance(self.branching_factor, int):
             if self.branching_factor < 2:
                 raise ValueError("branching_factor must be at least 2")
@@ -973,7 +972,7 @@ class HierarchyConfig:
             else list(self.branching_factor)
         )
         return {
-            "total_parent_nodes": self.total_parent_nodes,
+            "total_root_nodes": self.total_root_nodes,
             "branching_factor": branching,
             "max_depth": self.max_depth,
             "mutually_exclusive_portion": self.mutually_exclusive_portion,
@@ -1061,10 +1060,10 @@ def generate_hierarchy(
     Generate a hierarchy forest based on config using breadth-first construction.
 
     Algorithm:
-        1. Create root parent nodes up to total_parent_nodes or max breadth
-        2. For each level, assign children to parents breadth-first
-        3. Continue until total_parent_nodes reached or max_depth exceeded
-        4. Apply mutually_exclusive flag to portion of parents
+        1. Create total_root_nodes root nodes
+        2. Build each tree breadth-first up to max_depth
+        3. Each non-leaf node gets branching_factor children
+        4. Apply mutually_exclusive flag to portion of parent nodes
 
     Args:
         num_features: Total number of features available
@@ -1073,32 +1072,18 @@ def generate_hierarchy(
     Returns:
         Hierarchy with roots and modifier function
     """
-    if config.total_parent_nodes == 0:
+    if config.total_root_nodes == 0:
         return Hierarchy(roots=[], modifier=None)
 
     rng = random.Random(config.seed)
-
-    # Estimate features needed: each parent needs at least 2 children
-    min_features_needed = config.total_parent_nodes * 3  # parent + 2 children minimum
-    if num_features < min_features_needed:
-        raise ValueError(
-            f"num_features ({num_features}) is too small for {config.total_parent_nodes} "
-            f"parent nodes. Need at least {min_features_needed}."
-        )
 
     # Shuffle feature indices for random assignment
     all_indices = list(range(num_features))
     rng.shuffle(all_indices)
 
-    # Track which parents get ME
-    num_me_parents = int(config.total_parent_nodes * config.mutually_exclusive_portion)
-    me_parent_indices = set(
-        rng.sample(range(config.total_parent_nodes), num_me_parents)
-    )
-
     feature_idx = 0
-    parent_count = 0
     roots: list[HierarchyNode] = []
+    all_parents: list[HierarchyNode] = []  # Track all parent nodes for ME assignment
 
     def get_branching() -> int:
         if isinstance(config.branching_factor, int):
@@ -1113,33 +1098,32 @@ def generate_hierarchy(
         feature_idx += 1
         return idx
 
-    # Build hierarchy breadth-first using a queue of (node, depth, parent_idx) tuples
-    # parent_idx is the index in me_parent_indices to check for ME assignment
-    # Start by creating roots
-    parents_at_current_level: list[tuple[HierarchyNode, int, int]] = []
-
-    # Create initial roots until we've used all parent slots or run out of features
-    while parent_count < config.total_parent_nodes:
+    # Create root nodes
+    for _ in range(config.total_root_nodes):
         feat_idx = next_feature()
         if feat_idx is None:
             break
 
-        current_parent_idx = parent_count
-        # Create with ME=False initially, will set to True after children are populated
         node = HierarchyNode(
             feature_index=feat_idx,
             children=[],
             mutually_exclusive_children=False,
         )
         roots.append(node)
-        parents_at_current_level.append((node, 0, current_parent_idx))
-        parent_count += 1
+        all_parents.append(node)
 
-    # Process level by level (breadth-first)
+    # Process level by level (breadth-first), building complete trees
+    # depth 0 = roots, we build children for depths 0 to max_depth-1
+    parents_at_current_level: list[tuple[HierarchyNode, int]] = [(r, 0) for r in roots]
+
     while parents_at_current_level:
-        next_level: list[tuple[HierarchyNode, int, int]] = []
+        next_level: list[tuple[HierarchyNode, int]] = []
 
-        for parent_node, depth, parent_idx in parents_at_current_level:
+        for parent_node, depth in parents_at_current_level:
+            # Don't add children if we're at max_depth
+            if depth >= config.max_depth:
+                continue
+
             branching = get_branching()
             children: list[HierarchyNode] = []
 
@@ -1148,36 +1132,34 @@ def generate_hierarchy(
                 if feat_idx is None:
                     break
 
-                # Decide if this child should be a parent (has its own children)
-                child_is_parent = (
-                    parent_count < config.total_parent_nodes
-                    and depth + 1 < config.max_depth
-                )
+                # Children at depth+1 < max_depth are parents, otherwise leaves
+                is_parent = depth + 1 < config.max_depth
 
-                if child_is_parent:
-                    current_parent_idx = parent_count
-                    # Create with ME=False initially
+                if is_parent:
                     child = HierarchyNode(
                         feature_index=feat_idx,
                         children=[],
                         mutually_exclusive_children=False,
                     )
-                    next_level.append((child, depth + 1, current_parent_idx))
-                    parent_count += 1
+                    next_level.append((child, depth + 1))
+                    all_parents.append(child)
                 else:
-                    # Leaf node
                     child = HierarchyNode(feature_index=feat_idx)
 
                 children.append(child)
 
-            # Update parent's children
             parent_node.children = children
 
-            # Set ME flag if this parent was selected and has enough children
-            if parent_idx in me_parent_indices and len(children) >= 2:
-                parent_node.mutually_exclusive_children = True
-
         parents_at_current_level = next_level
+
+    # Assign ME flag to portion of parents
+    num_me_parents = int(len(all_parents) * config.mutually_exclusive_portion)
+    if num_me_parents > 0:
+        me_indices = set(rng.sample(range(len(all_parents)), num_me_parents))
+        for i in me_indices:
+            parent = all_parents[i]
+            if len(parent.children) >= 2:
+                parent.mutually_exclusive_children = True
 
     modifier = hierarchy_modifier(roots) if roots else None
 

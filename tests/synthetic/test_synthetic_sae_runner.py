@@ -107,7 +107,7 @@ def test_runner_run_completes_without_error():
     model_cfg = SyntheticModelConfig(
         num_features=32,
         hidden_dim=16,
-        hierarchy=HierarchyConfig(total_parent_nodes=5, max_depth=2),
+        hierarchy=HierarchyConfig(total_root_nodes=5, max_depth=2),
         orthogonalization=None,
     )
     sae_cfg = StandardTrainingSAEConfig(d_in=16, d_sae=32, l1_coefficient=0.01)

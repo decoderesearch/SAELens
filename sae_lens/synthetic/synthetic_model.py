@@ -345,7 +345,7 @@ class SyntheticModel(nn.Module):
 
         # Generate hierarchy
         hierarchy = None
-        if cfg.hierarchy is not None and cfg.hierarchy.total_parent_nodes > 0:
+        if cfg.hierarchy is not None and cfg.hierarchy.total_root_nodes > 0:
             hierarchy = generate_hierarchy(cfg.num_features, cfg.hierarchy)
 
         # Generate correlation matrix

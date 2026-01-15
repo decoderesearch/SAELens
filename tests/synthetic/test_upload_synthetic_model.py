@@ -54,7 +54,7 @@ def test_create_default_readme_with_hierarchy() -> None:
         num_features=100,
         hidden_dim=64,
         hierarchy=HierarchyConfig(
-            total_parent_nodes=10,
+            total_root_nodes=10,
             branching_factor=3,
             max_depth=2,
             seed=42,
@@ -90,7 +90,7 @@ def test_get_hierarchy_max_depth() -> None:
         num_features=100,
         hidden_dim=64,
         hierarchy=HierarchyConfig(
-            total_parent_nodes=5,
+            total_root_nodes=5,
             branching_factor=2,
             max_depth=3,
             seed=42,

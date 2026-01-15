@@ -42,7 +42,7 @@ def test_synthetic_model_config_to_dict_from_dict_roundtrip():
     original = SyntheticModelConfig(
         num_features=128,
         hidden_dim=64,
-        hierarchy=HierarchyConfig(total_parent_nodes=5, branching_factor=3),
+        hierarchy=HierarchyConfig(total_root_nodes=5, branching_factor=3),
         orthogonalization=OrthogonalizationConfig(num_steps=100),
         correlation=LowRankCorrelationConfig(rank=16),
         seed=42,
@@ -53,9 +53,7 @@ def test_synthetic_model_config_to_dict_from_dict_roundtrip():
     assert restored.hidden_dim == original.hidden_dim
     assert original.hierarchy is not None
     assert restored.hierarchy is not None
-    assert (
-        restored.hierarchy.total_parent_nodes == original.hierarchy.total_parent_nodes
-    )
+    assert restored.hierarchy.total_root_nodes == original.hierarchy.total_root_nodes
     assert original.orthogonalization is not None
     assert restored.orthogonalization is not None
     assert restored.orthogonalization.num_steps == original.orthogonalization.num_steps
@@ -108,7 +106,7 @@ def test_synthetic_model_with_hierarchy():
         num_features=64,
         hidden_dim=32,
         hierarchy=HierarchyConfig(
-            total_parent_nodes=5, branching_factor=2, max_depth=2, seed=42
+            total_root_nodes=5, branching_factor=2, max_depth=2, seed=42
         ),
         orthogonalization=None,
     )
@@ -164,7 +162,7 @@ def test_synthetic_model_save_load_with_hierarchy():
         num_features=64,
         hidden_dim=32,
         hierarchy=HierarchyConfig(
-            total_parent_nodes=3, branching_factor=(2, 4), max_depth=2, seed=42
+            total_root_nodes=3, branching_factor=(2, 4), max_depth=2, seed=42
         ),
         orthogonalization=None,
     )
@@ -327,7 +325,7 @@ def test_synthetic_model_from_pretrained_with_model_path(
         num_features=32,
         hidden_dim=16,
         hierarchy=HierarchyConfig(
-            total_parent_nodes=2, branching_factor=2, max_depth=1, seed=42
+            total_root_nodes=2, branching_factor=2, max_depth=1, seed=42
         ),
         orthogonalization=None,
     )
