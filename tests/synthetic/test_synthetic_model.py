@@ -26,7 +26,7 @@ def test_synthetic_model_config_default_values():
     assert cfg.hidden_dim == 32
     assert isinstance(cfg.firing_probability, ZipfianFiringProbabilityConfig)
     assert cfg.hierarchy is None
-    assert cfg.orthogonalization is not None
+    assert cfg.orthogonalization is None
     assert cfg.correlation is None
 
 

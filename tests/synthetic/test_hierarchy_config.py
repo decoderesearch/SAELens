@@ -16,6 +16,8 @@ def test_hierarchy_config_default_values():
     assert cfg.branching_factor == 100
     assert cfg.max_depth == 2
     assert cfg.mutually_exclusive_portion == 0.0
+    assert cfg.mutually_exclusive_min_depth == 0
+    assert cfg.mutually_exclusive_max_depth is None
     assert cfg.seed is None
 
 
@@ -56,12 +58,33 @@ def test_hierarchy_config_validation_me_portion():
         HierarchyConfig(total_root_nodes=5, mutually_exclusive_portion=1.5)
 
 
+def test_hierarchy_config_validation_me_min_depth_negative():
+    with pytest.raises(
+        ValueError, match="mutually_exclusive_min_depth must be non-negative"
+    ):
+        HierarchyConfig(total_root_nodes=5, mutually_exclusive_min_depth=-1)
+
+
+def test_hierarchy_config_validation_me_max_depth_less_than_min():
+    with pytest.raises(
+        ValueError,
+        match="mutually_exclusive_max_depth must be >= mutually_exclusive_min_depth",
+    ):
+        HierarchyConfig(
+            total_root_nodes=5,
+            mutually_exclusive_min_depth=2,
+            mutually_exclusive_max_depth=1,
+        )
+
+
 def test_hierarchy_config_to_dict_from_dict_roundtrip():
     original = HierarchyConfig(
         total_root_nodes=10,
         branching_factor=3,
         max_depth=4,
         mutually_exclusive_portion=0.3,
+        mutually_exclusive_min_depth=1,
+        mutually_exclusive_max_depth=2,
         seed=42,
     )
     d = original.to_dict()
@@ -70,6 +93,12 @@ def test_hierarchy_config_to_dict_from_dict_roundtrip():
     assert restored.branching_factor == original.branching_factor
     assert restored.max_depth == original.max_depth
     assert restored.mutually_exclusive_portion == original.mutually_exclusive_portion
+    assert (
+        restored.mutually_exclusive_min_depth == original.mutually_exclusive_min_depth
+    )
+    assert (
+        restored.mutually_exclusive_max_depth == original.mutually_exclusive_max_depth
+    )
     assert restored.seed == original.seed
 
 
@@ -150,3 +179,91 @@ def test_generated_hierarchy_to_dict_from_dict_roundtrip():
     assert len(restored.roots) == len(original.roots)
     # Modifier should be recreated
     assert (restored.modifier is None) == (original.modifier is None)
+
+
+def test_generate_hierarchy_me_depth_filtering_excludes_roots():
+    # max_depth=2 means roots (depth 0) and their children (depth 1) are parents
+    # Setting min_depth=1 should exclude roots from ME
+    cfg = HierarchyConfig(
+        total_root_nodes=5,
+        branching_factor=3,
+        max_depth=2,
+        mutually_exclusive_portion=1.0,
+        mutually_exclusive_min_depth=1,
+        seed=42,
+    )
+    result = generate_hierarchy(200, cfg)
+
+    # No roots should have ME
+    for root in result.roots:
+        assert not root.mutually_exclusive_children
+
+    # But depth-1 parents should have ME (if they have >= 2 children)
+    depth_1_parents_with_me = 0
+    for root in result.roots:
+        for child in root.children:
+            if child.children and child.mutually_exclusive_children:
+                depth_1_parents_with_me += 1
+    assert depth_1_parents_with_me > 0
+
+
+def test_generate_hierarchy_me_depth_filtering_only_roots():
+    # max_depth=2 means roots (depth 0) and their children (depth 1) are parents
+    # Setting max_depth=0 should only apply ME to roots
+    cfg = HierarchyConfig(
+        total_root_nodes=5,
+        branching_factor=3,
+        max_depth=2,
+        mutually_exclusive_portion=1.0,
+        mutually_exclusive_min_depth=0,
+        mutually_exclusive_max_depth=0,
+        seed=42,
+    )
+    result = generate_hierarchy(200, cfg)
+
+    # All roots with >= 2 children should have ME
+    for root in result.roots:
+        if len(root.children) >= 2:
+            assert root.mutually_exclusive_children
+
+    # No depth-1 parents should have ME
+    for root in result.roots:
+        for child in root.children:
+            if child.children:
+                assert not child.mutually_exclusive_children
+
+
+def test_generate_hierarchy_me_depth_filtering_middle_range():
+    # max_depth=3 creates: roots (0), depth 1 parents, depth 2 parents
+    # Only apply ME to depth 1
+    cfg = HierarchyConfig(
+        total_root_nodes=3,
+        branching_factor=2,
+        max_depth=3,
+        mutually_exclusive_portion=1.0,
+        mutually_exclusive_min_depth=1,
+        mutually_exclusive_max_depth=1,
+        seed=42,
+    )
+    result = generate_hierarchy(500, cfg)
+
+    # Roots should not have ME
+    for root in result.roots:
+        assert not root.mutually_exclusive_children
+
+    # Check depth 1 and depth 2 parents
+    depth_1_me_count = 0
+    depth_2_me_count = 0
+    for root in result.roots:
+        for child in root.children:
+            if child.children:  # depth 1 parent
+                if child.mutually_exclusive_children:
+                    depth_1_me_count += 1
+                for grandchild in child.children:
+                    if grandchild.children:  # depth 2 parent
+                        if grandchild.mutually_exclusive_children:
+                            depth_2_me_count += 1
+
+    # Depth 1 should have ME, depth 2 should not
+    assert depth_1_me_count > 0
+    assert depth_2_me_count == 0

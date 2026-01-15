@@ -937,8 +937,12 @@ class HierarchyConfig:
             - A tuple (min, max) for random branching in that range
 
         max_depth: Maximum depth of hierarchy trees. Depth 1 = parent with leaves.
-        mutually_exclusive_portion: Fraction of parent nodes whose children should
-            be mutually exclusive (0.0 to 1.0). Default 0.0.
+        mutually_exclusive_portion: Fraction of eligible parent nodes whose children
+            should be mutually exclusive (0.0 to 1.0). Default 0.0.
+        mutually_exclusive_min_depth: Minimum depth at which ME can be applied.
+            Depth 0 = root nodes. Default 0.
+        mutually_exclusive_max_depth: Maximum depth at which ME can be applied.
+            None means no upper limit. Default None.
         seed: Random seed for reproducibility.
     """
 
@@ -946,6 +950,8 @@ class HierarchyConfig:
     branching_factor: int | tuple[int, int] = 100
     max_depth: int = 2
     mutually_exclusive_portion: float = 0.0
+    mutually_exclusive_min_depth: int = 0
+    mutually_exclusive_max_depth: int | None = None
     seed: int | None = None
 
     def __post_init__(self) -> None:
@@ -963,6 +969,15 @@ class HierarchyConfig:
             raise ValueError("max_depth must be at least 1")
         if not 0.0 <= self.mutually_exclusive_portion <= 1.0:
             raise ValueError("mutually_exclusive_portion must be between 0.0 and 1.0")
+        if self.mutually_exclusive_min_depth < 0:
+            raise ValueError("mutually_exclusive_min_depth must be non-negative")
+        if (
+            self.mutually_exclusive_max_depth is not None
+            and self.mutually_exclusive_max_depth < self.mutually_exclusive_min_depth
+        ):
+            raise ValueError(
+                "mutually_exclusive_max_depth must be >= mutually_exclusive_min_depth"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize config to dictionary."""
@@ -976,6 +991,8 @@ class HierarchyConfig:
             "branching_factor": branching,
             "max_depth": self.max_depth,
             "mutually_exclusive_portion": self.mutually_exclusive_portion,
+            "mutually_exclusive_min_depth": self.mutually_exclusive_min_depth,
+            "mutually_exclusive_max_depth": self.mutually_exclusive_max_depth,
             "seed": self.seed,
         }
 
@@ -1086,7 +1103,8 @@ def generate_hierarchy(
 
     feature_idx = 0
     roots: list[HierarchyNode] = []
-    all_parents: list[HierarchyNode] = []  # Track all parent nodes for ME assignment
+    # Track all parent nodes with their depths for ME assignment
+    all_parents_with_depth: list[tuple[HierarchyNode, int]] = []
 
     def get_branching() -> int:
         if isinstance(config.branching_factor, int):
@@ -1113,7 +1131,7 @@ def generate_hierarchy(
             mutually_exclusive_children=False,
         )
         roots.append(node)
-        all_parents.append(node)
+        all_parents_with_depth.append((node, 0))
 
     # Process level by level (breadth-first), building complete trees
     # depth 0 = roots, we build children for depths 0 to max_depth-1
@@ -1145,7 +1163,7 @@ def generate_hierarchy(
                         mutually_exclusive_children=False,
                     )
                     next_level.append((child, depth + 1))
-                    all_parents.append(child)
+                    all_parents_with_depth.append((child, depth + 1))
                 else:
                     child = HierarchyNode(feature_index=feat_idx)
 
@@ -1155,14 +1173,24 @@ def generate_hierarchy(
 
         parents_at_current_level = next_level
 
-    # Assign ME flag to portion of parents
-    num_me_parents = int(len(all_parents) * config.mutually_exclusive_portion)
+    # Filter parents eligible for ME based on depth constraints
+    me_min_depth = config.mutually_exclusive_min_depth
+    me_max_depth = config.mutually_exclusive_max_depth
+    eligible_parents = [
+        (node, depth)
+        for node, depth in all_parents_with_depth
+        if depth >= me_min_depth
+        and (me_max_depth is None or depth <= me_max_depth)
+        and len(node.children) >= 2
+    ]
+
+    # Assign ME flag to portion of eligible parents
+    num_me_parents = int(len(eligible_parents) * config.mutually_exclusive_portion)
     if num_me_parents > 0:
-        me_indices = set(rng.sample(range(len(all_parents)), num_me_parents))
+        me_indices = set(rng.sample(range(len(eligible_parents)), num_me_parents))
         for i in me_indices:
-            parent = all_parents[i]
-            if len(parent.children) >= 2:
-                parent.mutually_exclusive_children = True
+            parent, _ = eligible_parents[i]
+            parent.mutually_exclusive_children = True
 
     modifier = hierarchy_modifier(roots) if roots else None
 

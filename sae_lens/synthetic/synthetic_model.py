@@ -144,13 +144,11 @@ class SyntheticModelConfig:
         default_factory=ZipfianFiringProbabilityConfig
     )
     hierarchy: HierarchyConfig | None = None
-    orthogonalization: OrthogonalizationConfig | None = field(
-        default_factory=OrthogonalizationConfig
-    )
+    orthogonalization: OrthogonalizationConfig | None = None
     correlation: LowRankCorrelationConfig | None = None
     std_firing_magnitudes: float | MagnitudeConfig = 0.0
     mean_firing_magnitudes: float | MagnitudeConfig = 1.0
-    bias: bool | float = False
+    bias: bool | float = 1.0
     dtype: str = "float32"
     seed: int | None = None
 
@@ -278,18 +276,15 @@ class SyntheticModel(nn.Module):
         """
         Create a SyntheticModel.
 
-        Typically, use `SyntheticModel.from_config(cfg)` to create a new model
-        from configuration, or `SyntheticModel.load(path)` to load a saved model.
-
-        Direct initialization is mainly for advanced use cases like loading
-        with custom components.
+        All components (feature_dict, activation_generator, hierarchy, correlation_matrix)
+        are automatically generated from the config if not explicitly provided.
 
         Args:
             cfg: Model configuration (defines the model structure)
             feature_dict: Optional pre-created feature dictionary
             activation_generator: Optional pre-created activation generator
-            hierarchy: Optional hierarchy structure
-            correlation_matrix: Optional correlation matrix
+            hierarchy: Optional hierarchy structure (generated from cfg.hierarchy if None)
+            correlation_matrix: Optional correlation matrix (generated from cfg.correlation if None)
             device: Device for tensors (runtime option, not saved)
             use_sparse_tensors: Whether to use sparse tensors (runtime option, not saved)
         """
@@ -297,11 +292,19 @@ class SyntheticModel(nn.Module):
         self.cfg = cfg
         self.device = device
 
-        # Store correlation matrix (may be None)
-        self.correlation_matrix = correlation_matrix
+        # Set random seed if specified (for any operations that don't handle seeding internally)
+        if cfg.seed is not None:
+            torch.manual_seed(cfg.seed)
 
-        # Store hierarchy (may be None)
+        # Hierarchy - generate from config if not provided
+        if hierarchy is None:
+            hierarchy = self._create_hierarchy()
         self.hierarchy = hierarchy
+
+        # Correlation matrix - generate from config if not provided
+        if correlation_matrix is None:
+            correlation_matrix = self._create_correlation_matrix()
+        self.correlation_matrix = correlation_matrix
 
         # Feature dictionary
         if feature_dict is None:
@@ -335,12 +338,8 @@ class SyntheticModel(nn.Module):
         """
         Create a new SyntheticModel from configuration.
 
-        This is the recommended way to create a new model. It:
-
-        1. Generates hierarchy (if configured)
-        2. Generates correlation matrix (if configured)
-        3. Creates feature dictionary with orthogonalization
-        4. Creates activation generator with all modifiers
+        This is equivalent to calling `SyntheticModel(cfg, device=device, ...)`.
+        Kept for backwards compatibility.
 
         Args:
             cfg: Complete model configuration
@@ -350,42 +349,41 @@ class SyntheticModel(nn.Module):
         Returns:
             Fully initialized SyntheticModel
         """
-        # Set random seed if specified
-        if cfg.seed is not None:
-            torch.manual_seed(cfg.seed)
-
-        # Compute seed offsets for different generators to avoid coupling
-        base_seed = cfg.seed
-        hierarchy_seed = base_seed + 3 if base_seed is not None else None
-        correlation_seed = base_seed + 4 if base_seed is not None else None
-
-        # Generate hierarchy
-        hierarchy = None
-        if cfg.hierarchy is not None and cfg.hierarchy.total_root_nodes > 0:
-            hierarchy = generate_hierarchy(
-                cfg.num_features, cfg.hierarchy, seed=hierarchy_seed
-            )
-
-        # Generate correlation matrix
-        correlation_matrix = None
-        if cfg.correlation is not None:
-            correlation_matrix = generate_random_low_rank_correlation_matrix(
-                num_features=cfg.num_features,
-                rank=cfg.correlation.rank,
-                correlation_scale=cfg.correlation.correlation_scale,
-                seed=correlation_seed,
-                device=device,
-                dtype=str_to_dtype(cfg.dtype),
-            )
-
         return cls(
             cfg=cfg,
-            feature_dict=None,  # Will be created in __init__
-            activation_generator=None,  # Will be created in __init__
-            hierarchy=hierarchy,
-            correlation_matrix=correlation_matrix,
             device=device,
             use_sparse_tensors=use_sparse_tensors,
+        )
+
+    def _create_hierarchy(self) -> Hierarchy | None:
+        """Create hierarchy from config if configured."""
+        if self.cfg.hierarchy is None or self.cfg.hierarchy.total_root_nodes == 0:
+            return None
+
+        # Compute seed offset to avoid coupling with other random generators
+        base_seed = self.cfg.seed
+        hierarchy_seed = base_seed + 3 if base_seed is not None else None
+
+        return generate_hierarchy(
+            self.cfg.num_features, self.cfg.hierarchy, seed=hierarchy_seed
+        )
+
+    def _create_correlation_matrix(self) -> LowRankCorrelationMatrix | None:
+        """Create correlation matrix from config if configured."""
+        if self.cfg.correlation is None:
+            return None
+
+        # Compute seed offset to avoid coupling with other random generators
+        base_seed = self.cfg.seed
+        correlation_seed = base_seed + 4 if base_seed is not None else None
+
+        return generate_random_low_rank_correlation_matrix(
+            num_features=self.cfg.num_features,
+            rank=self.cfg.correlation.rank,
+            correlation_scale=self.cfg.correlation.correlation_scale,
+            seed=correlation_seed,
+            device=self.device,
+            dtype=str_to_dtype(self.cfg.dtype),
         )
 
     def _create_feature_dict(self) -> FeatureDictionary:

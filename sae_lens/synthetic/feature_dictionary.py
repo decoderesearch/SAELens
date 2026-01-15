@@ -46,14 +46,19 @@ def orthogonalize_embeddings(
 
     optimizer = torch.optim.Adam([embeddings], lr=lr)  # type: ignore[list-item]
 
+    num_chunks = (num_vectors + chunk_size - 1) // chunk_size
+    total_iterations = num_steps * num_chunks
+
     pbar = tqdm(
-        range(num_steps), desc="Orthogonalizing vectors", disable=not show_progress
+        total=total_iterations,
+        desc="Orthogonalizing vectors",
+        disable=not show_progress,
     )
-    for _ in pbar:
+    for step in range(num_steps):
         optimizer.zero_grad()
 
-        off_diag_loss = torch.tensor(0.0, device=embeddings.device)
-        diag_loss = torch.tensor(0.0, device=embeddings.device)
+        # Track total loss for display (detached, no gradient)
+        total_loss = 0.0
 
         for i in range(0, num_vectors, chunk_size):
             end_i = min(i + chunk_size, num_vectors)
@@ -70,16 +75,25 @@ def orthogonalize_embeddings(
             off_diag_mask = torch.ones_like(chunk_dots, dtype=torch.bool)
             off_diag_mask[row_indices, col_indices] = False
 
-            off_diag_loss = off_diag_loss + chunk_dots[off_diag_mask].pow(2).sum()
+            off_diag_loss = chunk_dots[off_diag_mask].pow(2).sum()
 
             # Diagonal loss: keep self-dot-products at 1
             diag_vals = chunk_dots[row_indices, col_indices]
-            diag_loss = diag_loss + (diag_vals - 1).pow(2).sum()
+            diag_loss = (diag_vals - 1).pow(2).sum()
 
-        loss = off_diag_loss + num_vectors * diag_loss
-        loss.backward()
+            # Compute chunk loss and backward immediately to free memory
+            chunk_loss = off_diag_loss + num_vectors * diag_loss
+            chunk_loss.backward()
+            total_loss += chunk_loss.item()
+
+            pbar.update(1)
+            pbar.set_description(
+                f"Orthogonalizing vectors: step {step + 1}/{num_steps}, loss {total_loss:.2e}"
+            )
+
         optimizer.step()
-        pbar.set_description(f"loss: {loss.item():.3f}")
+
+    pbar.close()
 
     with torch.no_grad():
         embeddings = embeddings / embeddings.norm(p=2, dim=1, keepdim=True).clamp(
