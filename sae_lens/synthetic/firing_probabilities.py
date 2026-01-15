@@ -53,12 +53,13 @@ class FiringProbabilityGenerator(ABC):
     """Base class for generating firing probabilities."""
 
     @abstractmethod
-    def generate(self, num_features: int) -> torch.Tensor:
+    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         """
         Generate firing probabilities.
 
         Args:
             num_features: Number of features to generate probabilities for
+            seed: Optional random seed for reproducibility (for stochastic generators)
 
         Returns:
             Tensor of shape (num_features,) with firing probabilities
@@ -230,7 +231,7 @@ class ZipfianFiringProbabilityGenerator(FiringProbabilityGenerator):
     def __init__(self, cfg: ZipfianFiringProbabilityConfig):
         self.cfg = cfg
 
-    def generate(self, num_features: int) -> torch.Tensor:
+    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         return zipfian_firing_probabilities(
             num_features,
             exponent=self.cfg.exponent,
@@ -261,7 +262,7 @@ class LinearFiringProbabilityGenerator(FiringProbabilityGenerator):
     def __init__(self, cfg: LinearFiringProbabilityConfig):
         self.cfg = cfg
 
-    def generate(self, num_features: int) -> torch.Tensor:
+    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         return linear_firing_probabilities(
             num_features,
             max_prob=self.cfg.max_prob,
@@ -279,7 +280,6 @@ class RandomFiringProbabilityConfig(FiringProbabilityConfig):
 
     max_prob: float = 0.5
     min_prob: float = 0.01
-    seed: int | None = None
 
     @classmethod
     def generator_name(cls) -> str:
@@ -292,12 +292,12 @@ class RandomFiringProbabilityGenerator(FiringProbabilityGenerator):
     def __init__(self, cfg: RandomFiringProbabilityConfig):
         self.cfg = cfg
 
-    def generate(self, num_features: int) -> torch.Tensor:
+    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         return random_firing_probabilities(
             num_features,
             max_prob=self.cfg.max_prob,
             min_prob=self.cfg.min_prob,
-            seed=self.cfg.seed,
+            seed=seed,
         )
 
 
@@ -322,7 +322,7 @@ class ConstantFiringProbabilityGenerator(FiringProbabilityGenerator):
     def __init__(self, cfg: ConstantFiringProbabilityConfig):
         self.cfg = cfg
 
-    def generate(self, num_features: int) -> torch.Tensor:
+    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         return torch.full((num_features,), self.cfg.probability, dtype=torch.float32)
 
 

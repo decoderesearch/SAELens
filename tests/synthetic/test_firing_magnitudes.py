@@ -152,17 +152,15 @@ class TestFoldedNormalMagnitudeConfig:
         assert cfg.std == 0.1
         assert cfg.min_value is None
         assert cfg.max_value is None
-        assert cfg.seed is None
 
     def test_config_custom_values(self):
         cfg = FoldedNormalMagnitudeConfig(
-            mean=1.0, std=0.5, min_value=0.1, max_value=2.0, seed=42
+            mean=1.0, std=0.5, min_value=0.1, max_value=2.0
         )
         assert cfg.mean == 1.0
         assert cfg.std == 0.5
         assert cfg.min_value == 0.1
         assert cfg.max_value == 2.0
-        assert cfg.seed == 42
 
     def test_config_requires_positive_std(self):
         with pytest.raises(ValueError, match="std must be positive"):
@@ -245,7 +243,7 @@ class TestFoldedNormalMagnitudeConfig:
 
     def test_config_to_dict_from_dict_roundtrip(self):
         original = FoldedNormalMagnitudeConfig(
-            mean=1.0, std=0.5, min_value=0.1, max_value=2.0, seed=123
+            mean=1.0, std=0.5, min_value=0.1, max_value=2.0
         )
         d = original.to_dict()
         restored = MagnitudeConfig.from_dict(d)
@@ -254,7 +252,6 @@ class TestFoldedNormalMagnitudeConfig:
         assert restored.std == original.std
         assert restored.min_value == original.min_value
         assert restored.max_value == original.max_value
-        assert restored.seed == original.seed
 
 
 class TestGenerateMagnitudes:

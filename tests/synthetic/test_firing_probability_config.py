@@ -55,9 +55,9 @@ def test_linear_generator_produces_correct_shape():
 
 
 def test_random_generator_produces_correct_range():
-    cfg = RandomFiringProbabilityConfig(max_prob=0.5, min_prob=0.1, seed=42)
+    cfg = RandomFiringProbabilityConfig(max_prob=0.5, min_prob=0.1)
     gen = RandomFiringProbabilityGenerator(cfg)
-    probs = gen.generate(1000)
+    probs = gen.generate(1000, seed=42)
     assert probs.shape == (1000,)
     assert probs.min() >= cfg.min_prob - 1e-6
     assert probs.max() <= cfg.max_prob + 1e-6

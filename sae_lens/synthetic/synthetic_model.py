@@ -354,10 +354,17 @@ class SyntheticModel(nn.Module):
         if cfg.seed is not None:
             torch.manual_seed(cfg.seed)
 
+        # Compute seed offsets for different generators to avoid coupling
+        base_seed = cfg.seed
+        hierarchy_seed = base_seed + 3 if base_seed is not None else None
+        correlation_seed = base_seed + 4 if base_seed is not None else None
+
         # Generate hierarchy
         hierarchy = None
         if cfg.hierarchy is not None and cfg.hierarchy.total_root_nodes > 0:
-            hierarchy = generate_hierarchy(cfg.num_features, cfg.hierarchy)
+            hierarchy = generate_hierarchy(
+                cfg.num_features, cfg.hierarchy, seed=hierarchy_seed
+            )
 
         # Generate correlation matrix
         correlation_matrix = None
@@ -366,7 +373,7 @@ class SyntheticModel(nn.Module):
                 num_features=cfg.num_features,
                 rank=cfg.correlation.rank,
                 correlation_scale=cfg.correlation.correlation_scale,
-                seed=cfg.correlation.seed,
+                seed=correlation_seed,
                 device=device,
                 dtype=str_to_dtype(cfg.dtype),
             )
@@ -404,19 +411,25 @@ class SyntheticModel(nn.Module):
         self, use_sparse_tensors: bool = False
     ) -> ActivationGenerator:
         """Create activation generator from config."""
+        # Compute seed offsets to avoid coupling between random generators
+        base_seed = self.cfg.seed
+        firing_prob_seed = base_seed
+        std_mag_seed = base_seed + 1 if base_seed is not None else None
+        mean_mag_seed = base_seed + 2 if base_seed is not None else None
+
         # Generate firing probabilities
         _, generator_class = get_firing_probability_class(
             self.cfg.firing_probability.generator_name()
         )
         generator = generator_class(self.cfg.firing_probability)  # type: ignore[call-arg]
-        firing_probs = generator.generate(self.cfg.num_features)
+        firing_probs = generator.generate(self.cfg.num_features, seed=firing_prob_seed)
 
         # Generate firing magnitudes
         std_magnitudes = generate_magnitudes(
-            self.cfg.num_features, self.cfg.std_firing_magnitudes
+            self.cfg.num_features, self.cfg.std_firing_magnitudes, seed=std_mag_seed
         )
         mean_magnitudes = generate_magnitudes(
-            self.cfg.num_features, self.cfg.mean_firing_magnitudes
+            self.cfg.num_features, self.cfg.mean_firing_magnitudes, seed=mean_mag_seed
         )
 
         # Get correlation matrix input

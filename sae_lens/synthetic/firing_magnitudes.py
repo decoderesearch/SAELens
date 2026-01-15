@@ -53,12 +53,13 @@ class MagnitudeGenerator(ABC):
     """Base class for generating magnitude values."""
 
     @abstractmethod
-    def generate(self, num_features: int) -> torch.Tensor:
+    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         """
         Generate magnitude values.
 
         Args:
             num_features: Number of features to generate magnitudes for
+            seed: Optional random seed for reproducibility (for stochastic generators)
 
         Returns:
             Tensor of shape (num_features,) with magnitude values
@@ -100,6 +101,7 @@ def get_magnitude_class(
 def generate_magnitudes(
     num_features: int,
     config: float | MagnitudeConfig,
+    seed: int | None = None,
 ) -> torch.Tensor:
     """
     Generate per-feature magnitude values.
@@ -107,6 +109,7 @@ def generate_magnitudes(
     Args:
         num_features: Number of features
         config: Either a float (constant for all features) or MagnitudeConfig
+        seed: Optional random seed for reproducibility (for stochastic generators)
 
     Returns:
         Tensor of shape (num_features,) with magnitude values
@@ -116,7 +119,7 @@ def generate_magnitudes(
 
     _, generator_class = get_magnitude_class(config.generator_name())
     generator = generator_class(config)  # type: ignore[call-arg]
-    return generator.generate(num_features)
+    return generator.generate(num_features, seed=seed)
 
 
 # =============================================================================
@@ -145,7 +148,7 @@ class ConstantMagnitudeGenerator(MagnitudeGenerator):
     def __init__(self, cfg: ConstantMagnitudeConfig):
         self.cfg = cfg
 
-    def generate(self, num_features: int) -> torch.Tensor:
+    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         return torch.full((num_features,), self.cfg.value, dtype=torch.float32)
 
 
@@ -178,7 +181,7 @@ class LinearMagnitudeGenerator(MagnitudeGenerator):
     def __init__(self, cfg: LinearMagnitudeConfig):
         self.cfg = cfg
 
-    def generate(self, num_features: int) -> torch.Tensor:
+    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         if num_features == 1:
             return torch.tensor([self.cfg.start], dtype=torch.float32)
         return torch.linspace(self.cfg.start, self.cfg.end, num_features)
@@ -213,7 +216,7 @@ class ExponentialMagnitudeGenerator(MagnitudeGenerator):
     def __init__(self, cfg: ExponentialMagnitudeConfig):
         self.cfg = cfg
 
-    def generate(self, num_features: int) -> torch.Tensor:
+    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         if num_features == 1:
             return torch.tensor([self.cfg.start], dtype=torch.float32)
         t = torch.linspace(0, 1, num_features)
@@ -236,7 +239,6 @@ class FoldedNormalMagnitudeConfig(MagnitudeConfig):
     std: float = 0.1
     min_value: float | None = None
     max_value: float | None = None
-    seed: int | None = None
 
     def __post_init__(self) -> None:
         if self.std <= 0:
@@ -263,10 +265,10 @@ class FoldedNormalMagnitudeGenerator(MagnitudeGenerator):
     def __init__(self, cfg: FoldedNormalMagnitudeConfig):
         self.cfg = cfg
 
-    def generate(self, num_features: int) -> torch.Tensor:
+    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         generator = None
-        if self.cfg.seed is not None:
-            generator = torch.Generator().manual_seed(self.cfg.seed)
+        if seed is not None:
+            generator = torch.Generator().manual_seed(seed)
         samples = (
             self.cfg.mean
             + torch.randn(num_features, generator=generator) * self.cfg.std

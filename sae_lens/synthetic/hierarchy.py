@@ -1055,6 +1055,7 @@ class Hierarchy:
 def generate_hierarchy(
     num_features: int,
     config: HierarchyConfig,
+    seed: int | None = None,
 ) -> Hierarchy:
     """
     Generate a hierarchy forest based on config using breadth-first construction.
@@ -1068,6 +1069,7 @@ def generate_hierarchy(
     Args:
         num_features: Total number of features available
         config: Hierarchy configuration
+        seed: Optional seed override. If provided, takes precedence over config.seed.
 
     Returns:
         Hierarchy with roots and modifier function
@@ -1075,7 +1077,8 @@ def generate_hierarchy(
     if config.total_root_nodes == 0:
         return Hierarchy(roots=[], modifier=None)
 
-    rng = random.Random(config.seed)
+    effective_seed = seed if seed is not None else config.seed
+    rng = random.Random(effective_seed)
 
     # Shuffle feature indices for random assignment
     all_indices = list(range(num_features))

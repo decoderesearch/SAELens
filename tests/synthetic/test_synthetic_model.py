@@ -7,11 +7,13 @@ import torch
 
 from sae_lens.synthetic import (
     ExponentialMagnitudeConfig,
+    FoldedNormalMagnitudeConfig,
     HierarchyConfig,
     LinearMagnitudeConfig,
     LowRankCorrelationConfig,
     MagnitudeConfig,
     OrthogonalizationConfig,
+    RandomFiringProbabilityConfig,
     SyntheticModel,
     SyntheticModelConfig,
     ZipfianFiringProbabilityConfig,
@@ -496,3 +498,136 @@ def test_load_from_source_with_huggingface_subpath(
         # Load using HuggingFace format with colon for subpath
         loaded = SyntheticModel.load_from_source("username/repo:subfolder/model")
         assert loaded.cfg == cfg
+
+
+def test_synthetic_model_seed_produces_identical_models():
+    cfg = SyntheticModelConfig(
+        num_features=64,
+        hidden_dim=32,
+        firing_probability=RandomFiringProbabilityConfig(max_prob=0.5, min_prob=0.1),
+        std_firing_magnitudes=FoldedNormalMagnitudeConfig(mean=0.0, std=0.5),
+        mean_firing_magnitudes=FoldedNormalMagnitudeConfig(mean=1.0, std=0.3),
+        hierarchy=HierarchyConfig(
+            total_root_nodes=5,
+            branching_factor=3,
+            max_depth=2,
+            mutually_exclusive_portion=0.3,
+        ),
+        correlation=LowRankCorrelationConfig(rank=8, correlation_scale=0.1),
+        orthogonalization=None,
+        seed=42,
+    )
+
+    model1 = SyntheticModel.from_config(cfg)
+    model2 = SyntheticModel.from_config(cfg)
+
+    # Feature dictionary should be identical
+    assert torch.allclose(
+        model1.feature_dict.feature_vectors, model2.feature_dict.feature_vectors
+    )
+    assert torch.allclose(model1.feature_dict.bias, model2.feature_dict.bias)
+
+    # Firing probabilities should be identical
+    assert torch.allclose(
+        model1.activation_generator.firing_probabilities,
+        model2.activation_generator.firing_probabilities,
+    )
+
+    # Firing magnitudes should be identical
+    assert torch.allclose(
+        model1.activation_generator.std_firing_magnitudes,
+        model2.activation_generator.std_firing_magnitudes,
+    )
+    assert torch.allclose(
+        model1.activation_generator.mean_firing_magnitudes,
+        model2.activation_generator.mean_firing_magnitudes,
+    )
+
+    # Hierarchy should be identical
+    assert model1.hierarchy is not None
+    assert model2.hierarchy is not None
+    assert model1.hierarchy == model2.hierarchy
+
+    # Correlation matrix should be identical
+    assert model1.correlation_matrix is not None
+    assert model2.correlation_matrix is not None
+    assert torch.allclose(
+        model1.correlation_matrix.correlation_factor,
+        model2.correlation_matrix.correlation_factor,
+    )
+    assert torch.allclose(
+        model1.correlation_matrix.correlation_diag,
+        model2.correlation_matrix.correlation_diag,
+    )
+
+
+def test_synthetic_model_different_seeds_produce_different_models():
+    cfg1 = SyntheticModelConfig(
+        num_features=64,
+        hidden_dim=32,
+        firing_probability=RandomFiringProbabilityConfig(max_prob=0.5, min_prob=0.1),
+        std_firing_magnitudes=FoldedNormalMagnitudeConfig(mean=0.0, std=0.5),
+        mean_firing_magnitudes=FoldedNormalMagnitudeConfig(mean=1.0, std=0.3),
+        hierarchy=HierarchyConfig(
+            total_root_nodes=5,
+            branching_factor=3,
+            max_depth=2,
+            mutually_exclusive_portion=0.3,
+        ),
+        correlation=LowRankCorrelationConfig(rank=8, correlation_scale=0.1),
+        orthogonalization=None,
+        seed=42,
+    )
+    cfg2 = SyntheticModelConfig(
+        num_features=64,
+        hidden_dim=32,
+        firing_probability=RandomFiringProbabilityConfig(max_prob=0.5, min_prob=0.1),
+        std_firing_magnitudes=FoldedNormalMagnitudeConfig(mean=0.0, std=0.5),
+        mean_firing_magnitudes=FoldedNormalMagnitudeConfig(mean=1.0, std=0.3),
+        hierarchy=HierarchyConfig(
+            total_root_nodes=5,
+            branching_factor=3,
+            max_depth=2,
+            mutually_exclusive_portion=0.3,
+        ),
+        correlation=LowRankCorrelationConfig(rank=8, correlation_scale=0.1),
+        orthogonalization=None,
+        seed=123,
+    )
+
+    model1 = SyntheticModel.from_config(cfg1)
+    model2 = SyntheticModel.from_config(cfg2)
+
+    # Feature dictionary should be different
+    assert not torch.allclose(
+        model1.feature_dict.feature_vectors, model2.feature_dict.feature_vectors
+    )
+
+    # Firing probabilities should be different
+    assert not torch.allclose(
+        model1.activation_generator.firing_probabilities,
+        model2.activation_generator.firing_probabilities,
+    )
+
+    # Firing magnitudes should be different
+    assert not torch.allclose(
+        model1.activation_generator.std_firing_magnitudes,
+        model2.activation_generator.std_firing_magnitudes,
+    )
+    assert not torch.allclose(
+        model1.activation_generator.mean_firing_magnitudes,
+        model2.activation_generator.mean_firing_magnitudes,
+    )
+
+    # Hierarchy should be different (different feature assignments)
+    assert model1.hierarchy is not None
+    assert model2.hierarchy is not None
+    assert model1.hierarchy != model2.hierarchy
+
+    # Correlation matrix should be different
+    assert model1.correlation_matrix is not None
+    assert model2.correlation_matrix is not None
+    assert not torch.allclose(
+        model1.correlation_matrix.correlation_factor,
+        model2.correlation_matrix.correlation_factor,
+    )
