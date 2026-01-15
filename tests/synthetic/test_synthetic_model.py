@@ -101,6 +101,19 @@ def test_synthetic_model_sample_with_features_returns_both():
     assert feature_acts.shape == (100, 32)
 
 
+def test_synthetic_model_with_bias():
+    cfg = SyntheticModelConfig(
+        num_features=32,
+        hidden_dim=16,
+        bias=0.5,
+        orthogonalization=None,
+        seed=42,
+    )
+    model = SyntheticModel.from_config(cfg)
+    assert model.feature_dict.bias.norm().item() == pytest.approx(0.5, abs=1e-5)
+    assert model.feature_dict.bias.requires_grad
+
+
 def test_synthetic_model_with_hierarchy():
     cfg = SyntheticModelConfig(
         num_features=64,

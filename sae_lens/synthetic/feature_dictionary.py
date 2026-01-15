@@ -129,9 +129,10 @@ class FeatureDictionary(nn.Module):
         self,
         num_features: int,
         hidden_dim: int,
-        bias: bool = False,
+        bias: bool | float = False,
         initializer: FeatureDictionaryInitializer | None = orthogonal_initializer(),
         device: str | torch.device = "cpu",
+        seed: int | None = None,
     ):
         """
         Create a new FeatureDictionary.
@@ -139,25 +140,37 @@ class FeatureDictionary(nn.Module):
         Args:
             num_features: Number of features in the dictionary
             hidden_dim: Dimensionality of the hidden space
-            bias: Whether to include a bias term in the embedding
+            bias: If False, no bias. If True, bias with norm 1.0. If float, bias with that norm.
             initializer: Initializer function to use. If None, the embeddings are initialized to random unit vectors. By default will orthogonalize embeddings.
             device: Device to use for the feature dictionary.
+            seed: Random seed for reproducible initialization.
         """
         super().__init__()
         self.num_features = num_features
         self.hidden_dim = hidden_dim
 
         # Initialize feature vectors as unit vectors
-        embeddings = torch.randn(num_features, hidden_dim, device=device)
+        generator = None
+        if seed is not None:
+            generator = torch.Generator(device=device).manual_seed(seed)
+        embeddings = torch.randn(
+            num_features, hidden_dim, device=device, generator=generator
+        )
         embeddings = embeddings / embeddings.norm(p=2, dim=1, keepdim=True).clamp(
             min=1e-8
         )
         self.feature_vectors = nn.Parameter(embeddings)
 
-        # Initialize bias (zeros if not using bias, but still a parameter for consistent API)
-        self.bias = nn.Parameter(
-            torch.zeros(hidden_dim, device=device), requires_grad=bias
-        )
+        # Initialize bias
+        if bias:
+            bias_norm = 1.0 if bias is True else float(bias)
+            bias_vec = torch.randn(hidden_dim, device=device, generator=generator)
+            bias_vec = bias_vec / bias_vec.norm().clamp(min=1e-8) * bias_norm
+            self.bias = nn.Parameter(bias_vec)
+        else:
+            self.bias = nn.Parameter(
+                torch.zeros(hidden_dim, device=device), requires_grad=False
+            )
 
         if initializer is not None:
             initializer(self)

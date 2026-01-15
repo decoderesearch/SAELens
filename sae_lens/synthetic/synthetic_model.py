@@ -132,7 +132,8 @@ class SyntheticModelConfig:
             per-feature values.
         mean_firing_magnitudes: Mean firing magnitude when active. Can be a float
             for constant value, or MagnitudeConfig for per-feature values.
-        feature_dict_bias: Whether feature dictionary has a bias term.
+        bias: Feature dictionary bias. False for no bias, True for bias with
+            norm 1.0, or a float for bias with that norm.
         dtype: Data type for model tensors.
         seed: Global random seed for reproducibility.
     """
@@ -149,7 +150,7 @@ class SyntheticModelConfig:
     correlation: LowRankCorrelationConfig | None = None
     std_firing_magnitudes: float | MagnitudeConfig = 0.0
     mean_firing_magnitudes: float | MagnitudeConfig = 1.0
-    feature_dict_bias: bool = False
+    bias: bool | float = False
     dtype: str = "float32"
     seed: int | None = None
 
@@ -186,7 +187,7 @@ class SyntheticModelConfig:
                 if isinstance(self.mean_firing_magnitudes, MagnitudeConfig)
                 else self.mean_firing_magnitudes
             ),
-            "feature_dict_bias": self.feature_dict_bias,
+            "bias": self.bias,
             "dtype": self.dtype,
             "seed": self.seed,
         }
@@ -227,7 +228,7 @@ class SyntheticModelConfig:
             mean_firing_magnitudes=_deserialize_magnitude(
                 d.get("mean_firing_magnitudes", 1.0)
             ),
-            feature_dict_bias=d.get("feature_dict_bias", False),
+            bias=d.get("bias", False),
             dtype=d.get("dtype", "float32"),
             seed=d.get("seed"),
         )
@@ -263,7 +264,6 @@ class SyntheticModel(nn.Module):
     hierarchy: Hierarchy | None
     correlation_matrix: LowRankCorrelationMatrix | None
     device: str
-    use_sparse_tensors: bool
 
     def __init__(
         self,
@@ -296,7 +296,6 @@ class SyntheticModel(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.device = device
-        self.use_sparse_tensors = use_sparse_tensors
 
         # Store correlation matrix (may be None)
         self.correlation_matrix = correlation_matrix
@@ -311,8 +310,20 @@ class SyntheticModel(nn.Module):
 
         # Activation generator
         if activation_generator is None:
-            activation_generator = self._create_activation_generator()
+            activation_generator = self._create_activation_generator(use_sparse_tensors)
+        else:
+            activation_generator.use_sparse_tensors = use_sparse_tensors
         self.activation_generator = activation_generator
+
+    @property
+    def use_sparse_tensors(self) -> bool:
+        """Whether to use sparse tensors for activations."""
+        return self.activation_generator.use_sparse_tensors
+
+    @use_sparse_tensors.setter
+    def use_sparse_tensors(self, value: bool) -> None:
+        """Set whether to use sparse tensors for activations."""
+        self.activation_generator.use_sparse_tensors = value
 
     @classmethod
     def from_config(
@@ -383,12 +394,15 @@ class SyntheticModel(nn.Module):
         return FeatureDictionary(
             num_features=self.cfg.num_features,
             hidden_dim=self.cfg.hidden_dim,
-            bias=self.cfg.feature_dict_bias,
+            bias=self.cfg.bias,
             initializer=initializer,
             device=self.device,
+            seed=self.cfg.seed,
         )
 
-    def _create_activation_generator(self) -> ActivationGenerator:
+    def _create_activation_generator(
+        self, use_sparse_tensors: bool = False
+    ) -> ActivationGenerator:
         """Create activation generator from config."""
         # Generate firing probabilities
         _, generator_class = get_firing_probability_class(
@@ -424,7 +438,7 @@ class SyntheticModel(nn.Module):
             correlation_matrix=correlation_input,
             device=self.device,
             dtype=self.cfg.dtype,
-            use_sparse_tensors=self.use_sparse_tensors,
+            use_sparse_tensors=use_sparse_tensors,
         )
 
     @torch.no_grad()
@@ -569,7 +583,7 @@ class SyntheticModel(nn.Module):
         feature_dict = FeatureDictionary(
             num_features=cfg.num_features,
             hidden_dim=cfg.hidden_dim,
-            bias=cfg.feature_dict_bias,
+            bias=cfg.bias,
             initializer=None,  # Don't re-orthogonalize
             device=device,
         )

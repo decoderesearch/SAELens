@@ -176,3 +176,56 @@ def test_FeatureDictionary_sparse_with_bias():
     zero_activation = torch.zeros(1, 5)
     output_with_zero = feature_dict(to_sparse(zero_activation))
     assert torch.allclose(output_with_zero, feature_dict.bias.unsqueeze(0), atol=1e-6)
+
+
+def test_FeatureDictionary_seed_produces_reproducible_results():
+    fd1 = FeatureDictionary(num_features=10, hidden_dim=8, initializer=None, seed=42)
+    fd2 = FeatureDictionary(num_features=10, hidden_dim=8, initializer=None, seed=42)
+    assert torch.allclose(fd1.feature_vectors, fd2.feature_vectors)
+
+
+def test_FeatureDictionary_different_seeds_produce_different_results():
+    fd1 = FeatureDictionary(num_features=10, hidden_dim=8, initializer=None, seed=42)
+    fd2 = FeatureDictionary(num_features=10, hidden_dim=8, initializer=None, seed=43)
+    assert not torch.allclose(fd1.feature_vectors, fd2.feature_vectors)
+
+
+def test_FeatureDictionary_bias_false_is_zero_and_frozen():
+    fd = FeatureDictionary(num_features=10, hidden_dim=8, bias=False)
+    assert torch.allclose(fd.bias, torch.zeros(8))
+    assert not fd.bias.requires_grad
+
+
+def test_FeatureDictionary_bias_true_has_unit_norm_and_trainable():
+    fd = FeatureDictionary(num_features=10, hidden_dim=8, bias=True, initializer=None)
+    assert fd.bias.norm().item() == pytest.approx(1.0, abs=1e-5)
+    assert fd.bias.requires_grad
+
+
+def test_FeatureDictionary_bias_float_has_specified_norm():
+    fd = FeatureDictionary(num_features=10, hidden_dim=8, bias=0.5, initializer=None)
+    assert fd.bias.norm().item() == pytest.approx(0.5, abs=1e-5)
+    assert fd.bias.requires_grad
+
+    fd2 = FeatureDictionary(num_features=10, hidden_dim=8, bias=2.0, initializer=None)
+    assert fd2.bias.norm().item() == pytest.approx(2.0, abs=1e-5)
+
+
+def test_FeatureDictionary_bias_is_reproducible_with_seed():
+    fd1 = FeatureDictionary(
+        num_features=10, hidden_dim=8, bias=True, initializer=None, seed=42
+    )
+    fd2 = FeatureDictionary(
+        num_features=10, hidden_dim=8, bias=True, initializer=None, seed=42
+    )
+    assert torch.allclose(fd1.bias, fd2.bias)
+
+
+def test_FeatureDictionary_bias_different_seeds_produce_different_bias():
+    fd1 = FeatureDictionary(
+        num_features=10, hidden_dim=8, bias=True, initializer=None, seed=42
+    )
+    fd2 = FeatureDictionary(
+        num_features=10, hidden_dim=8, bias=True, initializer=None, seed=43
+    )
+    assert not torch.allclose(fd1.bias, fd2.bias)
