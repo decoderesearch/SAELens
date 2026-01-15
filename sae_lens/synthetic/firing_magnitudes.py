@@ -220,6 +220,67 @@ class ExponentialMagnitudeGenerator(MagnitudeGenerator):
         return self.cfg.start * (self.cfg.end / self.cfg.start) ** t
 
 
+@dataclass
+class FoldedNormalMagnitudeConfig(MagnitudeConfig):
+    """
+    Config for folded normal distributed magnitude values.
+
+    Each feature gets a magnitude sampled from |N(mean, std^2)|.
+    The folded normal distribution is the absolute value of a normal distribution,
+    producing only positive values.
+
+    Optionally clamp values to [min_value, max_value].
+    """
+
+    mean: float = 0.0
+    std: float = 0.1
+    min_value: float | None = None
+    max_value: float | None = None
+    seed: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.std <= 0:
+            raise ValueError("std must be positive")
+        if self.min_value is not None and self.min_value < 0:
+            raise ValueError("min_value must be non-negative")
+        if self.max_value is not None and self.max_value <= 0:
+            raise ValueError("max_value must be positive")
+        if (
+            self.min_value is not None
+            and self.max_value is not None
+            and self.min_value > self.max_value
+        ):
+            raise ValueError("min_value must be <= max_value")
+
+    @classmethod
+    def generator_name(cls) -> str:
+        return "folded_normal"
+
+
+class FoldedNormalMagnitudeGenerator(MagnitudeGenerator):
+    """Generator for folded normal distributed magnitude values."""
+
+    def __init__(self, cfg: FoldedNormalMagnitudeConfig):
+        self.cfg = cfg
+
+    def generate(self, num_features: int) -> torch.Tensor:
+        generator = None
+        if self.cfg.seed is not None:
+            generator = torch.Generator().manual_seed(self.cfg.seed)
+        samples = (
+            self.cfg.mean
+            + torch.randn(num_features, generator=generator) * self.cfg.std
+        )
+        samples = torch.abs(samples)
+        if self.cfg.min_value is not None or self.cfg.max_value is not None:
+            samples = torch.clamp(
+                samples,
+                min=self.cfg.min_value,
+                max=self.cfg.max_value,
+            )
+        return samples
+
+
 # =============================================================================
 # Register built-in generators
 # =============================================================================
@@ -228,4 +289,7 @@ register_magnitude("constant", ConstantMagnitudeConfig, ConstantMagnitudeGenerat
 register_magnitude("linear", LinearMagnitudeConfig, LinearMagnitudeGenerator)
 register_magnitude(
     "exponential", ExponentialMagnitudeConfig, ExponentialMagnitudeGenerator
+)
+register_magnitude(
+    "folded_normal", FoldedNormalMagnitudeConfig, FoldedNormalMagnitudeGenerator
 )

@@ -27,3 +27,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - NEVER place imports inside of functions. ALWAYS import at the top of the file.
 - Use parentheses for tensor shapes in docs and messages, e.g. (batch_size, num_features)
 - Keep code simple and readable. Avoid over-engineered or complex code.
+- Always add tests for new features.

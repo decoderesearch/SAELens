@@ -1,3 +1,5 @@
+import math
+
 import pytest
 import torch
 
@@ -6,6 +8,8 @@ from sae_lens.synthetic import (
     ConstantMagnitudeGenerator,
     ExponentialMagnitudeConfig,
     ExponentialMagnitudeGenerator,
+    FoldedNormalMagnitudeConfig,
+    FoldedNormalMagnitudeGenerator,
     LinearMagnitudeConfig,
     LinearMagnitudeGenerator,
     MagnitudeConfig,
@@ -141,6 +145,118 @@ class TestExponentialMagnitudeConfig:
         assert restored.end == original.end
 
 
+class TestFoldedNormalMagnitudeConfig:
+    def test_config_creates_with_defaults(self):
+        cfg = FoldedNormalMagnitudeConfig()
+        assert cfg.mean == 0.0
+        assert cfg.std == 0.1
+        assert cfg.min_value is None
+        assert cfg.max_value is None
+        assert cfg.seed is None
+
+    def test_config_custom_values(self):
+        cfg = FoldedNormalMagnitudeConfig(
+            mean=1.0, std=0.5, min_value=0.1, max_value=2.0, seed=42
+        )
+        assert cfg.mean == 1.0
+        assert cfg.std == 0.5
+        assert cfg.min_value == 0.1
+        assert cfg.max_value == 2.0
+        assert cfg.seed == 42
+
+    def test_config_requires_positive_std(self):
+        with pytest.raises(ValueError, match="std must be positive"):
+            FoldedNormalMagnitudeConfig(std=0.0)
+        with pytest.raises(ValueError, match="std must be positive"):
+            FoldedNormalMagnitudeConfig(std=-1.0)
+
+    def test_config_requires_non_negative_min_value(self):
+        with pytest.raises(ValueError, match="min_value must be non-negative"):
+            FoldedNormalMagnitudeConfig(std=1.0, min_value=-0.1)
+
+    def test_config_requires_positive_max_value(self):
+        with pytest.raises(ValueError, match="max_value must be positive"):
+            FoldedNormalMagnitudeConfig(std=1.0, max_value=0.0)
+        with pytest.raises(ValueError, match="max_value must be positive"):
+            FoldedNormalMagnitudeConfig(std=1.0, max_value=-1.0)
+
+    def test_config_requires_min_less_than_max(self):
+        with pytest.raises(ValueError, match="min_value must be <= max_value"):
+            FoldedNormalMagnitudeConfig(std=1.0, min_value=2.0, max_value=1.0)
+
+    def test_generator_produces_all_non_negative_values(self):
+        cfg = FoldedNormalMagnitudeConfig(std=1.0)
+        gen = FoldedNormalMagnitudeGenerator(cfg)
+        result = gen.generate(100_000)
+        assert result.shape == (100_000,)
+        assert torch.all(result >= 0)
+
+    def test_generator_produces_all_non_negative_values_with_negative_mean(self):
+        cfg = FoldedNormalMagnitudeConfig(mean=-2.0, std=1.0)
+        gen = FoldedNormalMagnitudeGenerator(cfg)
+        result = gen.generate(100_000)
+        assert torch.all(result >= 0)
+
+    def test_generator_with_zero_mean_produces_half_normal_mean(self):
+        std = 2.0
+        cfg = FoldedNormalMagnitudeConfig(mean=0.0, std=std)
+        gen = FoldedNormalMagnitudeGenerator(cfg)
+        result = gen.generate(500_000)
+        expected_mean = std * math.sqrt(2 / math.pi)
+        actual_mean = result.mean().item()
+        assert actual_mean == pytest.approx(expected_mean, rel=0.01)
+
+    def test_generator_with_zero_mean_produces_half_normal_std(self):
+        std = 2.0
+        cfg = FoldedNormalMagnitudeConfig(mean=0.0, std=std)
+        gen = FoldedNormalMagnitudeGenerator(cfg)
+        result = gen.generate(500_000)
+        expected_std = std * math.sqrt(1 - 2 / math.pi)
+        actual_std = result.std().item()
+        assert actual_std == pytest.approx(expected_std, rel=0.01)
+
+    def test_generator_with_large_positive_mean_approaches_normal(self):
+        mean = 10.0
+        std = 1.0
+        cfg = FoldedNormalMagnitudeConfig(mean=mean, std=std)
+        gen = FoldedNormalMagnitudeGenerator(cfg)
+        result = gen.generate(500_000)
+        assert result.mean().item() == pytest.approx(mean, rel=0.01)
+        assert result.std().item() == pytest.approx(std, rel=0.01)
+
+    def test_generator_clamps_to_max_value(self):
+        cfg = FoldedNormalMagnitudeConfig(std=1.0, max_value=0.5)
+        gen = FoldedNormalMagnitudeGenerator(cfg)
+        result = gen.generate(100_000)
+        assert torch.all(result <= 0.5)
+
+    def test_generator_clamps_to_min_value(self):
+        cfg = FoldedNormalMagnitudeConfig(std=1.0, min_value=0.5)
+        gen = FoldedNormalMagnitudeGenerator(cfg)
+        result = gen.generate(100_000)
+        assert torch.all(result >= 0.5)
+
+    def test_generator_clamps_to_both_min_and_max(self):
+        cfg = FoldedNormalMagnitudeConfig(std=1.0, min_value=0.2, max_value=0.8)
+        gen = FoldedNormalMagnitudeGenerator(cfg)
+        result = gen.generate(100_000)
+        assert torch.all(result >= 0.2)
+        assert torch.all(result <= 0.8)
+
+    def test_config_to_dict_from_dict_roundtrip(self):
+        original = FoldedNormalMagnitudeConfig(
+            mean=1.0, std=0.5, min_value=0.1, max_value=2.0, seed=123
+        )
+        d = original.to_dict()
+        restored = MagnitudeConfig.from_dict(d)
+        assert isinstance(restored, FoldedNormalMagnitudeConfig)
+        assert restored.mean == original.mean
+        assert restored.std == original.std
+        assert restored.min_value == original.min_value
+        assert restored.max_value == original.max_value
+        assert restored.seed == original.seed
+
+
 class TestGenerateMagnitudes:
     def test_constant_float_returns_uniform_tensor(self):
         result = generate_magnitudes(100, 2.5)
@@ -172,6 +288,12 @@ class TestGenerateMagnitudes:
         assert result[0] == pytest.approx(10.0)
         assert result[-1] == pytest.approx(0.1)
 
+    def test_with_folded_normal_config(self):
+        cfg = FoldedNormalMagnitudeConfig(std=1.0)
+        result = generate_magnitudes(10_000, cfg)
+        assert result.shape == (10_000,)
+        assert torch.all(result >= 0)
+
     def test_returns_float32_tensor(self):
         result = generate_magnitudes(10, 1.0)
         assert result.dtype == torch.float32
@@ -186,6 +308,7 @@ class TestMagnitudeRegistry:
         assert get_magnitude_class("constant")[0] == ConstantMagnitudeConfig
         assert get_magnitude_class("linear")[0] == LinearMagnitudeConfig
         assert get_magnitude_class("exponential")[0] == ExponentialMagnitudeConfig
+        assert get_magnitude_class("folded_normal")[0] == FoldedNormalMagnitudeConfig
 
     def test_get_magnitude_class_raises_for_unknown(self):
         with pytest.raises(ValueError, match="Unknown name"):
