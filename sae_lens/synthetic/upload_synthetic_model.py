@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from textwrap import dedent
 
 from huggingface_hub import HfApi, create_repo, get_hf_file_metadata, hf_hub_url
 from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError
@@ -122,30 +121,28 @@ def _create_default_readme(
 
     model_info = "\n".join(model_info_lines)
 
-    readme = dedent(
-        f"""
-        ---
-        library_name: saelens
-        ---
+    # Note: We don't use dedent with f-strings here because interpolated
+    # multi-line variables (model_info) break dedent's common prefix detection.
+    return f"""\
+---
+library_name: saelens
+---
 
-        # Synthetic Model for SAE Training
+# Synthetic Model for SAE Training
 
-        This repository contains a SyntheticModel for use with SAELens.
+This repository contains a SyntheticModel for use with SAELens.
 
-        ## Model Info
+## Model Info
 
-        {model_info}
+{model_info}
 
-        ## Usage
+## Usage
 
-        ```python
-        from sae_lens.synthetic import SyntheticModel
+```python
+from sae_lens.synthetic import SyntheticModel
 
-        {load_code}
-        ```
-        """
-    )
-    return readme.strip()
+{load_code}
+```"""
 
 
 def _get_hierarchy_max_depth(hierarchy: Hierarchy) -> int:

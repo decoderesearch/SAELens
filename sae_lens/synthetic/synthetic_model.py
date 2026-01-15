@@ -394,6 +394,7 @@ class SyntheticModel(nn.Module):
                 num_steps=self.cfg.orthogonalization.num_steps,
                 lr=self.cfg.orthogonalization.lr,
                 chunk_size=self.cfg.orthogonalization.chunk_size,
+                show_progress=True,
             )
 
         return FeatureDictionary(

@@ -36,6 +36,32 @@ def test_create_default_readme_basic() -> None:
     assert "model_path" not in readme
 
 
+def test_create_default_readme_has_valid_yaml_frontmatter() -> None:
+    cfg = SyntheticModelConfig(
+        num_features=1000,
+        hidden_dim=256,
+        orthogonalization=None,
+    )
+    model = SyntheticModel.from_config(cfg)
+
+    readme = _create_default_readme("user/repo", None, model)
+
+    # Check YAML frontmatter is properly formatted (no extra indentation)
+    lines = readme.split("\n")
+    assert lines[0] == "---", f"First line should be '---', got: {repr(lines[0])}"
+    assert (
+        lines[1] == "library_name: saelens"
+    ), f"Second line should be 'library_name: saelens', got: {repr(lines[1])}"
+    assert lines[2] == "---", f"Third line should be '---', got: {repr(lines[2])}"
+
+    # No line should have leading whitespace (dedent should have worked)
+    for i, line in enumerate(lines):
+        if line:  # skip empty lines
+            assert not line.startswith(
+                " "
+            ), f"Line {i} has leading whitespace: {repr(line)}"
+
+
 def test_create_default_readme_with_hf_path() -> None:
     cfg = SyntheticModelConfig(
         num_features=500,

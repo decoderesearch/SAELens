@@ -54,6 +54,7 @@ def orthogonalize_embeddings(
         desc="Orthogonalizing vectors",
         disable=not show_progress,
     )
+    step_loss: float | None = None
     for step in range(num_steps):
         optimizer.zero_grad()
 
@@ -87,11 +88,13 @@ def orthogonalize_embeddings(
             total_loss += chunk_loss.item()
 
             pbar.update(1)
-            pbar.set_description(
-                f"Orthogonalizing vectors: step {step + 1}/{num_steps}, loss {total_loss:.2e}"
-            )
+            desc = f"Orthogonalizing vectors: step {step + 1}/{num_steps}"
+            if step_loss is not None:
+                desc += f", loss {step_loss:.2e}"
+            pbar.set_description(desc)
 
         optimizer.step()
+        step_loss = total_loss
 
     pbar.close()
 
