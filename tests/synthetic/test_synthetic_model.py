@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 import torch
@@ -150,8 +151,7 @@ def test_synthetic_model_save_load_roundtrip():
 
         # Load and compare
         loaded = SyntheticModel.load(save_path)
-        assert loaded.cfg.num_features == cfg.num_features
-        assert loaded.cfg.hidden_dim == cfg.hidden_dim
+        assert loaded.cfg == cfg
 
         # Feature vectors should be identical
         assert torch.allclose(
@@ -164,7 +164,7 @@ def test_synthetic_model_save_load_with_hierarchy():
         num_features=64,
         hidden_dim=32,
         hierarchy=HierarchyConfig(
-            total_parent_nodes=3, branching_factor=2, max_depth=2, seed=42
+            total_parent_nodes=3, branching_factor=(2, 4), max_depth=2, seed=42
         ),
         orthogonalization=None,
     )
@@ -178,19 +178,17 @@ def test_synthetic_model_save_load_with_hierarchy():
         assert (save_path / "hierarchy.json").exists()
 
         loaded = SyntheticModel.load(save_path)
+        assert loaded.cfg == cfg
         assert loaded.hierarchy is not None
         assert model.hierarchy is not None
-        assert (
-            loaded.hierarchy.feature_indices_used
-            == model.hierarchy.feature_indices_used
-        )
+        assert loaded.hierarchy == model.hierarchy
 
 
 def test_synthetic_model_save_load_with_correlation():
     cfg = SyntheticModelConfig(
         num_features=32,
         hidden_dim=16,
-        correlation=LowRankCorrelationConfig(rank=8, seed=42),
+        correlation=LowRankCorrelationConfig(rank=8),
         orthogonalization=None,
     )
     model = SyntheticModel.from_config(cfg)
@@ -200,11 +198,16 @@ def test_synthetic_model_save_load_with_correlation():
         model.save(save_path)
 
         loaded = SyntheticModel.load(save_path)
+        assert loaded.cfg == cfg
         assert loaded.correlation_matrix is not None
         assert model.correlation_matrix is not None
         assert torch.allclose(
             loaded.correlation_matrix.correlation_factor,
             model.correlation_matrix.correlation_factor,
+        )
+        assert torch.allclose(
+            loaded.correlation_matrix.correlation_diag,
+            model.correlation_matrix.correlation_diag,
         )
 
 
@@ -273,3 +276,212 @@ def test_synthetic_model_with_magnitude_configs_generates_samples():
     model = SyntheticModel.from_config(cfg)
     samples = model.sample(100)
     assert samples.shape == (100, 16)
+
+
+def test_synthetic_model_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
+    from huggingface_hub.utils import EntryNotFoundError
+
+    import sae_lens.synthetic.synthetic_model as synthetic_model_module
+
+    cfg = SyntheticModelConfig(
+        num_features=32,
+        hidden_dim=16,
+        orthogonalization=None,
+    )
+    model = SyntheticModel.from_config(cfg)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_path = Path(tmpdir) / "test_model"
+        model.save(save_path)
+
+        # Mock hf_hub_download to return local files (raise error if file doesn't exist)
+        def mock_download(
+            repo_id: str | None = None,  # noqa: ARG001
+            filename: str | None = None,
+            **_kwargs: Any,
+        ) -> str:
+            assert filename is not None
+            local_filename = filename.split("/")[-1]
+            local_path = save_path / local_filename
+            if not local_path.exists():
+                raise EntryNotFoundError(f"File not found: {filename}")
+            return str(local_path)
+
+        monkeypatch.setattr(synthetic_model_module, "hf_hub_download", mock_download)
+
+        loaded = SyntheticModel.from_pretrained("test/repo")
+        assert loaded.cfg == cfg
+        assert torch.allclose(
+            loaded.feature_dict.feature_vectors, model.feature_dict.feature_vectors
+        )
+
+
+def test_synthetic_model_from_pretrained_with_model_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from huggingface_hub.utils import EntryNotFoundError
+
+    import sae_lens.synthetic.synthetic_model as synthetic_model_module
+
+    cfg = SyntheticModelConfig(
+        num_features=32,
+        hidden_dim=16,
+        hierarchy=HierarchyConfig(
+            total_parent_nodes=2, branching_factor=2, max_depth=1, seed=42
+        ),
+        orthogonalization=None,
+    )
+    model = SyntheticModel.from_config(cfg)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_path = Path(tmpdir) / "test_model"
+        model.save(save_path)
+
+        # Mock hf_hub_download to return local files (raise error if file doesn't exist)
+        def mock_download(
+            repo_id: str | None = None,  # noqa: ARG001
+            filename: str | None = None,
+            **_kwargs: Any,
+        ) -> str:
+            assert filename is not None
+            local_filename = filename.split("/")[-1]
+            local_path = save_path / local_filename
+            if not local_path.exists():
+                raise EntryNotFoundError(f"File not found: {filename}")
+            return str(local_path)
+
+        monkeypatch.setattr(synthetic_model_module, "hf_hub_download", mock_download)
+
+        loaded = SyntheticModel.from_pretrained("test/repo", model_path="my_model")
+        assert loaded.cfg == cfg
+        assert loaded.hierarchy is not None
+        assert loaded.hierarchy == model.hierarchy
+
+
+def test_load_from_source_with_config() -> None:
+    cfg = SyntheticModelConfig(
+        num_features=32,
+        hidden_dim=16,
+        orthogonalization=None,
+    )
+    model = SyntheticModel.load_from_source(cfg)
+    assert model.cfg == cfg
+    assert model.feature_dict.feature_vectors.shape == (32, 16)
+
+
+def test_load_from_source_with_local_path() -> None:
+    cfg = SyntheticModelConfig(
+        num_features=32,
+        hidden_dim=16,
+        orthogonalization=None,
+    )
+    model = SyntheticModel.from_config(cfg)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_path = Path(tmpdir) / "test_model"
+        model.save(save_path)
+
+        # Load using load_from_source with local path
+        loaded = SyntheticModel.load_from_source(str(save_path))
+        assert loaded.cfg == cfg
+        assert torch.allclose(
+            loaded.feature_dict.feature_vectors, model.feature_dict.feature_vectors
+        )
+
+
+def test_load_from_source_with_relative_path() -> None:
+    cfg = SyntheticModelConfig(
+        num_features=32,
+        hidden_dim=16,
+        orthogonalization=None,
+    )
+    model = SyntheticModel.from_config(cfg)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_path = Path(tmpdir) / "test_model"
+        model.save(save_path)
+
+        # Test that paths starting with "./" are treated as local
+        # We can't easily test this without mocking, but we can test the detection
+        from sae_lens.synthetic.synthetic_model import _is_local_path
+
+        assert _is_local_path("./some/path")
+        assert _is_local_path("/absolute/path")
+        assert _is_local_path("~/home/path")
+        assert _is_local_path("../relative/path")
+        assert _is_local_path("C:\\windows\\path")
+        # These should be detected as HuggingFace
+        assert not _is_local_path("username/repo")
+        assert not _is_local_path("org/model-name")
+
+
+def test_load_from_source_with_huggingface(monkeypatch: pytest.MonkeyPatch) -> None:
+    from huggingface_hub.utils import EntryNotFoundError
+
+    import sae_lens.synthetic.synthetic_model as synthetic_model_module
+
+    cfg = SyntheticModelConfig(
+        num_features=32,
+        hidden_dim=16,
+        orthogonalization=None,
+    )
+    model = SyntheticModel.from_config(cfg)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_path = Path(tmpdir) / "test_model"
+        model.save(save_path)
+
+        def mock_download(
+            repo_id: str | None = None,  # noqa: ARG001
+            filename: str | None = None,
+            **_kwargs: Any,
+        ) -> str:
+            assert filename is not None
+            local_filename = filename.split("/")[-1]
+            local_path = save_path / local_filename
+            if not local_path.exists():
+                raise EntryNotFoundError(f"File not found: {filename}")
+            return str(local_path)
+
+        monkeypatch.setattr(synthetic_model_module, "hf_hub_download", mock_download)
+
+        # Load using HuggingFace format (no colon = repo root)
+        loaded = SyntheticModel.load_from_source("username/repo")
+        assert loaded.cfg == cfg
+
+
+def test_load_from_source_with_huggingface_subpath(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from huggingface_hub.utils import EntryNotFoundError
+
+    import sae_lens.synthetic.synthetic_model as synthetic_model_module
+
+    cfg = SyntheticModelConfig(
+        num_features=32,
+        hidden_dim=16,
+        orthogonalization=None,
+    )
+    model = SyntheticModel.from_config(cfg)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_path = Path(tmpdir) / "test_model"
+        model.save(save_path)
+
+        def mock_download(
+            repo_id: str | None = None,  # noqa: ARG001
+            filename: str | None = None,
+            **_kwargs: Any,
+        ) -> str:
+            assert filename is not None
+            local_filename = filename.split("/")[-1]
+            local_path = save_path / local_filename
+            if not local_path.exists():
+                raise EntryNotFoundError(f"File not found: {filename}")
+            return str(local_path)
+
+        monkeypatch.setattr(synthetic_model_module, "hf_hub_download", mock_download)
+
+        # Load using HuggingFace format with colon for subpath
+        loaded = SyntheticModel.load_from_source("username/repo:subfolder/model")
+        assert loaded.cfg == cfg

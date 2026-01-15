@@ -107,6 +107,9 @@ from sae_lens.synthetic.training import (
     SyntheticActivationIterator,
     train_toy_sae,
 )
+from sae_lens.synthetic.upload_synthetic_model import (
+    upload_synthetic_model_to_huggingface,
+)
 from sae_lens.util import cosine_similarities
 
 __all__ = [
@@ -194,4 +197,6 @@ __all__ = [
     "find_best_feature_ordering_from_sae",
     "find_best_feature_ordering_across_saes",
     "plot_sae_feature_similarity",
+    # HuggingFace utilities
+    "upload_synthetic_model_to_huggingface",
 ]

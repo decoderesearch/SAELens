@@ -908,6 +908,19 @@ class HierarchyNode:
             s += "\n" + child.__repr__(indent + 2)
         return s
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, HierarchyNode):
+            return NotImplemented
+        if self.feature_index != other.feature_index:
+            return False
+        if self.mutually_exclusive_children != other.mutually_exclusive_children:
+            return False
+        if self.feature_id != other.feature_id:
+            return False
+        if len(self.children) != len(other.children):
+            return False
+        return all(a == b for a, b in zip(self.children, other.children, strict=True))
+
 
 @dataclass
 class HierarchyConfig:
@@ -1031,6 +1044,13 @@ class Hierarchy:
         roots = [dict_to_node(r) for r in d["roots"]]
         modifier = hierarchy_modifier(roots) if roots else None
         return cls(roots=roots, modifier=modifier)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Hierarchy):
+            return NotImplemented
+        if len(self.roots) != len(other.roots):
+            return False
+        return all(a == b for a, b in zip(self.roots, other.roots, strict=True))
 
 
 def generate_hierarchy(

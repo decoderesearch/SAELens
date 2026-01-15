@@ -39,8 +39,14 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     Combines synthetic model config with SAE training config.
 
     Attributes:
-        synthetic_model: Config for the synthetic data generator, or path to
-            a pre-saved SyntheticModel directory.
+        synthetic_model: Source for the synthetic data generator. Can be:
+
+            - SyntheticModelConfig: Create a new model from config
+            - Local path (str): Load from disk. Detected if path exists or starts
+              with "/", "./", "~"
+            - HuggingFace (str): Load from HuggingFace Hub. Format is "repo_id"
+              or "repo_id:model_path" for models in subfolders
+
         sae: Config for the SAE being trained.
         training_samples: Total training samples (activations) to generate.
         batch_size: Batch size for training.
@@ -291,16 +297,10 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
         # Create or load synthetic model
         if override_synthetic_model is not None:
             self.synthetic_model = override_synthetic_model
-        elif isinstance(cfg.synthetic_model, str):
-            # Load from path
-            self.synthetic_model = SyntheticModel.load(
+        else:
+            self.synthetic_model = SyntheticModel.load_from_source(
                 cfg.synthetic_model, device=cfg.device
             )
-        else:
-            # Create from config
-            model_cfg = cfg.synthetic_model
-            model_cfg.device = cfg.device
-            self.synthetic_model = SyntheticModel.from_config(model_cfg)
 
         # Ensure SAE dimensions match synthetic model
         expected_d_in = self.synthetic_model.cfg.hidden_dim

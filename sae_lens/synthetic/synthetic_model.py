@@ -6,11 +6,15 @@ and FeatureDictionary with configuration, hierarchy, correlation, and persistenc
 """
 
 import json
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 import torch
+from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import EntryNotFoundError
 from safetensors.torch import load_file, save_file
 from torch import nn
 
@@ -564,6 +568,65 @@ class SyntheticModel(nn.Module):
 
         return model
 
+    @classmethod
+    def from_pretrained(
+        cls,
+        repo_id: str,
+        model_path: str | None = None,
+        device: str | None = None,
+        force_download: bool = False,
+    ) -> "SyntheticModel":
+        """
+        Load a SyntheticModel from the Hugging Face model hub.
+
+        Args:
+            repo_id: The Hugging Face repository ID (e.g., "username/repo-name")
+            model_path: Optional subfolder within the repo. If None, loads from repo root.
+            device: Override device (uses saved config device if None)
+            force_download: Whether to force re-download even if cached
+
+        Returns:
+            Loaded SyntheticModel
+        """
+        with TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+
+            # Build filename prefixes
+            prefix = f"{model_path}/" if model_path else ""
+
+            # Download config
+            config_path = hf_hub_download(
+                repo_id=repo_id,
+                filename=f"{prefix}{SYNTHETIC_MODEL_CONFIG_FILENAME}",
+                force_download=force_download,
+            )
+
+            # Download weights
+            weights_path = hf_hub_download(
+                repo_id=repo_id,
+                filename=f"{prefix}{SYNTHETIC_MODEL_WEIGHTS_FILENAME}",
+                force_download=force_download,
+            )
+
+            # Copy to temp directory for loading
+            shutil.copy(config_path, tmp_path / SYNTHETIC_MODEL_CONFIG_FILENAME)
+            shutil.copy(weights_path, tmp_path / SYNTHETIC_MODEL_WEIGHTS_FILENAME)
+
+            # Try to download hierarchy if it exists
+            try:
+                hierarchy_path = hf_hub_download(
+                    repo_id=repo_id,
+                    filename=f"{prefix}{SYNTHETIC_MODEL_HIERARCHY_FILENAME}",
+                    force_download=force_download,
+                )
+                shutil.copy(
+                    hierarchy_path, tmp_path / SYNTHETIC_MODEL_HIERARCHY_FILENAME
+                )
+            except EntryNotFoundError:
+                pass  # No hierarchy file
+
+            return cls.load(tmp_path, device=device)
+
     def to(  # type: ignore[override]
         self,
         device: str | torch.device | None = None,
@@ -584,3 +647,64 @@ class SyntheticModel(nn.Module):
             self.activation_generator = self._create_activation_generator()
 
         return self
+
+    @classmethod
+    def load_from_source(
+        cls,
+        source: "SyntheticModelConfig | str",
+        device: str | None = None,
+    ) -> "SyntheticModel":
+        """
+        Load a SyntheticModel from various sources with smart detection.
+
+        This is the recommended way to load a SyntheticModel when the source type
+        is not known in advance.
+
+        Args:
+            source: One of:
+
+                - SyntheticModelConfig: Create a new model from config
+                - Local path string: Load from disk (if path exists or starts with
+                  "/", "./", "~", or contains backslash)
+                - HuggingFace string: Load from HuggingFace Hub. Format is
+                  "repo_id" or "repo_id:model_path" for models in subfolders
+
+            device: Override device (uses saved config device if None)
+
+        Returns:
+            Loaded or created SyntheticModel
+        """
+        if isinstance(source, SyntheticModelConfig):
+            if device is not None:
+                source.device = device
+            return cls.from_config(source)
+
+        # String source - determine if local path or HuggingFace
+        if _is_local_path(source):
+            return cls.load(source, device=device)
+
+        # Parse HuggingFace format: "repo_id" or "repo_id:model_path"
+        if ":" in source:
+            repo_id, model_path = source.split(":", 1)
+        else:
+            repo_id, model_path = source, None
+
+        return cls.from_pretrained(repo_id, model_path=model_path, device=device)
+
+
+def _is_local_path(path: str) -> bool:
+    """
+    Determine if a string represents a local path vs a HuggingFace repo ID.
+
+    Returns True if the path:
+
+    - Exists on the filesystem
+    - Starts with "/", "./", "../", or "~"
+    - Contains a backslash (Windows path)
+    """
+    # Check for explicit path indicators
+    if path.startswith(("/", "./", "../", "~")) or "\\" in path:
+        return True
+
+    # Check if path exists on filesystem
+    return Path(path).exists()
