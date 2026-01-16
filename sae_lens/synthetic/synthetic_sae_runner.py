@@ -376,6 +376,7 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
                 feature_dict=self.synthetic_model.feature_dict,
                 activations_generator=self.synthetic_model.activation_generator,
                 num_samples=self.cfg.eval_samples,
+                batch_size=self.cfg.batch_size,
             )
             logger.info(f"Final MCC: {final_eval.mcc:.4f}")
 
@@ -419,6 +420,7 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
                 feature_dict=self.synthetic_model.feature_dict,
                 activations_generator=self.synthetic_model.activation_generator,
                 num_samples=self.cfg.eval_samples,
+                batch_size=self.cfg.batch_size,
             )
             return {
                 "synthetic/mcc": result.mcc,

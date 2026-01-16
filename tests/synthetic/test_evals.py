@@ -14,6 +14,7 @@ from sae_lens.synthetic import (
     feature_uniqueness,
     mean_correlation_coefficient,
 )
+from sae_lens.synthetic.evals import ExplainedVarianceCalculator
 
 
 class TestMeanCorrelationCoefficient:
@@ -164,6 +165,7 @@ class TestEvalSaeOnSyntheticData:
         assert hasattr(result, "sae_l0")
         assert hasattr(result, "dead_latents")
         assert hasattr(result, "shrinkage")
+        assert hasattr(result, "explained_variance")
         assert hasattr(result, "mcc")
         assert hasattr(result, "uniqueness")
         assert hasattr(result, "classification")
@@ -214,6 +216,20 @@ class TestEvalSaeOnSyntheticData:
         )
 
         assert result.shrinkage > 0
+
+    def test_explained_variance_in_valid_range(self, eval_setup: EvalSetup) -> None:
+        sae, feature_dict, activations_gen = eval_setup
+
+        result = eval_sae_on_synthetic_data(
+            sae=sae,
+            feature_dict=feature_dict,
+            activations_generator=activations_gen,
+            num_samples=1000,
+        )
+
+        # Explained variance can theoretically be negative if reconstruction is very bad,
+        # but should typically be between 0 and 1
+        assert result.explained_variance <= 1.0
 
     def test_mcc_in_valid_range(self, eval_setup: EvalSetup) -> None:
         """MCC should be in [0, 1]."""
@@ -589,3 +605,127 @@ class TestComputeClassificationMetrics:
         # Mean recall = (1.0 + 0) / 2 = 0.5
         assert 0.2 < metrics.precision < 0.3
         assert 0.4 < metrics.recall < 0.6
+
+
+class TestExplainedVarianceCalculator:
+    def test_perfect_reconstruction_returns_one(self) -> None:
+        hidden_dim = 8
+        calc = ExplainedVarianceCalculator(hidden_dim)
+
+        # Perfect reconstruction: output = input
+        input_data = torch.randn(1000, hidden_dim)
+        output_data = input_data.clone()
+
+        calc.add_batch(output_data, input_data)
+        result = calc.compute()
+
+        assert abs(result - 1.0) < 1e-5
+
+    def test_zero_reconstruction_returns_near_zero(self) -> None:
+        hidden_dim = 8
+        calc = ExplainedVarianceCalculator(hidden_dim)
+
+        # Zero reconstruction: output = 0, input has variance
+        input_data = torch.randn(10000, hidden_dim)
+        output_data = torch.zeros_like(input_data)
+
+        calc.add_batch(output_data, input_data)
+        result = calc.compute()
+
+        # If output is zeros, MSE equals sum of squared inputs
+        # For zero-mean input, explained variance should be near 0
+        # For non-zero-mean input, it could be slightly different
+        assert result < 0.1
+
+    def test_constant_input_with_perfect_reconstruction(self) -> None:
+        hidden_dim = 4
+        calc = ExplainedVarianceCalculator(hidden_dim)
+
+        # Constant input (zero variance) with perfect reconstruction
+        input_data = torch.ones(100, hidden_dim)
+        output_data = input_data.clone()
+
+        calc.add_batch(output_data, input_data)
+        result = calc.compute()
+
+        # Zero variance case should return 1.0 (perfect reconstruction)
+        assert abs(result - 1.0) < 1e-5
+
+    def test_batched_computation_matches_single_batch(self) -> None:
+        hidden_dim = 8
+        num_samples = 1000
+
+        # Generate data
+        input_data = torch.randn(num_samples, hidden_dim)
+        output_data = input_data + 0.1 * torch.randn(num_samples, hidden_dim)
+
+        # Single batch
+        calc_single = ExplainedVarianceCalculator(hidden_dim)
+        calc_single.add_batch(output_data, input_data)
+        result_single = calc_single.compute()
+
+        # Multiple batches
+        calc_batched = ExplainedVarianceCalculator(hidden_dim)
+        batch_size = 100
+        for i in range(0, num_samples, batch_size):
+            calc_batched.add_batch(
+                output_data[i : i + batch_size], input_data[i : i + batch_size]
+            )
+        result_batched = calc_batched.compute()
+
+        assert abs(result_single - result_batched) < 1e-5
+
+    def test_returns_float(self) -> None:
+        hidden_dim = 4
+        calc = ExplainedVarianceCalculator(hidden_dim)
+
+        input_data = torch.randn(100, hidden_dim)
+        output_data = input_data.clone()
+
+        calc.add_batch(output_data, input_data)
+        result = calc.compute()
+
+        assert isinstance(result, float)
+
+    def test_no_samples_returns_zero(self) -> None:
+        hidden_dim = 8
+        calc = ExplainedVarianceCalculator(hidden_dim)
+
+        result = calc.compute()
+
+        assert result == 0.0
+
+    def test_partial_reconstruction_gives_intermediate_value(self) -> None:
+        hidden_dim = 8
+        calc = ExplainedVarianceCalculator(hidden_dim)
+
+        # Add noise that explains away some variance
+        input_data = torch.randn(10000, hidden_dim)
+        noise_level = 0.5
+        output_data = input_data + noise_level * torch.randn(10000, hidden_dim)
+
+        calc.add_batch(output_data, input_data)
+        result = calc.compute()
+
+        # Should be between 0 and 1, closer to 1 since noise is smaller than signal
+        assert 0.3 < result < 1.0
+
+    def test_known_explained_variance(self) -> None:
+        hidden_dim = 1
+        num_samples = 100000
+
+        # Create input with known variance
+        input_data = torch.randn(num_samples, hidden_dim)
+
+        # Create reconstruction with known MSE
+        # MSE = 0.25 * Var(input), so explained variance = 1 - 0.25 = 0.75
+        noise_std = 0.5  # MSE = noise_std^2 = 0.25
+        output_data = input_data + noise_std * torch.randn(num_samples, hidden_dim)
+
+        calc = ExplainedVarianceCalculator(hidden_dim)
+        calc.add_batch(output_data, input_data)
+        result = calc.compute()
+
+        # The input has variance ~1 (standard normal), noise has variance 0.25
+        # So explained_variance = 1 - 0.25/1.0 = 0.75
+        assert abs(result - 0.75) < 0.02

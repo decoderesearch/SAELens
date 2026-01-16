@@ -175,6 +175,62 @@ class ShrinkageCalculator:
         return self.total_shrinkage / self.num_samples
 
 
+class ExplainedVarianceCalculator:
+    """Calculator for explained variance (R²) over batches.
+
+    Computes: 1 - E[||x - x_hat||²] / Var(x)
+    where Var(x) = E[||x||²] - ||E[x]||²
+    """
+
+    def __init__(self, hidden_dim: int, device: torch.device | str = "cpu") -> None:
+        self.hidden_dim = hidden_dim
+        self.device = device
+        # Running sums
+        self.sum_x: torch.Tensor = torch.zeros(hidden_dim, device=device)
+        self.sum_squared_norm: float = 0.0
+        self.sum_squared_residual: float = 0.0
+        self.num_samples: int = 0
+
+    def add_batch(self, sae_output: torch.Tensor, hidden_acts: torch.Tensor) -> None:
+        """Add a batch. Both shapes: (batch_size, hidden_dim)."""
+        batch_size = hidden_acts.shape[0]
+
+        # Sum of input vectors (for computing E[x])
+        self.sum_x += hidden_acts.sum(dim=0).to(self.device)
+
+        # Sum of squared norms (for computing E[||x||²])
+        self.sum_squared_norm += hidden_acts.pow(2).sum().item()
+
+        # Sum of squared residuals (for computing E[||x - x_hat||²])
+        residuals = hidden_acts - sae_output
+        self.sum_squared_residual += residuals.pow(2).sum().item()
+
+        self.num_samples += batch_size
+
+    def compute(self) -> float:
+        """Return explained variance (R²) across all samples."""
+        if self.num_samples == 0:
+            return 0.0
+
+        # E[||x||²]
+        mean_squared_norm = self.sum_squared_norm / self.num_samples
+
+        # ||E[x]||²
+        mean_x = self.sum_x / self.num_samples
+        squared_norm_of_mean = mean_x.pow(2).sum().item()
+
+        # Total variance = E[||x||²] - ||E[x]||²
+        total_variance = mean_squared_norm - squared_norm_of_mean
+
+        if total_variance < 1e-10:
+            return 1.0 if self.sum_squared_residual < 1e-10 else 0.0
+
+        # MSE = E[||x - x_hat||²]
+        mse = self.sum_squared_residual / self.num_samples
+
+        return 1.0 - mse / total_variance
+
+
 class ClassificationMetricsCalculator:
     """
     Calculator for classification metrics over batches.
@@ -316,6 +372,9 @@ class SyntheticDataEvalResult:
     shrinkage: float
     """Average ratio of SAE output norm to input norm (1.0 = no shrinkage)"""
 
+    explained_variance: float
+    """Fraction of input variance explained by SAE reconstruction (R², 1.0 = perfect)"""
+
     mcc: float
     """Mean Correlation Coefficient between SAE decoder and ground truth features"""
 
@@ -361,6 +420,9 @@ def eval_sae_on_synthetic_data(
     sae_l0_calc = L0Calculator()
     dead_latents_calc = DeadLatentsCalculator(sae_decoder.shape[0])
     shrinkage_calc = ShrinkageCalculator()
+    explained_variance_calc = ExplainedVarianceCalculator(
+        sae_decoder.shape[-1], device=sae_decoder.device
+    )
     classification_calc = ClassificationMetricsCalculator(sae_decoder, gt_features)
 
     # Process in batches
@@ -382,6 +444,7 @@ def eval_sae_on_synthetic_data(
         sae_l0_calc.add_batch(sae_latents)
         dead_latents_calc.add_batch(sae_latents)
         shrinkage_calc.add_batch(sae_output, hidden_acts)
+        explained_variance_calc.add_batch(sae_output, hidden_acts)
         classification_calc.add_batch(sae_latents, feature_acts)
 
         num_processed += current_batch_size
@@ -395,6 +458,7 @@ def eval_sae_on_synthetic_data(
         sae_l0=sae_l0_calc.compute(),
         dead_latents=dead_latents_calc.compute(),
         shrinkage=shrinkage_calc.compute(),
+        explained_variance=explained_variance_calc.compute(),
         mcc=mcc,
         uniqueness=uniqueness,
         classification=classification_calc.compute(),
