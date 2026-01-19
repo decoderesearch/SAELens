@@ -1588,9 +1588,10 @@ class TestComputeProbabilityCorrectionFactors:
         base_probs = torch.tensor([0.5, 0.4, 0.3])
         correction = hierarchy.compute_probability_correction_factors(base_probs)
 
+        # Correction is 1/base[parent], not 1/product(all ancestors)
         assert correction[0] == 1.0
-        assert correction[1] == pytest.approx(1.0 / 0.5)
-        assert correction[2] == pytest.approx(1.0 / (0.5 * 0.4))
+        assert correction[1] == pytest.approx(1.0 / 0.5)  # parent is root (0.5)
+        assert correction[2] == pytest.approx(1.0 / 0.4)  # parent is child (0.4)
 
     def test_organizational_nodes(self):
         from sae_lens.synthetic import Hierarchy
@@ -1664,3 +1665,89 @@ class TestComputeProbabilityCorrectionFactors:
         correction = hierarchy.compute_probability_correction_factors(base_probs)
 
         assert correction.dtype == torch.float64
+
+    def test_correction_recovers_original_rates_without_mutual_exclusion(self):
+        """Verify that corrected probabilities yield intended firing rates after hierarchy.
+
+        Without mutual exclusion:
+        1. Sample all features with corrected probabilities
+        2. Apply hierarchy constraints
+        3. The effective firing rates should match the original base probabilities
+
+        Uses deeper hierarchies (3 levels) with base probabilities chosen such that
+        corrected probabilities don't exceed 1.0.
+
+        The correction factor for each feature is 1/base[parent], which compensates
+        for the probability that the parent fires after hierarchy (which equals
+        base[parent] when parents also use corrected probabilities).
+        """
+        from sae_lens.synthetic import Hierarchy
+
+        # Create deeper hierarchies without mutual exclusion:
+        # Tree 1: Root (0) -> Child (1) -> Grandchild (2)
+        #                  -> Child (3)
+        # Tree 2: Root (4) -> Child (5) -> Grandchild (6)
+        # Feature outside hierarchy (7)
+        grandchild1 = HierarchyNode(feature_index=2)
+        child1a = HierarchyNode(feature_index=1, children=[grandchild1])
+        child1b = HierarchyNode(feature_index=3)
+        tree1 = HierarchyNode(feature_index=0, children=[child1a, child1b])
+
+        grandchild2 = HierarchyNode(feature_index=6)
+        child2 = HierarchyNode(feature_index=5, children=[grandchild2])
+        tree2 = HierarchyNode(feature_index=4, children=[child2])
+
+        hierarchy = Hierarchy(
+            roots=[tree1, tree2], modifier=hierarchy_modifier([tree1, tree2])
+        )
+
+        # Use probabilities that won't exceed 1.0 after correction
+        # For child: correction = 1/base[parent], so base[child] <= base[parent]
+        # For grandchild: correction = 1/base[child], so base[grandchild] <= base[child]
+        #
+        # Tree 1: base[0]=0.9, base[1]=0.8 (0.8 <= 0.9 ✓), base[2]=0.5 (0.5 <= 0.8 ✓)
+        # Tree 2: base[4]=0.9, base[5]=0.8 (0.8 <= 0.9 ✓), base[6]=0.6 (0.6 <= 0.8 ✓)
+        base_probs = torch.tensor([0.9, 0.8, 0.5, 0.7, 0.9, 0.8, 0.6, 0.5])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        # Verify correction factors: correction[i] = 1 / base[parent]
+        assert correction[0] == 1.0  # root (no parent)
+        assert correction[1] == pytest.approx(1.0 / 0.9)  # child of 0
+        assert correction[2] == pytest.approx(1.0 / 0.8)  # grandchild, parent is 1
+        assert correction[3] == pytest.approx(1.0 / 0.9)  # child of 0
+        assert correction[4] == 1.0  # root (no parent)
+        assert correction[5] == pytest.approx(1.0 / 0.9)  # child of 4
+        assert correction[6] == pytest.approx(1.0 / 0.8)  # grandchild, parent is 5
+        assert correction[7] == 1.0  # outside hierarchy
+
+        # Corrected probabilities
+        corrected_probs = base_probs * correction
+
+        # Verify corrected probs are all <= 1.0 (no clamping needed)
+        assert (
+            corrected_probs <= 1.0
+        ).all(), f"Corrected probs exceed 1.0: {corrected_probs.tolist()}"
+
+        # Sample all features with corrected probabilities
+        n_samples = 100_000
+        random_vals = torch.rand(n_samples, len(base_probs))
+        activations = (random_vals < corrected_probs).float()
+
+        # Apply hierarchy constraints
+        assert hierarchy.modifier is not None
+        result = hierarchy.modifier(activations)
+
+        # Measure effective firing rates
+        effective_rates = result.mean(dim=0)
+
+        # Compare to base probabilities - all should match now
+        # With 100k samples, std ≈ sqrt(p(1-p)/n) ≈ 0.0016 max
+        # 6 std deviations gives us ~0.01 margin
+        tolerance = 0.015
+        for i in range(len(base_probs)):
+            expected = base_probs[i].item()
+            actual = effective_rates[i].item()
+            assert abs(actual - expected) < tolerance, (
+                f"Feature {i}: expected rate {expected:.4f}, got {actual:.4f}, "
+                f"diff={abs(actual - expected):.4f} (tolerance={tolerance})"
+            )

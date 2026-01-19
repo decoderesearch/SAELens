@@ -1081,13 +1081,12 @@ class Hierarchy:
         Compute correction factors to compensate for hierarchy probability reduction.
 
         When hierarchy is enabled, children can only fire when their parents fire.
-        This reduces effective firing probabilities: if child has base probability
-        p_child and parent has p_parent, effective probability = p_child * p_parent.
-        For deeper hierarchies, it's the product of all ancestor probabilities.
+        This reduces effective firing probabilities. The correction factor for each
+        feature compensates for this reduction.
 
-        This method computes correction factors that, when multiplied with the base
-        probabilities, yield probabilities that will result in the intended effective
-        firing rates after hierarchy constraints are applied.
+        When all features are sampled with corrected probabilities and hierarchy
+        is applied, the effective firing rate for each feature equals its base
+        probability.
 
         Args:
             base_firing_probabilities: Original firing probabilities of shape
@@ -1095,26 +1094,25 @@ class Hierarchy:
 
         Returns:
             Tensor of shape (num_features,) where correction_factors[i] =
-            1 / (product of ancestor base probabilities). Features not in the
-            hierarchy get correction factor of 1.0.
+            1 / base_prob[parent]. Features not in the hierarchy (roots and
+            features outside any tree) get correction factor of 1.0.
         """
         num_features = base_firing_probabilities.shape[0]
         correction_factors = torch.ones(
             num_features, dtype=base_firing_probabilities.dtype
         )
 
-        def traverse(node: HierarchyNode, ancestor_prob_product: float) -> None:
+        def traverse(node: HierarchyNode, parent_base_prob: float) -> None:
             if node.feature_index is not None:
-                if ancestor_prob_product > 0:
-                    correction_factors[node.feature_index] = 1.0 / ancestor_prob_product
+                if parent_base_prob > 0:
+                    correction_factors[node.feature_index] = 1.0 / parent_base_prob
                 node_prob = base_firing_probabilities[node.feature_index].item()
-                new_product = ancestor_prob_product * node_prob
             else:
-                # Organizational node without feature_index doesn't affect product
-                new_product = ancestor_prob_product
+                # Organizational node without feature_index - children see parent's prob
+                node_prob = parent_base_prob
 
             for child in node.children:
-                traverse(child, new_product)
+                traverse(child, node_prob)
 
         for root in self.roots:
             traverse(root, 1.0)
