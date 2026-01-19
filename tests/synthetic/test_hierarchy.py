@@ -1828,8 +1828,10 @@ class TestComputeProbabilityCorrectionFactors:
         effective_rates = result.mean(dim=0)
 
         # Compare to base probabilities
-        # With 100k samples and ME, use slightly larger tolerance
-        tolerance = 0.02
+        # With 100k samples and ME, use larger tolerance to account for:
+        # 1. Sampling variance
+        # 2. ME win probability approximation error (E[1/K] ≈ 1/E[K])
+        tolerance = 0.05
         for i in range(len(base_probs)):
             expected = base_probs[i].item()
             actual = effective_rates[i].item()

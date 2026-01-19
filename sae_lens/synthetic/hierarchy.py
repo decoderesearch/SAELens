@@ -1151,101 +1151,54 @@ def _adjust_me_corrections(
     parent_base_prob: float,
     base_probs: torch.Tensor,
     correction_factors: torch.Tensor,
-    max_iterations: int = 100,
-    tolerance: float = 1e-8,
 ) -> None:
     """
-    Adjust correction factors for an ME group using iterative refinement.
+    Adjust correction factors for an ME group using closed-form solution.
 
     For ME siblings, P(child fires after ME) = corrected × parent_prob × win_prob,
-    where win_prob is the probability of winning the ME selection given the child
-    is initially active. This creates a system of equations since win_prob depends
-    on all siblings' corrected probabilities.
+    where win_prob is the probability of winning the ME selection. Using the
+    approximation win_prob[i] ≈ 1/(1 + S - c[i]) where S = sum(c[j]), we can solve
+    for the corrected probabilities directly.
+
+    Let b[i] = base[i] / parent_prob (target effective rate given parent active).
+    Let T = sum(b[i] / (1 + b[i])).
+    Then S = T / (1 - T) and correction[i] = (1 + S) / (parent_prob + base[i]).
 
     Args:
         sibling_indices: Feature indices of ME siblings
         parent_base_prob: Base probability of the parent (effective rate after correction)
         base_probs: Base firing probabilities tensor
         correction_factors: Correction factors tensor (modified in place)
-        max_iterations: Maximum iterations for convergence
-        tolerance: Convergence tolerance
     """
     if parent_base_prob <= 0:
         return
 
-    n = len(sibling_indices)
     base = [base_probs[i].item() for i in sibling_indices]
 
-    # Initialize corrected probs (without ME adjustment)
-    corrected = [b / parent_base_prob for b in base]
+    # Compute b[i] = base[i] / parent_prob
+    b = [bi / parent_base_prob for bi in base]
 
-    for _ in range(max_iterations):
-        # Compute win probability for each sibling
-        win_probs = _compute_me_win_probs(corrected)
+    # Compute T = sum(b[i] / (1 + b[i]))
+    T = sum(bi / (1 + bi) for bi in b)
 
-        # Update corrected probs
-        new_corrected = []
-        max_diff = 0.0
-        for i in range(n):
-            if win_probs[i] > 0 and parent_base_prob > 0:
-                c = base[i] / (parent_base_prob * win_probs[i])
-                # Clamp to valid probability
-                c = min(c, 1.0)
-            else:
-                c = corrected[i]
-            max_diff = max(max_diff, abs(c - corrected[i]))
-            new_corrected.append(c)
+    if T >= 1.0:
+        # Sum of desired rates exceeds what's achievable; use simple correction
+        for i, idx in enumerate(sibling_indices):
+            if base[i] > 0:
+                correction_factors[idx] = 1.0 / parent_base_prob
+        return
 
-        corrected = new_corrected
-        if max_diff < tolerance:
-            break
+    # Closed-form solution: S = T / (1 - T)
+    S = T / (1 - T)
 
-    # Update correction factors
+    # correction[i] = (1 + S) / (parent_prob + base[i])
+    one_plus_S = 1 + S
     for i, idx in enumerate(sibling_indices):
         if base[i] > 0:
-            correction_factors[idx] = corrected[i] / base[i]
-
-
-def _compute_me_win_probs(corrected: list[float]) -> list[float]:
-    """
-    Compute P(sibling i wins ME | sibling i is active) for each sibling.
-
-    When sibling i is active and k total siblings are active (including i),
-    sibling i wins with probability 1/k. This computes E[1/K | i is active].
-
-    Args:
-        corrected: List of corrected probabilities for each sibling
-
-    Returns:
-        List of win probabilities for each sibling
-    """
-    n = len(corrected)
-    win_probs = []
-
-    for i in range(n):
-        # For sibling i, compute E[1/K | i is active]
-        # where K = 1 + (number of other active siblings)
-        # Enumerate all 2^(n-1) subsets of other siblings
-        other_indices = [j for j in range(n) if j != i]
-        total_prob = 0.0
-
-        for mask in range(1 << (n - 1)):  # 2^(n-1) subsets
-            # Compute P(this subset of others is active) × 1/(1 + |subset|)
-            subset_prob = 1.0
-            num_active = 1  # sibling i is always active in this conditional
-
-            for bit, j in enumerate(other_indices):
-                if mask & (1 << bit):
-                    subset_prob *= corrected[j]
-                    num_active += 1
-                else:
-                    subset_prob *= 1 - corrected[j]
-
-            total_prob += subset_prob / num_active
-
-        win_probs.append(total_prob)
-
-    return win_probs
+            correction = one_plus_S / (parent_base_prob + base[i])
+            # Clamp to ensure corrected prob <= 1
+            max_correction = 1.0 / base[i]
+            correction_factors[idx] = min(correction, max_correction)
 
 
 def generate_hierarchy(
