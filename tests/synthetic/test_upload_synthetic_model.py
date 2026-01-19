@@ -83,9 +83,9 @@ def test_create_default_readme_with_hierarchy() -> None:
             total_root_nodes=10,
             branching_factor=3,
             max_depth=2,
-            seed=42,
         ),
         orthogonalization=None,
+        seed=42,
     )
     model = SyntheticModel.from_config(cfg)
 
@@ -119,9 +119,9 @@ def test_get_hierarchy_max_depth() -> None:
             total_root_nodes=5,
             branching_factor=2,
             max_depth=3,
-            seed=42,
         ),
         orthogonalization=None,
+        seed=42,
     )
     model = SyntheticModel.from_config(cfg)
 

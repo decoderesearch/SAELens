@@ -19,7 +19,6 @@ def test_hierarchy_config_default_values():
     assert cfg.mutually_exclusive_min_depth == 0
     assert cfg.mutually_exclusive_max_depth is None
     assert cfg.compensate_probabilities is False
-    assert cfg.seed is None
 
 
 def test_hierarchy_config_validation_non_positive_parent_nodes():
@@ -86,7 +85,6 @@ def test_hierarchy_config_to_dict_from_dict_roundtrip():
         mutually_exclusive_portion=0.3,
         mutually_exclusive_min_depth=1,
         mutually_exclusive_max_depth=2,
-        seed=42,
     )
     d = original.to_dict()
     restored = HierarchyConfig.from_dict(d)
@@ -100,12 +98,11 @@ def test_hierarchy_config_to_dict_from_dict_roundtrip():
     assert (
         restored.mutually_exclusive_max_depth == original.mutually_exclusive_max_depth
     )
-    assert restored.seed == original.seed
 
 
 def test_generate_hierarchy_creates_correct_number_of_roots():
-    cfg = HierarchyConfig(total_root_nodes=5, branching_factor=2, max_depth=2, seed=42)
-    result = generate_hierarchy(100, cfg)
+    cfg = HierarchyConfig(total_root_nodes=5, branching_factor=2, max_depth=2)
+    result = generate_hierarchy(100, cfg, seed=42)
 
     assert len(result.roots) == 5
     # Each root should have children (since max_depth=2, roots are parents)
@@ -120,9 +117,8 @@ def test_generate_hierarchy_applies_mutual_exclusion():
         branching_factor=3,
         max_depth=1,
         mutually_exclusive_portion=1.0,
-        seed=42,
     )
-    result = generate_hierarchy(200, cfg)
+    result = generate_hierarchy(200, cfg, seed=42)
 
     # Count ME parents
     def count_me_parents(nodes: Sequence[HierarchyNode]) -> int:
@@ -144,9 +140,8 @@ def test_generate_hierarchy_no_mutual_exclusion_by_default():
         branching_factor=2,
         max_depth=2,
         mutually_exclusive_portion=0.0,
-        seed=42,
     )
-    result = generate_hierarchy(100, cfg)
+    result = generate_hierarchy(100, cfg, seed=42)
 
     def has_me_parents(nodes: Sequence[HierarchyNode]) -> bool:
         for node in nodes:
@@ -160,19 +155,17 @@ def test_generate_hierarchy_no_mutual_exclusion_by_default():
 
 
 def test_generate_hierarchy_uses_seed_for_reproducibility():
-    cfg = HierarchyConfig(
-        total_root_nodes=5, branching_factor=3, max_depth=2, seed=12345
-    )
-    result1 = generate_hierarchy(100, cfg)
-    result2 = generate_hierarchy(100, cfg)
+    cfg = HierarchyConfig(total_root_nodes=5, branching_factor=3, max_depth=2)
+    result1 = generate_hierarchy(100, cfg, seed=12345)
+    result2 = generate_hierarchy(100, cfg, seed=12345)
 
     # Same seed should produce same structure
     assert result1.feature_indices_used == result2.feature_indices_used
 
 
 def test_generated_hierarchy_to_dict_from_dict_roundtrip():
-    cfg = HierarchyConfig(total_root_nodes=3, branching_factor=2, max_depth=2, seed=42)
-    original = generate_hierarchy(50, cfg)
+    cfg = HierarchyConfig(total_root_nodes=3, branching_factor=2, max_depth=2)
+    original = generate_hierarchy(50, cfg, seed=42)
     d = original.to_dict()
     restored = Hierarchy.from_dict(d)
 
@@ -191,9 +184,8 @@ def test_generate_hierarchy_me_depth_filtering_excludes_roots():
         max_depth=2,
         mutually_exclusive_portion=1.0,
         mutually_exclusive_min_depth=1,
-        seed=42,
     )
-    result = generate_hierarchy(200, cfg)
+    result = generate_hierarchy(200, cfg, seed=42)
 
     # No roots should have ME
     for root in result.roots:
@@ -218,9 +210,8 @@ def test_generate_hierarchy_me_depth_filtering_only_roots():
         mutually_exclusive_portion=1.0,
         mutually_exclusive_min_depth=0,
         mutually_exclusive_max_depth=0,
-        seed=42,
     )
-    result = generate_hierarchy(200, cfg)
+    result = generate_hierarchy(200, cfg, seed=42)
 
     # All roots with >= 2 children should have ME
     for root in result.roots:
@@ -244,9 +235,8 @@ def test_generate_hierarchy_me_depth_filtering_middle_range():
         mutually_exclusive_portion=1.0,
         mutually_exclusive_min_depth=1,
         mutually_exclusive_max_depth=1,
-        seed=42,
     )
-    result = generate_hierarchy(500, cfg)
+    result = generate_hierarchy(500, cfg, seed=42)
 
     # Roots should not have ME
     for root in result.roots:
@@ -269,13 +259,55 @@ def test_generate_hierarchy_me_depth_filtering_middle_range():
     assert depth_2_me_count == 0
 
 
+def test_generate_hierarchy_assigns_indices_by_depth():
+    cfg = HierarchyConfig(
+        total_root_nodes=10,
+        branching_factor=3,
+        max_depth=2,
+    )
+    result = generate_hierarchy(500, cfg, seed=42)
+
+    # Roots should be at indices 0-9
+    depth_0_indices: list[int] = []
+    for r in result.roots:
+        assert r.feature_index is not None
+        depth_0_indices.append(r.feature_index)
+    assert depth_0_indices == list(range(10))
+
+    # Collect all indices by depth
+    depth_1_indices: list[int] = []
+    depth_2_indices: list[int] = []
+
+    for root in result.roots:
+        for child in root.children:
+            assert child.feature_index is not None
+            depth_1_indices.append(child.feature_index)
+            for grandchild in child.children:
+                assert grandchild.feature_index is not None
+                depth_2_indices.append(grandchild.feature_index)
+
+    # All depth 0 indices should be less than all depth 1 indices
+    if depth_1_indices:
+        assert max(depth_0_indices) < min(depth_1_indices)
+
+    # All depth 1 indices should be less than all depth 2 indices
+    if depth_2_indices:
+        assert max(depth_1_indices) < min(depth_2_indices)
+
+    # Indices within each depth should be contiguous and increasing
+    assert depth_0_indices == list(range(0, len(depth_0_indices)))
+    if depth_1_indices:
+        assert depth_1_indices == list(
+            range(len(depth_0_indices), len(depth_0_indices) + len(depth_1_indices))
+        )
+
+
 def test_hierarchy_config_compensate_probabilities_serialization():
     cfg = HierarchyConfig(
         total_root_nodes=5,
         branching_factor=3,
         max_depth=2,
         compensate_probabilities=True,
-        seed=42,
     )
     d = cfg.to_dict()
     assert d["compensate_probabilities"] is True

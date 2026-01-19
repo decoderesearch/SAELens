@@ -121,10 +121,9 @@ def test_synthetic_model_with_hierarchy():
     cfg = SyntheticModelConfig(
         num_features=64,
         hidden_dim=32,
-        hierarchy=HierarchyConfig(
-            total_root_nodes=5, branching_factor=2, max_depth=2, seed=42
-        ),
+        hierarchy=HierarchyConfig(total_root_nodes=5, branching_factor=2, max_depth=2),
         orthogonalization=None,
+        seed=42,
     )
     model = SyntheticModel.from_config(cfg)
     assert model.hierarchy is not None
@@ -178,9 +177,10 @@ def test_synthetic_model_save_load_with_hierarchy():
         num_features=64,
         hidden_dim=32,
         hierarchy=HierarchyConfig(
-            total_root_nodes=3, branching_factor=(2, 4), max_depth=2, seed=42
+            total_root_nodes=3, branching_factor=(2, 4), max_depth=2
         ),
         orthogonalization=None,
+        seed=42,
     )
     model = SyntheticModel.from_config(cfg)
 
@@ -340,10 +340,9 @@ def test_synthetic_model_from_pretrained_with_model_path(
     cfg = SyntheticModelConfig(
         num_features=32,
         hidden_dim=16,
-        hierarchy=HierarchyConfig(
-            total_root_nodes=2, branching_factor=2, max_depth=1, seed=42
-        ),
+        hierarchy=HierarchyConfig(total_root_nodes=2, branching_factor=2, max_depth=1),
         orthogonalization=None,
+        seed=42,
     )
     model = SyntheticModel.from_config(cfg)
 
@@ -644,7 +643,6 @@ def test_synthetic_model_hierarchy_compensation_integration():
             branching_factor=2,
             max_depth=2,
             compensate_probabilities=True,
-            seed=42,
         ),
         orthogonalization=None,
         seed=42,
@@ -684,7 +682,6 @@ def test_synthetic_model_hierarchy_compensation_clamping(
             branching_factor=2,
             max_depth=3,
             compensate_probabilities=True,
-            seed=42,
         ),
         orthogonalization=None,
         seed=42,
@@ -706,7 +703,6 @@ def test_synthetic_model_hierarchy_compensation_disabled_by_default():
             total_root_nodes=2,
             branching_factor=2,
             max_depth=2,
-            seed=42,
         ),
         orthogonalization=None,
         seed=42,

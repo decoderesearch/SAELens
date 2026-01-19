@@ -947,7 +947,6 @@ class HierarchyConfig:
             for the probability reduction caused by hierarchy constraints. When children
             can only fire when parents fire, effective probability becomes the product
             of all ancestor probabilities. This option corrects for that. Default False.
-        seed: Random seed for reproducibility.
     """
 
     total_root_nodes: int = 100
@@ -957,7 +956,6 @@ class HierarchyConfig:
     mutually_exclusive_min_depth: int = 0
     mutually_exclusive_max_depth: int | None = None
     compensate_probabilities: bool = False
-    seed: int | None = None
 
     def __post_init__(self) -> None:
         if self.total_root_nodes <= 0:
@@ -999,7 +997,6 @@ class HierarchyConfig:
             "mutually_exclusive_min_depth": self.mutually_exclusive_min_depth,
             "mutually_exclusive_max_depth": self.mutually_exclusive_max_depth,
             "compensate_probabilities": self.compensate_probabilities,
-            "seed": self.seed,
         }
 
     @classmethod
@@ -1009,6 +1006,8 @@ class HierarchyConfig:
         # Convert list to tuple (JSON doesn't have tuples)
         if "branching_factor" in d and isinstance(d["branching_factor"], list):
             d["branching_factor"] = tuple(d["branching_factor"])
+        # Remove deprecated seed field if present (for backward compatibility)
+        d.pop("seed", None)
         return cls(**d)
 
 
@@ -1140,7 +1139,7 @@ def generate_hierarchy(
     Args:
         num_features: Total number of features available
         config: Hierarchy configuration
-        seed: Optional seed override. If provided, takes precedence over config.seed.
+        seed: Random seed for reproducibility
 
     Returns:
         Hierarchy with roots and modifier function
@@ -1148,12 +1147,7 @@ def generate_hierarchy(
     if config.total_root_nodes == 0:
         return Hierarchy(roots=[], modifier=None)
 
-    effective_seed = seed if seed is not None else config.seed
-    rng = random.Random(effective_seed)
-
-    # Shuffle feature indices for random assignment
-    all_indices = list(range(num_features))
-    rng.shuffle(all_indices)
+    rng = random.Random(seed)
 
     feature_idx = 0
     roots: list[HierarchyNode] = []
@@ -1169,7 +1163,7 @@ def generate_hierarchy(
         nonlocal feature_idx
         if feature_idx >= num_features:
             return None
-        idx = all_indices[feature_idx]
+        idx = feature_idx
         feature_idx += 1
         return idx
 
