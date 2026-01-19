@@ -1561,3 +1561,106 @@ class TestHierarchyModifierSparseCOO:
         assert result.is_sparse
         # Both should be deactivated due to inactive parents
         assert result._nnz() == 0
+
+
+class TestComputeProbabilityCorrectionFactors:
+    def test_simple_parent_child(self):
+        from sae_lens.synthetic import Hierarchy
+
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(feature_index=0, children=[child])
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        base_probs = torch.tensor([0.5, 0.3])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        assert correction[0] == 1.0
+        assert correction[1] == pytest.approx(1.0 / 0.5)
+
+    def test_deep_hierarchy(self):
+        from sae_lens.synthetic import Hierarchy
+
+        grandchild = HierarchyNode(feature_index=2)
+        child = HierarchyNode(feature_index=1, children=[grandchild])
+        root = HierarchyNode(feature_index=0, children=[child])
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        base_probs = torch.tensor([0.5, 0.4, 0.3])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        assert correction[0] == 1.0
+        assert correction[1] == pytest.approx(1.0 / 0.5)
+        assert correction[2] == pytest.approx(1.0 / (0.5 * 0.4))
+
+    def test_organizational_nodes(self):
+        from sae_lens.synthetic import Hierarchy
+
+        child1 = HierarchyNode(feature_index=0)
+        child2 = HierarchyNode(feature_index=1)
+        org_root = HierarchyNode(feature_index=None, children=[child1, child2])
+        hierarchy = Hierarchy(roots=[org_root], modifier=hierarchy_modifier([org_root]))
+
+        base_probs = torch.tensor([0.5, 0.3])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        assert correction[0] == 1.0
+        assert correction[1] == 1.0
+
+    def test_features_outside_hierarchy(self):
+        from sae_lens.synthetic import Hierarchy
+
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(feature_index=0, children=[child])
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        base_probs = torch.tensor([0.5, 0.3, 0.6, 0.4])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        assert correction[0] == 1.0
+        assert correction[1] == pytest.approx(1.0 / 0.5)
+        assert correction[2] == 1.0
+        assert correction[3] == 1.0
+
+    def test_multiple_trees(self):
+        from sae_lens.synthetic import Hierarchy
+
+        child1 = HierarchyNode(feature_index=1)
+        tree1 = HierarchyNode(feature_index=0, children=[child1])
+        child2 = HierarchyNode(feature_index=3)
+        tree2 = HierarchyNode(feature_index=2, children=[child2])
+        hierarchy = Hierarchy(
+            roots=[tree1, tree2], modifier=hierarchy_modifier([tree1, tree2])
+        )
+
+        base_probs = torch.tensor([0.5, 0.3, 0.4, 0.2])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        assert correction[0] == 1.0
+        assert correction[1] == pytest.approx(1.0 / 0.5)
+        assert correction[2] == 1.0
+        assert correction[3] == pytest.approx(1.0 / 0.4)
+
+    def test_zero_ancestor_probability(self):
+        from sae_lens.synthetic import Hierarchy
+
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(feature_index=0, children=[child])
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        base_probs = torch.tensor([0.0, 0.3])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        assert correction[0] == 1.0
+        assert correction[1] == 1.0
+
+    def test_preserves_dtype(self):
+        from sae_lens.synthetic import Hierarchy
+
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(feature_index=0, children=[child])
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        base_probs = torch.tensor([0.5, 0.3], dtype=torch.float64)
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        assert correction.dtype == torch.float64

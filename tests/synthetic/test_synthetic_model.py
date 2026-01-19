@@ -6,6 +6,7 @@ import pytest
 import torch
 
 from sae_lens.synthetic import (
+    ConstantFiringProbabilityConfig,
     ExponentialMagnitudeConfig,
     FoldedNormalMagnitudeConfig,
     HierarchyConfig,
@@ -631,3 +632,95 @@ def test_synthetic_model_different_seeds_produce_different_models():
         model1.correlation_matrix.correlation_factor,
         model2.correlation_matrix.correlation_factor,
     )
+
+
+def test_synthetic_model_hierarchy_compensation_integration():
+    cfg = SyntheticModelConfig(
+        num_features=10,
+        hidden_dim=8,
+        firing_probability=ConstantFiringProbabilityConfig(probability=0.3),
+        hierarchy=HierarchyConfig(
+            total_root_nodes=2,
+            branching_factor=2,
+            max_depth=2,
+            compensate_probabilities=True,
+            seed=42,
+        ),
+        orthogonalization=None,
+        seed=42,
+    )
+    model = SyntheticModel.from_config(cfg)
+
+    n_samples = 20000
+    _, features = model.sample_with_features(n_samples)
+
+    assert model.hierarchy is not None
+    hierarchy_indices = model.hierarchy.feature_indices_used
+    outside_indices = set(range(10)) - hierarchy_indices
+
+    observed_rates = (features > 0).float().mean(dim=0)
+
+    for idx in outside_indices:
+        assert observed_rates[idx].item() == pytest.approx(0.3, abs=0.05)
+
+    for root in model.hierarchy.roots:
+        if root.feature_index is not None:
+            assert observed_rates[root.feature_index].item() == pytest.approx(
+                0.3, abs=0.05
+            )
+
+
+def test_synthetic_model_hierarchy_compensation_clamping(
+    caplog: pytest.LogCaptureFixture,
+):
+    import logging
+
+    cfg = SyntheticModelConfig(
+        num_features=10,
+        hidden_dim=8,
+        firing_probability=ConstantFiringProbabilityConfig(probability=0.9),
+        hierarchy=HierarchyConfig(
+            total_root_nodes=1,
+            branching_factor=2,
+            max_depth=3,
+            compensate_probabilities=True,
+            seed=42,
+        ),
+        orthogonalization=None,
+        seed=42,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="sae_lens.synthetic.synthetic_model"):
+        model = SyntheticModel.from_config(cfg)
+
+    assert "clamped" in caplog.text.lower()
+    assert model.activation_generator.firing_probabilities.max().item() <= 1.0
+
+
+def test_synthetic_model_hierarchy_compensation_disabled_by_default():
+    cfg = SyntheticModelConfig(
+        num_features=10,
+        hidden_dim=8,
+        firing_probability=ConstantFiringProbabilityConfig(probability=0.5),
+        hierarchy=HierarchyConfig(
+            total_root_nodes=2,
+            branching_factor=2,
+            max_depth=2,
+            seed=42,
+        ),
+        orthogonalization=None,
+        seed=42,
+    )
+    model = SyntheticModel.from_config(cfg)
+
+    n_samples = 10000
+    _, features = model.sample_with_features(n_samples)
+
+    assert model.hierarchy is not None
+
+    for root in model.hierarchy.roots:
+        if root.feature_index is not None:
+            for child in root.children:
+                if child.feature_index is not None:
+                    child_rate = (features[:, child.feature_index] > 0).float().mean()
+                    assert child_rate.item() < 0.35

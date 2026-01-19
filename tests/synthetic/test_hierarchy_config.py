@@ -18,6 +18,7 @@ def test_hierarchy_config_default_values():
     assert cfg.mutually_exclusive_portion == 0.0
     assert cfg.mutually_exclusive_min_depth == 0
     assert cfg.mutually_exclusive_max_depth is None
+    assert cfg.compensate_probabilities is False
     assert cfg.seed is None
 
 
@@ -260,10 +261,33 @@ def test_generate_hierarchy_me_depth_filtering_middle_range():
                 if child.mutually_exclusive_children:
                     depth_1_me_count += 1
                 for grandchild in child.children:
-                    if grandchild.children:  # depth 2 parent
-                        if grandchild.mutually_exclusive_children:
-                            depth_2_me_count += 1
+                    if grandchild.children and grandchild.mutually_exclusive_children:
+                        depth_2_me_count += 1
 
     # Depth 1 should have ME, depth 2 should not
     assert depth_1_me_count > 0
     assert depth_2_me_count == 0
+
+
+def test_hierarchy_config_compensate_probabilities_serialization():
+    cfg = HierarchyConfig(
+        total_root_nodes=5,
+        branching_factor=3,
+        max_depth=2,
+        compensate_probabilities=True,
+        seed=42,
+    )
+    d = cfg.to_dict()
+    assert d["compensate_probabilities"] is True
+
+    restored = HierarchyConfig.from_dict(d)
+    assert restored.compensate_probabilities is True
+
+
+def test_hierarchy_config_compensate_probabilities_default_serialization():
+    cfg = HierarchyConfig(total_root_nodes=5, branching_factor=3, max_depth=2)
+    d = cfg.to_dict()
+    assert d["compensate_probabilities"] is False
+
+    restored = HierarchyConfig.from_dict(d)
+    assert restored.compensate_probabilities is False

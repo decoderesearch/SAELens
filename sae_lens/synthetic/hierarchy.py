@@ -943,6 +943,10 @@ class HierarchyConfig:
             Depth 0 = root nodes. Default 0.
         mutually_exclusive_max_depth: Maximum depth at which ME can be applied.
             None means no upper limit. Default None.
+        compensate_probabilities: If True, scale up firing probabilities to compensate
+            for the probability reduction caused by hierarchy constraints. When children
+            can only fire when parents fire, effective probability becomes the product
+            of all ancestor probabilities. This option corrects for that. Default False.
         seed: Random seed for reproducibility.
     """
 
@@ -952,6 +956,7 @@ class HierarchyConfig:
     mutually_exclusive_portion: float = 0.0
     mutually_exclusive_min_depth: int = 0
     mutually_exclusive_max_depth: int | None = None
+    compensate_probabilities: bool = False
     seed: int | None = None
 
     def __post_init__(self) -> None:
@@ -993,6 +998,7 @@ class HierarchyConfig:
             "mutually_exclusive_portion": self.mutually_exclusive_portion,
             "mutually_exclusive_min_depth": self.mutually_exclusive_min_depth,
             "mutually_exclusive_max_depth": self.mutually_exclusive_max_depth,
+            "compensate_probabilities": self.compensate_probabilities,
             "seed": self.seed,
         }
 
@@ -1067,6 +1073,54 @@ class Hierarchy:
         if len(self.roots) != len(other.roots):
             return False
         return all(a == b for a, b in zip(self.roots, other.roots, strict=True))
+
+    def compute_probability_correction_factors(
+        self,
+        base_firing_probabilities: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Compute correction factors to compensate for hierarchy probability reduction.
+
+        When hierarchy is enabled, children can only fire when their parents fire.
+        This reduces effective firing probabilities: if child has base probability
+        p_child and parent has p_parent, effective probability = p_child * p_parent.
+        For deeper hierarchies, it's the product of all ancestor probabilities.
+
+        This method computes correction factors that, when multiplied with the base
+        probabilities, yield probabilities that will result in the intended effective
+        firing rates after hierarchy constraints are applied.
+
+        Args:
+            base_firing_probabilities: Original firing probabilities of shape
+                (num_features,)
+
+        Returns:
+            Tensor of shape (num_features,) where correction_factors[i] =
+            1 / (product of ancestor base probabilities). Features not in the
+            hierarchy get correction factor of 1.0.
+        """
+        num_features = base_firing_probabilities.shape[0]
+        correction_factors = torch.ones(
+            num_features, dtype=base_firing_probabilities.dtype
+        )
+
+        def traverse(node: HierarchyNode, ancestor_prob_product: float) -> None:
+            if node.feature_index is not None:
+                if ancestor_prob_product > 0:
+                    correction_factors[node.feature_index] = 1.0 / ancestor_prob_product
+                node_prob = base_firing_probabilities[node.feature_index].item()
+                new_product = ancestor_prob_product * node_prob
+            else:
+                # Organizational node without feature_index doesn't affect product
+                new_product = ancestor_prob_product
+
+            for child in node.children:
+                traverse(child, new_product)
+
+        for root in self.roots:
+            traverse(root, 1.0)
+
+        return correction_factors
 
 
 def generate_hierarchy(

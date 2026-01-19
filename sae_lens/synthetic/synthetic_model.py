@@ -6,6 +6,7 @@ and FeatureDictionary with configuration, hierarchy, correlation, and persistenc
 """
 
 import json
+import logging
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -42,6 +43,8 @@ from sae_lens.synthetic.hierarchy import (
     generate_hierarchy,
 )
 from sae_lens.util import str_to_dtype
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -422,6 +425,27 @@ class SyntheticModel(nn.Module):
         )
         generator = generator_class(self.cfg.firing_probability)  # type: ignore[call-arg]
         firing_probs = generator.generate(self.cfg.num_features, seed=firing_prob_seed)
+
+        # Apply hierarchy probability compensation if enabled
+        if (
+            self.hierarchy is not None
+            and self.cfg.hierarchy is not None
+            and self.cfg.hierarchy.compensate_probabilities
+        ):
+            correction_factors = self.hierarchy.compute_probability_correction_factors(
+                firing_probs
+            )
+            uncorrected = firing_probs * correction_factors
+            firing_probs = uncorrected.clamp(max=1.0)
+
+            # Log warning if probabilities were clamped
+            if (uncorrected > 1.0).any():
+                num_clamped = (uncorrected > 1.0).sum().item()
+                logger.warning(
+                    f"Hierarchy probability compensation clamped {num_clamped} features "
+                    f"(max before clamp: {uncorrected.max().item():.3f}). "
+                    "Consider using lower base probabilities."
+                )
 
         # Generate firing magnitudes
         std_magnitudes = generate_magnitudes(
