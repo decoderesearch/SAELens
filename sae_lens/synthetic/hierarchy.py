@@ -1084,6 +1084,10 @@ class Hierarchy:
         This reduces effective firing probabilities. The correction factor for each
         feature compensates for this reduction.
 
+        For mutually exclusive children, the correction also accounts for the
+        probability of winning the ME selection (when multiple siblings are active,
+        one is randomly chosen).
+
         When all features are sampled with corrected probabilities and hierarchy
         is applied, the effective firing rate for each feature equals its base
         probability.
@@ -1093,23 +1097,45 @@ class Hierarchy:
                 (num_features,)
 
         Returns:
-            Tensor of shape (num_features,) where correction_factors[i] =
-            1 / base_prob[parent]. Features not in the hierarchy (roots and
-            features outside any tree) get correction factor of 1.0.
+            Tensor of shape (num_features,) where correction_factors[i] compensates
+            for both parent deactivation and ME selection. Features not in the
+            hierarchy (roots and features outside any tree) get correction factor
+            of 1.0.
         """
         num_features = base_firing_probabilities.shape[0]
         correction_factors = torch.ones(
             num_features, dtype=base_firing_probabilities.dtype
         )
 
+        # Track which features are in ME groups (their corrections are set by _adjust_me_corrections)
+        me_features: set[int] = set()
+
         def traverse(node: HierarchyNode, parent_base_prob: float) -> None:
             if node.feature_index is not None:
-                if parent_base_prob > 0:
+                # Only set basic correction if not in an ME group
+                if node.feature_index not in me_features and parent_base_prob > 0:
                     correction_factors[node.feature_index] = 1.0 / parent_base_prob
                 node_prob = base_firing_probabilities[node.feature_index].item()
             else:
                 # Organizational node without feature_index - children see parent's prob
                 node_prob = parent_base_prob
+
+            # Adjust for ME groups - this sets corrections for ME children
+            if node.mutually_exclusive_children and len(node.children) >= 2:
+                me_indices = [
+                    c.feature_index
+                    for c in node.children
+                    if c.feature_index is not None
+                ]
+                if len(me_indices) >= 2:
+                    # Mark these features as ME so traverse won't overwrite their corrections
+                    me_features.update(me_indices)
+                    _adjust_me_corrections(
+                        me_indices,
+                        node_prob,
+                        base_firing_probabilities,
+                        correction_factors,
+                    )
 
             for child in node.children:
                 traverse(child, node_prob)
@@ -1118,6 +1144,108 @@ class Hierarchy:
             traverse(root, 1.0)
 
         return correction_factors
+
+
+def _adjust_me_corrections(
+    sibling_indices: list[int],
+    parent_base_prob: float,
+    base_probs: torch.Tensor,
+    correction_factors: torch.Tensor,
+    max_iterations: int = 100,
+    tolerance: float = 1e-8,
+) -> None:
+    """
+    Adjust correction factors for an ME group using iterative refinement.
+
+    For ME siblings, P(child fires after ME) = corrected × parent_prob × win_prob,
+    where win_prob is the probability of winning the ME selection given the child
+    is initially active. This creates a system of equations since win_prob depends
+    on all siblings' corrected probabilities.
+
+    Args:
+        sibling_indices: Feature indices of ME siblings
+        parent_base_prob: Base probability of the parent (effective rate after correction)
+        base_probs: Base firing probabilities tensor
+        correction_factors: Correction factors tensor (modified in place)
+        max_iterations: Maximum iterations for convergence
+        tolerance: Convergence tolerance
+    """
+    if parent_base_prob <= 0:
+        return
+
+    n = len(sibling_indices)
+    base = [base_probs[i].item() for i in sibling_indices]
+
+    # Initialize corrected probs (without ME adjustment)
+    corrected = [b / parent_base_prob for b in base]
+
+    for _ in range(max_iterations):
+        # Compute win probability for each sibling
+        win_probs = _compute_me_win_probs(corrected)
+
+        # Update corrected probs
+        new_corrected = []
+        max_diff = 0.0
+        for i in range(n):
+            if win_probs[i] > 0 and parent_base_prob > 0:
+                c = base[i] / (parent_base_prob * win_probs[i])
+                # Clamp to valid probability
+                c = min(c, 1.0)
+            else:
+                c = corrected[i]
+            max_diff = max(max_diff, abs(c - corrected[i]))
+            new_corrected.append(c)
+
+        corrected = new_corrected
+        if max_diff < tolerance:
+            break
+
+    # Update correction factors
+    for i, idx in enumerate(sibling_indices):
+        if base[i] > 0:
+            correction_factors[idx] = corrected[i] / base[i]
+
+
+def _compute_me_win_probs(corrected: list[float]) -> list[float]:
+    """
+    Compute P(sibling i wins ME | sibling i is active) for each sibling.
+
+    When sibling i is active and k total siblings are active (including i),
+    sibling i wins with probability 1/k. This computes E[1/K | i is active].
+
+    Args:
+        corrected: List of corrected probabilities for each sibling
+
+    Returns:
+        List of win probabilities for each sibling
+    """
+    n = len(corrected)
+    win_probs = []
+
+    for i in range(n):
+        # For sibling i, compute E[1/K | i is active]
+        # where K = 1 + (number of other active siblings)
+        # Enumerate all 2^(n-1) subsets of other siblings
+        other_indices = [j for j in range(n) if j != i]
+        total_prob = 0.0
+
+        for mask in range(1 << (n - 1)):  # 2^(n-1) subsets
+            # Compute P(this subset of others is active) × 1/(1 + |subset|)
+            subset_prob = 1.0
+            num_active = 1  # sibling i is always active in this conditional
+
+            for bit, j in enumerate(other_indices):
+                if mask & (1 << bit):
+                    subset_prob *= corrected[j]
+                    num_active += 1
+                else:
+                    subset_prob *= 1 - corrected[j]
+
+            total_prob += subset_prob / num_active
+
+        win_probs.append(total_prob)
+
+    return win_probs
 
 
 def generate_hierarchy(
