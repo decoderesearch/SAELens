@@ -435,15 +435,18 @@ class SyntheticModel(nn.Module):
             correction_factors = self.hierarchy.compute_probability_correction_factors(
                 firing_probs
             )
-            uncorrected = firing_probs * correction_factors
-            firing_probs = uncorrected.clamp(max=1.0)
+            original_probs = firing_probs
+            corrected_probs = firing_probs * correction_factors
+            firing_probs = corrected_probs.clamp(max=1.0)
 
-            # Log warning if probabilities were clamped
-            if (uncorrected > 1.0).any():
-                num_clamped = (uncorrected > 1.0).sum().item()
+            # Log warning if correction caused probabilities to reach/exceed 1.0
+            # (but not if the user explicitly set them to 1.0)
+            clamped_by_correction = (corrected_probs >= 1.0) & (original_probs < 1.0)
+            if clamped_by_correction.any():
+                num_clamped = clamped_by_correction.sum().item()
                 logger.warning(
                     f"Hierarchy probability compensation clamped {num_clamped} features "
-                    f"(max before clamp: {uncorrected.max().item():.3f}). "
+                    f"(max before clamp: {corrected_probs.max().item():.3f}). "
                     "Consider using lower base probabilities."
                 )
 

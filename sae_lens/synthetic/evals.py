@@ -9,7 +9,7 @@ This module provides helpers for:
 - Initializing SAEs to match feature dictionaries
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any
 
 import torch
@@ -383,6 +383,19 @@ class SyntheticDataEvalResult:
 
     classification: ClassificationMetrics
     """Classification metrics for SAE latents as feature detectors"""
+
+    def to_log_dict(self, prefix: str = "") -> dict[str, float | int]:
+        """Convert to a flat dictionary for logging (e.g., to wandb)."""
+        result: dict[str, float | int] = {}
+        for f in fields(self):
+            value = getattr(self, f.name)
+            if isinstance(value, ClassificationMetrics):
+                for sub_f in fields(value):
+                    key = f"{prefix}classification/{sub_f.name}"
+                    result[key] = getattr(value, sub_f.name)
+            else:
+                result[f"{prefix}{f.name}"] = value
+        return result
 
 
 @torch.no_grad()

@@ -1,10 +1,13 @@
+import logging
 import tempfile
 from pathlib import Path
 from typing import Any
 
 import pytest
 import torch
+from huggingface_hub.utils import EntryNotFoundError
 
+import sae_lens.synthetic.synthetic_model as synthetic_model_module
 from sae_lens.synthetic import (
     ConstantFiringProbabilityConfig,
     ExponentialMagnitudeConfig,
@@ -293,10 +296,6 @@ def test_synthetic_model_with_magnitude_configs_generates_samples():
 
 
 def test_synthetic_model_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
-    from huggingface_hub.utils import EntryNotFoundError
-
-    import sae_lens.synthetic.synthetic_model as synthetic_model_module
-
     cfg = SyntheticModelConfig(
         num_features=32,
         hidden_dim=16,
@@ -333,10 +332,6 @@ def test_synthetic_model_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_synthetic_model_from_pretrained_with_model_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from huggingface_hub.utils import EntryNotFoundError
-
-    import sae_lens.synthetic.synthetic_model as synthetic_model_module
-
     cfg = SyntheticModelConfig(
         num_features=32,
         hidden_dim=16,
@@ -429,10 +424,6 @@ def test_load_from_source_with_relative_path() -> None:
 
 
 def test_load_from_source_with_huggingface(monkeypatch: pytest.MonkeyPatch) -> None:
-    from huggingface_hub.utils import EntryNotFoundError
-
-    import sae_lens.synthetic.synthetic_model as synthetic_model_module
-
     cfg = SyntheticModelConfig(
         num_features=32,
         hidden_dim=16,
@@ -671,8 +662,6 @@ def test_synthetic_model_hierarchy_compensation_integration():
 def test_synthetic_model_hierarchy_compensation_clamping(
     caplog: pytest.LogCaptureFixture,
 ):
-    import logging
-
     cfg = SyntheticModelConfig(
         num_features=10,
         hidden_dim=8,

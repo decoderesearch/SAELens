@@ -381,15 +381,7 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
             logger.info(f"Final MCC: {final_eval.mcc:.4f}")
 
             if self.cfg.logger.log_to_wandb:
-                wandb.log(
-                    {
-                        "final/mcc": final_eval.mcc,
-                        "final/sae_l0": final_eval.sae_l0,
-                        "final/true_l0": final_eval.true_l0,
-                        "final/dead_latents": final_eval.dead_latents,
-                        "final/shrinkage": final_eval.shrinkage,
-                    }
-                )
+                wandb.log(final_eval.to_log_dict(prefix="final/"))
 
         # Save outputs
         output_path = None
@@ -422,13 +414,7 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
                 num_samples=self.cfg.eval_samples,
                 batch_size=self.cfg.batch_size,
             )
-            return {
-                "synthetic/mcc": result.mcc,
-                "synthetic/sae_l0": result.sae_l0,
-                "synthetic/true_l0": result.true_l0,
-                "synthetic/dead_latents": result.dead_latents,
-                "synthetic/shrinkage": result.shrinkage,
-            }
+            return result.to_log_dict(prefix="synthetic/")
 
         return evaluator
 

@@ -17,6 +17,57 @@ from sae_lens.synthetic import (
 from sae_lens.synthetic.evals import ExplainedVarianceCalculator
 
 
+class TestSyntheticDataEvalResultToLogDict:
+    def test_returns_all_fields_with_prefix(self) -> None:
+        result = SyntheticDataEvalResult(
+            true_l0=1.5,
+            sae_l0=2.0,
+            dead_latents=5,
+            shrinkage=0.95,
+            explained_variance=0.9,
+            mcc=0.85,
+            uniqueness=0.7,
+            classification=ClassificationMetrics(
+                precision=0.8, recall=0.75, f1_score=0.77, accuracy=0.9
+            ),
+        )
+
+        log_dict = result.to_log_dict(prefix="test/")
+
+        assert log_dict == {
+            "test/true_l0": 1.5,
+            "test/sae_l0": 2.0,
+            "test/dead_latents": 5,
+            "test/shrinkage": 0.95,
+            "test/explained_variance": 0.9,
+            "test/mcc": 0.85,
+            "test/uniqueness": 0.7,
+            "test/classification/precision": 0.8,
+            "test/classification/recall": 0.75,
+            "test/classification/f1_score": 0.77,
+            "test/classification/accuracy": 0.9,
+        }
+
+    def test_empty_prefix(self) -> None:
+        result = SyntheticDataEvalResult(
+            true_l0=1.0,
+            sae_l0=2.0,
+            dead_latents=0,
+            shrinkage=1.0,
+            explained_variance=1.0,
+            mcc=1.0,
+            uniqueness=1.0,
+            classification=ClassificationMetrics(
+                precision=1.0, recall=1.0, f1_score=1.0, accuracy=1.0
+            ),
+        )
+
+        log_dict = result.to_log_dict()
+
+        assert "true_l0" in log_dict
+        assert "classification/precision" in log_dict
+
+
 class TestMeanCorrelationCoefficient:
     def test_identical_features_returns_one(self) -> None:
         """MCC of identical features should be 1.0."""
