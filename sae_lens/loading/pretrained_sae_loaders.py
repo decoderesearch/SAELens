@@ -575,6 +575,8 @@ def _infer_gemma_3_raw_cfg_dict(repo_id: str, folder_name: str) -> dict[str, Any
         "model_name": model_name,
         "hf_hook_point_in": hf_hook_point_in,
     }
+    if "transcoder" in folder_name or "clt" in folder_name:
+        cfg["affine_connection"] = "affine" in folder_name
     if hf_hook_point_out is not None:
         cfg["hf_hook_point_out"] = hf_hook_point_out
 
@@ -614,11 +616,11 @@ def get_gemma_3_config_from_hf(
     if "resid_post" in folder_name:
         hook_name = f"blocks.{layer}.hook_resid_post"
     elif "attn_out" in folder_name:
-        hook_name = f"blocks.{layer}.hook_attn_out"
+        hook_name = f"blocks.{layer}.attn.hook_z"
     elif "mlp_out" in folder_name:
         hook_name = f"blocks.{layer}.hook_mlp_out"
     elif "transcoder" in folder_name or "clt" in folder_name:
-        hook_name = f"blocks.{layer}.ln2.hook_normalized"
+        hook_name = f"blocks.{layer}.hook_mlp_in"
         hook_name_out = f"blocks.{layer}.hook_mlp_out"
     else:
         raise ValueError("Hook name not found in folder_name.")
@@ -643,7 +645,11 @@ def get_gemma_3_config_from_hf(
 
     architecture = "jumprelu"
     if "transcoder" in folder_name or "clt" in folder_name:
-        architecture = "jumprelu_skip_transcoder"
+        architecture = (
+            "jumprelu_skip_transcoder"
+            if raw_cfg_dict.get("affine_connection", False)
+            else "jumprelu_transcoder"
+        )
         d_out = shapes_dict["w_dec"][-1]
 
     cfg = {

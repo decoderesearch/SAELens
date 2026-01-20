@@ -183,7 +183,7 @@ def test_load_sae_config_from_huggingface_gemma_2():
             "transcoder_all/layer_10_width_262k_l0_small_affine",
             "jumprelu_skip_transcoder",
             {
-                "hook_name": "blocks.10.ln2.hook_normalized",
+                "hook_name": "blocks.10.hook_mlp_in",
                 "hook_name_out": "blocks.10.hook_mlp_out",
                 "hf_hook_name": "model.layers.10.pre_feedforward_layernorm.output",
                 "hf_hook_name_out": "model.layers.10.post_feedforward_layernorm.output",
@@ -196,7 +196,7 @@ def test_load_sae_config_from_huggingface_gemma_2():
             "attn_out_all/layer_11_width_16k_l0_small",
             "jumprelu",
             {
-                "hook_name": "blocks.11.hook_attn_out",
+                "hook_name": "blocks.11.attn.hook_z",
                 "hf_hook_name": "model.layers.11.self_attn.o_proj.input",
             },
             16384,
@@ -259,6 +259,7 @@ def test_get_gemma_3_config_from_hf(
                 "model_name": "google/gemma-3-4b-it",
                 "hf_hook_point_in": "model.layers.5.pre_feedforward_layernorm.output",
                 "hf_hook_point_out": "model.layers.5.post_feedforward_layernorm.output",
+                "affine_connection": True,
             },
         ),
         (
@@ -287,6 +288,7 @@ def test_get_gemma_3_config_from_hf(
                 "model_name": "google/gemma-3-270m-pt",
                 "hf_hook_point_in": "model.layers.3.pre_feedforward_layernorm.output",
                 "hf_hook_point_out": "model.layers.3.post_feedforward_layernorm.output",
+                "affine_connection": False,
             },
         ),
     ],
