@@ -1164,6 +1164,9 @@ def _adjust_me_corrections(
     Let T = sum(b[i] / (1 + b[i])).
     Then S = T / (1 - T) and correction[i] = (1 + S) / (parent_prob + base[i]).
 
+    When T >= 1 (over-constrained: sum of target rates too high), we scale down
+    targets proportionally to make the problem feasible.
+
     Args:
         sibling_indices: Feature indices of ME siblings
         parent_base_prob: Base probability of the parent (effective rate after correction)
@@ -1175,17 +1178,24 @@ def _adjust_me_corrections(
 
     base = [base_probs[i].item() for i in sibling_indices]
 
-    # Compute b[i] = base[i] / parent_prob
+    # Compute b[i] = base[i] / parent_prob (target rate given parent active)
     b = [bi / parent_base_prob for bi in base]
 
     # Compute T = sum(b[i] / (1 + b[i]))
     T = sum(bi / (1 + bi) for bi in b)
 
+    # When T >= 1 (over-constrained: sum of target rates too high), it's impossible
+    # to achieve effective rates = base rates. Instead, set corrected probabilities
+    # proportional to base probabilities, preserving relative rates.
     if T >= 1.0:
-        # Sum of desired rates exceeds what's achievable; use simple correction
+        # Set corrected[i] = base[i] * uniform_correction where uniform_correction
+        # is chosen so the highest corrected prob is slightly below 1.0.
+        # This preserves the relative proportions of base probs.
+        max_base = max(base)
+        uniform_correction = 0.95 / max_base  # Target max corrected prob = 0.95
         for i, idx in enumerate(sibling_indices):
             if base[i] > 0:
-                correction_factors[idx] = 1.0 / parent_base_prob
+                correction_factors[idx] = uniform_correction
         return
 
     # Closed-form solution: S = T / (1 - T)
