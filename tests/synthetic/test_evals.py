@@ -106,6 +106,25 @@ class TestMeanCorrelationCoefficient:
         mcc = mean_correlation_coefficient(features, scaled)
         assert abs(mcc - 1.0) < 1e-5
 
+    def test_duplicate_values(self) -> None:
+        features = torch.randn(10, 800)
+        repeated = features[0].expand(10, -1).clone()
+        mcc = mean_correlation_coefficient(features, repeated)
+        assert mcc < 0.3
+
+    def test_duplicate_values_with_different_sizes(self) -> None:
+        features = torch.randn(10, 800)
+        repeated = features[0].expand(2, -1).clone()
+        mcc = mean_correlation_coefficient(features, repeated)
+        assert 0.4 < mcc < 0.6
+
+    def test_parameter_order_does_not_matter(self) -> None:
+        features = torch.randn(10, 800)
+        repeated = features[0].expand(2, -1).clone()
+        mcc1 = mean_correlation_coefficient(features, repeated)
+        mcc2 = mean_correlation_coefficient(repeated, features)
+        assert mcc1 == pytest.approx(mcc2)
+
     def test_partial_match_returns_intermediate_value(self) -> None:
         """MCC with some matching and some orthogonal features."""
         # First 5 features match, last 5 are random

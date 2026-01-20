@@ -23,6 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Do not relax assertion tolerances in tests unless absolutely necessary. Never relax tolerances to mask an underlying bug. Ask for input if you are unsure.
 - Never set random seeds in tests. If you want to check something random that runs fast, generate large number of samples and check the statistics.
 - For statistical tests, don't be afraid to use large number of samples to allow for tight bounds. Please make bounds as tight as possible too.
+- use `pytest.approx` for floating point comparisons in tests, DO NOT use `abs(value) < tolerance`.
 - Do not add doc comments to test functions. The test name should be self-explanatory.
 - NEVER place imports inside of functions. ALWAYS import at the top of the file.
 - Use parentheses for tensor shapes in docs and messages, e.g. (batch_size, num_features)
