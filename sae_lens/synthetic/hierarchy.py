@@ -1084,10 +1084,6 @@ class Hierarchy:
         This reduces effective firing probabilities. The correction factor for each
         feature compensates for this reduction.
 
-        For mutually exclusive children, the correction also accounts for the
-        probability of winning the ME selection (when multiple siblings are active,
-        one is randomly chosen).
-
         When all features are sampled with corrected probabilities and hierarchy
         is applied, the effective firing rate for each feature equals its base
         probability.
@@ -1097,45 +1093,23 @@ class Hierarchy:
                 (num_features,)
 
         Returns:
-            Tensor of shape (num_features,) where correction_factors[i] compensates
-            for both parent deactivation and ME selection. Features not in the
-            hierarchy (roots and features outside any tree) get correction factor
-            of 1.0.
+            Tensor of shape (num_features,) where correction_factors[i] =
+            1 / base_prob[parent]. Features not in the hierarchy (roots and
+            features outside any tree) get correction factor of 1.0.
         """
         num_features = base_firing_probabilities.shape[0]
         correction_factors = torch.ones(
             num_features, dtype=base_firing_probabilities.dtype
         )
 
-        # Track which features are in ME groups (their corrections are set by _adjust_me_corrections)
-        me_features: set[int] = set()
-
         def traverse(node: HierarchyNode, parent_base_prob: float) -> None:
             if node.feature_index is not None:
-                # Only set basic correction if not in an ME group
-                if node.feature_index not in me_features and parent_base_prob > 0:
+                if parent_base_prob > 0:
                     correction_factors[node.feature_index] = 1.0 / parent_base_prob
                 node_prob = base_firing_probabilities[node.feature_index].item()
             else:
                 # Organizational node without feature_index - children see parent's prob
                 node_prob = parent_base_prob
-
-            # Adjust for ME groups - this sets corrections for ME children
-            if node.mutually_exclusive_children and len(node.children) >= 2:
-                me_indices = [
-                    c.feature_index
-                    for c in node.children
-                    if c.feature_index is not None
-                ]
-                if len(me_indices) >= 2:
-                    # Mark these features as ME so traverse won't overwrite their corrections
-                    me_features.update(me_indices)
-                    _adjust_me_corrections(
-                        me_indices,
-                        node_prob,
-                        base_firing_probabilities,
-                        correction_factors,
-                    )
 
             for child in node.children:
                 traverse(child, node_prob)
@@ -1144,71 +1118,6 @@ class Hierarchy:
             traverse(root, 1.0)
 
         return correction_factors
-
-
-def _adjust_me_corrections(
-    sibling_indices: list[int],
-    parent_base_prob: float,
-    base_probs: torch.Tensor,
-    correction_factors: torch.Tensor,
-) -> None:
-    """
-    Adjust correction factors for an ME group using closed-form solution.
-
-    For ME siblings, P(child fires after ME) = corrected × parent_prob × win_prob,
-    where win_prob is the probability of winning the ME selection. Using the
-    approximation win_prob[i] ≈ 1/(1 + S - c[i]) where S = sum(c[j]), we can solve
-    for the corrected probabilities directly.
-
-    Let b[i] = base[i] / parent_prob (target effective rate given parent active).
-    Let T = sum(b[i] / (1 + b[i])).
-    Then S = T / (1 - T) and correction[i] = (1 + S) / (parent_prob + base[i]).
-
-    When T >= 1 (over-constrained: sum of target rates too high), we scale down
-    targets proportionally to make the problem feasible.
-
-    Args:
-        sibling_indices: Feature indices of ME siblings
-        parent_base_prob: Base probability of the parent (effective rate after correction)
-        base_probs: Base firing probabilities tensor
-        correction_factors: Correction factors tensor (modified in place)
-    """
-    if parent_base_prob <= 0:
-        return
-
-    base = [base_probs[i].item() for i in sibling_indices]
-
-    # Compute b[i] = base[i] / parent_prob (target rate given parent active)
-    b = [bi / parent_base_prob for bi in base]
-
-    # Compute T = sum(b[i] / (1 + b[i]))
-    T = sum(bi / (1 + bi) for bi in b)
-
-    # When T >= 1 (over-constrained: sum of target rates too high), it's impossible
-    # to achieve effective rates = base rates. Instead, set corrected probabilities
-    # proportional to base probabilities, preserving relative rates.
-    if T >= 1.0:
-        # Set corrected[i] = base[i] * uniform_correction where uniform_correction
-        # is chosen so the highest corrected prob is slightly below 1.0.
-        # This preserves the relative proportions of base probs.
-        max_base = max(base)
-        uniform_correction = 0.95 / max_base  # Target max corrected prob = 0.95
-        for i, idx in enumerate(sibling_indices):
-            if base[i] > 0:
-                correction_factors[idx] = uniform_correction
-        return
-
-    # Closed-form solution: S = T / (1 - T)
-    S = T / (1 - T)
-
-    # correction[i] = (1 + S) / (parent_prob + base[i])
-    one_plus_S = 1 + S
-    for i, idx in enumerate(sibling_indices):
-        if base[i] > 0:
-            correction = one_plus_S / (parent_base_prob + base[i])
-            # Clamp to ensure corrected prob <= 1
-            max_correction = 1.0 / base[i]
-            correction_factors[idx] = min(correction, max_correction)
 
 
 def generate_hierarchy(
