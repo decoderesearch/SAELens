@@ -1769,11 +1769,13 @@ class TestComputeProbabilityCorrectionFactors:
         assert correction[0] == 1.0
 
         # Children get hierarchy correction (1/parent_prob) * ME correction
-        # ME correction for child1 = 1 + other_sibling_prob = 1 + 0.2 = 1.2
-        # ME correction for child2 = 1 + other_sibling_prob = 1 + 0.3 = 1.3
+        # ME correction uses conditional probs: given parent fires, sibling fires
+        # with prob base_prob[sibling] / base_prob[parent]
+        # ME correction for child1 = 1 + (0.2 / 0.5) = 1 + 0.4 = 1.4
+        # ME correction for child2 = 1 + (0.3 / 0.5) = 1 + 0.6 = 1.6
         hierarchy_correction = 1.0 / 0.5
-        assert correction[1] == pytest.approx(hierarchy_correction * 1.2)
-        assert correction[2] == pytest.approx(hierarchy_correction * 1.3)
+        assert correction[1] == pytest.approx(hierarchy_correction * 1.4)
+        assert correction[2] == pytest.approx(hierarchy_correction * 1.6)
 
     def test_mutual_exclusion_three_siblings(self):
         from sae_lens.synthetic import Hierarchy
@@ -1792,10 +1794,17 @@ class TestComputeProbabilityCorrectionFactors:
         correction = hierarchy.compute_probability_correction_factors(base_probs)
 
         hierarchy_correction = 1.0 / 0.6
-        # ME correction for each = 1 + sum of other siblings' probs
-        assert correction[1] == pytest.approx(hierarchy_correction * (1 + 0.2 + 0.15))
-        assert correction[2] == pytest.approx(hierarchy_correction * (1 + 0.1 + 0.15))
-        assert correction[3] == pytest.approx(hierarchy_correction * (1 + 0.1 + 0.2))
+        parent_prob = 0.6
+        # ME correction for each = 1 + sum of other siblings' conditional probs
+        assert correction[1] == pytest.approx(
+            hierarchy_correction * (1 + (0.2 + 0.15) / parent_prob)
+        )
+        assert correction[2] == pytest.approx(
+            hierarchy_correction * (1 + (0.1 + 0.15) / parent_prob)
+        )
+        assert correction[3] == pytest.approx(
+            hierarchy_correction * (1 + (0.1 + 0.2) / parent_prob)
+        )
 
     def test_mutual_exclusion_root_level(self):
         from sae_lens.synthetic import Hierarchy
@@ -1814,9 +1823,9 @@ class TestComputeProbabilityCorrectionFactors:
         correction = hierarchy.compute_probability_correction_factors(base_probs)
 
         # No hierarchy correction (parent is organizational with prob 1.0)
-        # Only ME correction applies
-        assert correction[0] == pytest.approx(1.0 * (1 + 0.2))
-        assert correction[1] == pytest.approx(1.0 * (1 + 0.3))
+        # ME correction: 1 + other_prob / parent_prob = 1 + other_prob / 1.0
+        assert correction[0] == pytest.approx(1.0 * (1 + 0.2 / 1.0))
+        assert correction[1] == pytest.approx(1.0 * (1 + 0.3 / 1.0))
 
     def test_nested_mutual_exclusion(self):
         from sae_lens.synthetic import Hierarchy
@@ -1840,15 +1849,21 @@ class TestComputeProbabilityCorrectionFactors:
 
         assert correction[0] == 1.0  # root
 
-        # Children of root (ME group)
+        # Children of root (ME group under root with prob 0.8)
         hier_corr_child = 1.0 / 0.8
-        assert correction[1] == pytest.approx(hier_corr_child * (1 + 0.3))
-        assert correction[2] == pytest.approx(hier_corr_child * (1 + 0.4))
+        root_prob = 0.8
+        assert correction[1] == pytest.approx(hier_corr_child * (1 + 0.3 / root_prob))
+        assert correction[2] == pytest.approx(hier_corr_child * (1 + 0.4 / root_prob))
 
-        # Grandchildren (ME group under child1)
+        # Grandchildren (ME group under child1 with prob 0.4)
         hier_corr_grandchild = 1.0 / 0.4
-        assert correction[3] == pytest.approx(hier_corr_grandchild * (1 + 0.15))
-        assert correction[4] == pytest.approx(hier_corr_grandchild * (1 + 0.1))
+        child1_prob = 0.4
+        assert correction[3] == pytest.approx(
+            hier_corr_grandchild * (1 + 0.15 / child1_prob)
+        )
+        assert correction[4] == pytest.approx(
+            hier_corr_grandchild * (1 + 0.1 / child1_prob)
+        )
 
     def test_no_me_no_extra_correction(self):
         from sae_lens.synthetic import Hierarchy
