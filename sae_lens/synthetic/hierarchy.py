@@ -1084,18 +1084,27 @@ class Hierarchy:
         This reduces effective firing probabilities. The correction factor for each
         feature compensates for this reduction.
 
+        When mutual exclusion is enabled for a group of siblings, only one can
+        remain active at a time. This further reduces effective probabilities.
+        The correction uses a first-order approximation: for feature i in an ME
+        group, the survival probability is approximately 1 / (1 + sum of other
+        siblings' probabilities), so the correction multiplier is
+        (1 + sum of other siblings' probs).
+
         When all features are sampled with corrected probabilities and hierarchy
-        is applied, the effective firing rate for each feature equals its base
-        probability.
+        is applied, the effective firing rate for each feature approximately
+        equals its base probability.
 
         Args:
             base_firing_probabilities: Original firing probabilities of shape
                 (num_features,)
 
         Returns:
-            Tensor of shape (num_features,) where correction_factors[i] =
-            1 / base_prob[parent]. Features not in the hierarchy (roots and
-            features outside any tree) get correction factor of 1.0.
+            Tensor of shape (num_features,) with correction factors. For hierarchy,
+            this is 1 / base_prob[parent]. For ME groups, an additional multiplicative
+            factor of (1 + sum_other_sibling_probs) is applied. Features not in the
+            hierarchy (roots and features outside any tree) get correction factor
+            of 1.0.
         """
         num_features = base_firing_probabilities.shape[0]
         correction_factors = torch.ones(
@@ -1103,6 +1112,7 @@ class Hierarchy:
         )
 
         def traverse(node: HierarchyNode, parent_base_prob: float) -> None:
+            # Set hierarchy correction for this node
             if node.feature_index is not None:
                 if parent_base_prob > 0:
                     correction_factors[node.feature_index] = 1.0 / parent_base_prob
@@ -1111,8 +1121,31 @@ class Hierarchy:
                 # Organizational node without feature_index - children see parent's prob
                 node_prob = parent_base_prob
 
+            # Recurse to children first so they get their hierarchy corrections
             for child in node.children:
                 traverse(child, node_prob)
+
+            # After children have hierarchy corrections, apply ME correction
+            # The ME correction is multiplicative on top of hierarchy correction
+            if node.mutually_exclusive_children and len(node.children) >= 2:
+                # Collect base probabilities of children in this ME group
+                child_probs: list[tuple[int, float]] = []
+                for child in node.children:
+                    if child.feature_index is not None:
+                        p = base_firing_probabilities[child.feature_index].item()
+                        child_probs.append((child.feature_index, p))
+
+                if len(child_probs) >= 2:
+                    # Sum of all sibling probabilities
+                    total_prob = sum(p for _, p in child_probs)
+
+                    # For each child, ME correction = 1 + sum of other siblings' probs
+                    # This approximates 1 / P(survives ME | fires), where
+                    # P(survives) ≈ 1 / (1 + expected_other_active)
+                    for feat_idx, p in child_probs:
+                        other_probs_sum = total_prob - p
+                        me_correction = 1.0 + other_probs_sum
+                        correction_factors[feat_idx] *= me_correction
 
         for root in self.roots:
             traverse(root, 1.0)

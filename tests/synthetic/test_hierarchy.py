@@ -1751,3 +1751,179 @@ class TestComputeProbabilityCorrectionFactors:
                 f"Feature {i}: expected rate {expected:.4f}, got {actual:.4f}, "
                 f"diff={abs(actual - expected):.4f} (tolerance={tolerance})"
             )
+
+    def test_simple_mutual_exclusion_correction(self):
+        from sae_lens.synthetic import Hierarchy
+
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        root = HierarchyNode(
+            feature_index=0, children=[child1, child2], mutually_exclusive_children=True
+        )
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        base_probs = torch.tensor([0.5, 0.3, 0.2])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        # Root has no correction
+        assert correction[0] == 1.0
+
+        # Children get hierarchy correction (1/parent_prob) * ME correction
+        # ME correction for child1 = 1 + other_sibling_prob = 1 + 0.2 = 1.2
+        # ME correction for child2 = 1 + other_sibling_prob = 1 + 0.3 = 1.3
+        hierarchy_correction = 1.0 / 0.5
+        assert correction[1] == pytest.approx(hierarchy_correction * 1.2)
+        assert correction[2] == pytest.approx(hierarchy_correction * 1.3)
+
+    def test_mutual_exclusion_three_siblings(self):
+        from sae_lens.synthetic import Hierarchy
+
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        child3 = HierarchyNode(feature_index=3)
+        root = HierarchyNode(
+            feature_index=0,
+            children=[child1, child2, child3],
+            mutually_exclusive_children=True,
+        )
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        base_probs = torch.tensor([0.6, 0.1, 0.2, 0.15])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        hierarchy_correction = 1.0 / 0.6
+        # ME correction for each = 1 + sum of other siblings' probs
+        assert correction[1] == pytest.approx(hierarchy_correction * (1 + 0.2 + 0.15))
+        assert correction[2] == pytest.approx(hierarchy_correction * (1 + 0.1 + 0.15))
+        assert correction[3] == pytest.approx(hierarchy_correction * (1 + 0.1 + 0.2))
+
+    def test_mutual_exclusion_root_level(self):
+        from sae_lens.synthetic import Hierarchy
+
+        child1 = HierarchyNode(feature_index=0)
+        child2 = HierarchyNode(feature_index=1)
+        # Organizational root with ME children (no feature_index)
+        org_root = HierarchyNode(
+            feature_index=None,
+            children=[child1, child2],
+            mutually_exclusive_children=True,
+        )
+        hierarchy = Hierarchy(roots=[org_root], modifier=hierarchy_modifier([org_root]))
+
+        base_probs = torch.tensor([0.3, 0.2])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        # No hierarchy correction (parent is organizational with prob 1.0)
+        # Only ME correction applies
+        assert correction[0] == pytest.approx(1.0 * (1 + 0.2))
+        assert correction[1] == pytest.approx(1.0 * (1 + 0.3))
+
+    def test_nested_mutual_exclusion(self):
+        from sae_lens.synthetic import Hierarchy
+
+        # Create nested ME: root has ME children, one child also has ME grandchildren
+        grandchild1 = HierarchyNode(feature_index=3)
+        grandchild2 = HierarchyNode(feature_index=4)
+        child1 = HierarchyNode(
+            feature_index=1,
+            children=[grandchild1, grandchild2],
+            mutually_exclusive_children=True,
+        )
+        child2 = HierarchyNode(feature_index=2)
+        root = HierarchyNode(
+            feature_index=0, children=[child1, child2], mutually_exclusive_children=True
+        )
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        base_probs = torch.tensor([0.8, 0.4, 0.3, 0.1, 0.15])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        assert correction[0] == 1.0  # root
+
+        # Children of root (ME group)
+        hier_corr_child = 1.0 / 0.8
+        assert correction[1] == pytest.approx(hier_corr_child * (1 + 0.3))
+        assert correction[2] == pytest.approx(hier_corr_child * (1 + 0.4))
+
+        # Grandchildren (ME group under child1)
+        hier_corr_grandchild = 1.0 / 0.4
+        assert correction[3] == pytest.approx(hier_corr_grandchild * (1 + 0.15))
+        assert correction[4] == pytest.approx(hier_corr_grandchild * (1 + 0.1))
+
+    def test_no_me_no_extra_correction(self):
+        from sae_lens.synthetic import Hierarchy
+
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        root = HierarchyNode(
+            feature_index=0,
+            children=[child1, child2],
+            mutually_exclusive_children=False,
+        )
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        base_probs = torch.tensor([0.5, 0.3, 0.2])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        # Without ME, only hierarchy correction applies
+        assert correction[0] == 1.0
+        assert correction[1] == pytest.approx(1.0 / 0.5)
+        assert correction[2] == pytest.approx(1.0 / 0.5)
+
+    def test_me_correction_improves_effective_rates(self):
+        """Verify that ME correction improves effective firing rates.
+
+        With ME, when multiple siblings fire, only one survives. The ME correction
+        compensates for this by boosting sampling probabilities. This test verifies
+        that with correction, effective rates are closer to target than without.
+        """
+        from sae_lens.synthetic import Hierarchy
+
+        # Create hierarchy with ME children
+        children = [HierarchyNode(feature_index=i) for i in range(1, 5)]
+        root = HierarchyNode(
+            feature_index=0, children=children, mutually_exclusive_children=True
+        )
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        # Use moderate probabilities
+        base_probs = torch.tensor([0.8, 0.15, 0.12, 0.1, 0.08])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+        corrected_probs = (base_probs * correction).clamp(max=1.0)
+
+        n_samples = 200_000
+
+        # Sample with corrected probabilities
+        random_vals = torch.rand(n_samples, len(base_probs))
+        activations_corrected = (random_vals < corrected_probs).float()
+        assert hierarchy.modifier is not None
+        result_corrected = hierarchy.modifier(activations_corrected)
+        rates_corrected = result_corrected.mean(dim=0)
+
+        # Sample with uncorrected probabilities (hierarchy only)
+        hierarchy_only_correction = torch.tensor(
+            [1.0, 1.0 / 0.8, 1.0 / 0.8, 1.0 / 0.8, 1.0 / 0.8]
+        )
+        uncorrected_probs = base_probs * hierarchy_only_correction
+        random_vals2 = torch.rand(n_samples, len(base_probs))
+        activations_uncorrected = (random_vals2 < uncorrected_probs).float()
+        result_uncorrected = hierarchy.modifier(activations_uncorrected)
+        rates_uncorrected = result_uncorrected.mean(dim=0)
+
+        # For ME children, corrected rates should be closer to target than uncorrected
+        for i in range(1, 5):
+            target = base_probs[i].item()
+            error_corrected = abs(rates_corrected[i].item() - target)
+            error_uncorrected = abs(rates_uncorrected[i].item() - target)
+
+            # Uncorrected should have lower rates than target (due to ME filtering)
+            assert rates_uncorrected[i].item() < target
+
+            # Corrected should have higher rates than uncorrected
+            assert rates_corrected[i].item() > rates_uncorrected[i].item()
+
+            # Corrected error should be smaller (though not perfect due to approximation)
+            assert error_corrected < error_uncorrected, (
+                f"Feature {i}: corrected error {error_corrected:.4f} should be < "
+                f"uncorrected error {error_uncorrected:.4f}"
+            )

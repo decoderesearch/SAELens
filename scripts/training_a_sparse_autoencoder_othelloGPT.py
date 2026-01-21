@@ -34,6 +34,7 @@ training_tokens = int(1e3)
 train_batch_size_tokens = 2048
 n_steps = int(training_tokens / train_batch_size_tokens)
 
+assert model.cfg.d_mlp is not None
 runner_cfg = LanguageModelSAERunnerConfig(
     sae=GatedTrainingSAEConfig(
         d_in=model.cfg.d_mlp,
