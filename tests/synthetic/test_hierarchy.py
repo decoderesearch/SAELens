@@ -2,7 +2,6 @@ import pytest
 import torch
 
 from sae_lens.synthetic import HierarchyNode, hierarchy_modifier
-from sae_lens.synthetic.hierarchy import ME_CORRECTION_ITERATIONS
 from tests.helpers import to_dense, to_sparse
 
 
@@ -1770,18 +1769,15 @@ class TestComputeProbabilityCorrectionFactors:
         assert correction[0] == 1.0
 
         # Children get hierarchy correction (1/parent_prob) * ME correction
-        # ME correction is computed iteratively: m_i = 1 + sum_j(p_j * m_j) / p_parent
-        # For 2 siblings, closed form is: m_i = (1 + p_j/p_P) / (1 - p_i*p_j/p_P^2)
+        # ME correction = 1 + sum(other_sibling_probs) / parent_prob
         p_parent = 0.5
         p1, p2 = 0.3, 0.2
-        denom = 1 - (p1 * p2) / (p_parent**2)
-        me_1 = (1 + p2 / p_parent) / denom
-        me_2 = (1 + p1 / p_parent) / denom
+        me_1 = 1 + p2 / p_parent  # 1 + 0.2/0.5 = 1.4
+        me_2 = 1 + p1 / p_parent  # 1 + 0.3/0.5 = 1.6
 
         hierarchy_correction = 1.0 / p_parent
-        # Use 2% tolerance since we use 5 iterations which is approximate
-        assert correction[1] == pytest.approx(hierarchy_correction * me_1, rel=0.02)
-        assert correction[2] == pytest.approx(hierarchy_correction * me_2, rel=0.02)
+        assert correction[1] == pytest.approx(hierarchy_correction * me_1)
+        assert correction[2] == pytest.approx(hierarchy_correction * me_2)
 
     def test_mutual_exclusion_three_siblings(self):
         from sae_lens.synthetic import Hierarchy
@@ -1801,22 +1797,18 @@ class TestComputeProbabilityCorrectionFactors:
 
         hierarchy_correction = 1.0 / 0.6
         parent_prob = 0.6
-        child_probs = [0.1, 0.2, 0.15]
 
-        # Compute expected ME corrections iteratively (same as implementation)
-        me = [1.0, 1.0, 1.0]
-        for _ in range(ME_CORRECTION_ITERATIONS):
-            new_me = []
-            for i in range(3):
-                other_expected = sum(
-                    child_probs[j] * me[j] / parent_prob for j in range(3) if j != i
-                )
-                new_me.append(1.0 + other_expected)
-            me = new_me
+        # ME correction = 1 + sum(other_sibling_probs) / parent_prob
+        # For child1 (0.1): others = 0.2 + 0.15 = 0.35
+        # For child2 (0.2): others = 0.1 + 0.15 = 0.25
+        # For child3 (0.15): others = 0.1 + 0.2 = 0.30
+        me_1 = 1 + 0.35 / parent_prob
+        me_2 = 1 + 0.25 / parent_prob
+        me_3 = 1 + 0.30 / parent_prob
 
-        assert correction[1] == pytest.approx(hierarchy_correction * me[0], rel=0.001)
-        assert correction[2] == pytest.approx(hierarchy_correction * me[1], rel=0.001)
-        assert correction[3] == pytest.approx(hierarchy_correction * me[2], rel=0.001)
+        assert correction[1] == pytest.approx(hierarchy_correction * me_1)
+        assert correction[2] == pytest.approx(hierarchy_correction * me_2)
+        assert correction[3] == pytest.approx(hierarchy_correction * me_3)
 
     def test_mutual_exclusion_root_level(self):
         from sae_lens.synthetic import Hierarchy
@@ -1835,15 +1827,14 @@ class TestComputeProbabilityCorrectionFactors:
         correction = hierarchy.compute_probability_correction_factors(base_probs)
 
         # No hierarchy correction (parent is organizational with prob 1.0)
-        # ME correction computed iteratively with parent_prob = 1.0
+        # ME correction = 1 + other_prob / parent_prob = 1 + other_prob
         p_parent = 1.0
         p1, p2 = 0.3, 0.2
-        denom = 1 - (p1 * p2) / (p_parent**2)
-        me_1 = (1 + p2 / p_parent) / denom
-        me_2 = (1 + p1 / p_parent) / denom
+        me_1 = 1 + p2 / p_parent  # 1 + 0.2 = 1.2
+        me_2 = 1 + p1 / p_parent  # 1 + 0.3 = 1.3
 
-        assert correction[0] == pytest.approx(me_1, rel=0.01)
-        assert correction[1] == pytest.approx(me_2, rel=0.01)
+        assert correction[0] == pytest.approx(me_1)
+        assert correction[1] == pytest.approx(me_2)
 
     def test_nested_mutual_exclusion(self):
         from sae_lens.synthetic import Hierarchy
@@ -1870,24 +1861,22 @@ class TestComputeProbabilityCorrectionFactors:
         # Children of root (ME group under root with prob 0.8)
         root_prob = 0.8
         p1, p2 = 0.4, 0.3
-        denom_root = 1 - (p1 * p2) / (root_prob**2)
-        me_child1 = (1 + p2 / root_prob) / denom_root
-        me_child2 = (1 + p1 / root_prob) / denom_root
+        me_child1 = 1 + p2 / root_prob  # 1 + 0.3/0.8 = 1.375
+        me_child2 = 1 + p1 / root_prob  # 1 + 0.4/0.8 = 1.5
 
         hier_corr_child = 1.0 / root_prob
-        assert correction[1] == pytest.approx(hier_corr_child * me_child1, rel=0.01)
-        assert correction[2] == pytest.approx(hier_corr_child * me_child2, rel=0.01)
+        assert correction[1] == pytest.approx(hier_corr_child * me_child1)
+        assert correction[2] == pytest.approx(hier_corr_child * me_child2)
 
         # Grandchildren (ME group under child1 with prob 0.4)
         child1_prob = 0.4
         gc1, gc2 = 0.1, 0.15
-        denom_child = 1 - (gc1 * gc2) / (child1_prob**2)
-        me_gc1 = (1 + gc2 / child1_prob) / denom_child
-        me_gc2 = (1 + gc1 / child1_prob) / denom_child
+        me_gc1 = 1 + gc2 / child1_prob  # 1 + 0.15/0.4 = 1.375
+        me_gc2 = 1 + gc1 / child1_prob  # 1 + 0.1/0.4 = 1.25
 
         hier_corr_grandchild = 1.0 / child1_prob
-        assert correction[3] == pytest.approx(hier_corr_grandchild * me_gc1, rel=0.01)
-        assert correction[4] == pytest.approx(hier_corr_grandchild * me_gc2, rel=0.01)
+        assert correction[3] == pytest.approx(hier_corr_grandchild * me_gc1)
+        assert correction[4] == pytest.approx(hier_corr_grandchild * me_gc2)
 
     def test_no_me_no_extra_correction(self):
         from sae_lens.synthetic import Hierarchy

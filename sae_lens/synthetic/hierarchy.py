@@ -21,10 +21,6 @@ import torch
 
 ActivationsModifier = Callable[[torch.Tensor], torch.Tensor]
 
-# Number of iterations for computing mutual exclusion correction factors.
-# Higher values give more accurate corrections but take longer to compute.
-ME_CORRECTION_ITERATIONS = 10
-
 
 @torch.no_grad()
 def _validate_hierarchy(roots: Sequence[HierarchyNode]) -> None:
@@ -1090,10 +1086,9 @@ class Hierarchy:
 
         When mutual exclusion is enabled for a group of siblings, only one can
         remain active at a time. This further reduces effective probabilities.
-        The ME correction is computed iteratively to account for the fact that
-        siblings also have boosted sampling probabilities. The equation solved
-        is: m_i = 1 + sum_j(p_j * m_j) / parent_prob, where m_i is the ME
-        correction for feature i and the sum is over other siblings j.
+        For feature i in an ME group under parent P, the expected number of
+        competing siblings (given parent fires) is sum(other_base_probs) / P.
+        The ME correction is (1 + expected_competitors).
 
         When all features are sampled with corrected probabilities and hierarchy
         is applied, the effective firing rate for each feature approximately
@@ -1140,25 +1135,16 @@ class Hierarchy:
                         child_probs.append((child.feature_index, p))
 
                 if len(child_probs) >= 2 and node_prob > 0:
-                    # Compute ME corrections iteratively for better accuracy.
-                    # The equation is: m_i = 1 + sum_j(p_j * m_j) / node_prob
-                    # where m_i is the ME correction for feature i, and j ranges
-                    # over other siblings. We solve via fixed-point iteration.
-                    me_corrections = {feat_idx: 1.0 for feat_idx, _ in child_probs}
-
-                    for _ in range(ME_CORRECTION_ITERATIONS):
-                        new_me = {}
-                        for feat_idx, p in child_probs:
-                            other_expected = sum(
-                                other_p * me_corrections[other_idx] / node_prob
-                                for other_idx, other_p in child_probs
-                                if other_idx != feat_idx
-                            )
-                            new_me[feat_idx] = 1.0 + other_expected
-                        me_corrections = new_me
-
-                    for feat_idx, _ in child_probs:
-                        correction_factors[feat_idx] *= me_corrections[feat_idx]
+                    # For each child, ME correction accounts for competition with siblings.
+                    # Given parent fires, sibling j fires with prob base_prob[j] / node_prob
+                    # (after hierarchy correction). Expected competing siblings is
+                    # sum(other_base_probs) / node_prob.
+                    # ME correction = 1 + expected_other_active
+                    total_prob = sum(p for _, p in child_probs)
+                    for feat_idx, p in child_probs:
+                        other_probs_sum = total_prob - p
+                        me_correction = 1.0 + other_probs_sum / node_prob
+                        correction_factors[feat_idx] *= me_correction
 
         for root in self.roots:
             traverse(root, 1.0)
