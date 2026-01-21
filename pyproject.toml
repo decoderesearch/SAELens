@@ -19,7 +19,7 @@ classifiers = ["Topic :: Scientific/Engineering :: Artificial Intelligence"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-transformer-lens = "^2.16.1"
+transformer-lens = ">=2.16.1"
 transformers = "^4.38.1"
 plotly = ">=5.19.0"
 plotly-express = ">=0.4.1"
