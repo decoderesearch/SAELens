@@ -4,7 +4,7 @@ TemporalSAE decomposes activations into:
 1. Predicted codes (from attention over context)
 2. Novel codes (sparse features of the residual)
 
-See: https://arxiv.org/abs/2410.04185
+See: https://arxiv.org/pdf/2511.01836
 """
 
 import math
