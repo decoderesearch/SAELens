@@ -18,6 +18,7 @@ from scipy.optimize import linear_sum_assignment
 from sae_lens.saes.sae import SAE
 from sae_lens.synthetic.activation_generator import ActivationGenerator
 from sae_lens.synthetic.feature_dictionary import FeatureDictionary
+from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.util import cosine_similarities
 
 
@@ -405,6 +406,7 @@ def eval_sae_on_synthetic_data(
     activations_generator: ActivationGenerator,
     num_samples: int = 100_000,
     batch_size: int | None = None,
+    activation_scaler: ActivationScaler | None = None,
 ) -> SyntheticDataEvalResult:
     """
     Evaluate an SAE on synthetic data with known ground truth.
@@ -415,6 +417,8 @@ def eval_sae_on_synthetic_data(
         activations_generator: Generator that produces feature activations
         num_samples: Number of samples to use for evaluation
         batch_size: Batch size for processing. If None, processes all samples at once.
+        activation_scaler: Optional scaler to apply to activations before encoding.
+            If None, no scaling is applied.
 
     Returns:
         SyntheticDataEvalResult containing evaluation metrics
@@ -423,6 +427,9 @@ def eval_sae_on_synthetic_data(
 
     if batch_size is None:
         batch_size = num_samples
+
+    if activation_scaler is None:
+        activation_scaler = ActivationScaler()
 
     # Get decoder and GT features for metrics that don't depend on samples
     sae_decoder = sae.W_dec
@@ -449,9 +456,15 @@ def eval_sae_on_synthetic_data(
 
         hidden_acts = feature_dict(feature_acts)
 
+        # Scale activations before encoding (if scaler is configured)
+        hidden_acts_scaled = activation_scaler.scale(hidden_acts)
+
         # Get SAE reconstructions
-        sae_latents = sae.encode(hidden_acts)
-        sae_output = sae.decode(sae_latents)
+        sae_latents = sae.encode(hidden_acts_scaled)
+        sae_output_scaled = sae.decode(sae_latents)
+
+        # Unscale SAE output
+        sae_output = activation_scaler.unscale(sae_output_scaled)
 
         # Update calculators
         sae_l0_calc.add_batch(sae_latents)

@@ -29,3 +29,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Use parentheses for tensor shapes in docs and messages, e.g. (batch_size, num_features)
 - Keep code simple and readable. Avoid over-engineered or complex code.
 - ALWAYS add tests for new features.
+- In tests, DO NOT use `TrainingSAE.from_dict` to create a SAE. Directly create the SAE class you want using the config for the SAE. There are helpers for creating configs in `tests.helpers`.
+- If you want an SAE with arbitrary parameters, you must call `random_params(sae)` on the SAE to properly initialize the SAE.
+- It it more important that tests verify the correct behavior than that tests pass. Stop and say you need help or are confused rather than writing a trivial test that will pass even if behavior is incorrect.

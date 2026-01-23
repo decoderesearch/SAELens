@@ -405,7 +405,7 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
         def evaluator(
             sae: TrainingSAE[Any],
             data_provider: DataProvider,  # noqa: ARG001
-            activation_scaler: ActivationScaler,  # noqa: ARG001
+            activation_scaler: ActivationScaler,
         ) -> dict[str, Any]:
             result = eval_sae_on_synthetic_data(
                 sae=sae,
@@ -413,6 +413,7 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
                 activations_generator=self.synthetic_model.activation_generator,
                 num_samples=self.cfg.eval_samples,
                 batch_size=self.cfg.batch_size,
+                activation_scaler=activation_scaler,
             )
             return result.to_log_dict(prefix="synthetic/")
 

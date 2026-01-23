@@ -1,9 +1,7 @@
-from typing import Any
-
 import pytest
 import torch
 
-from sae_lens.saes.sae import TrainingSAE
+from sae_lens.saes.standard_sae import StandardTrainingSAE, StandardTrainingSAEConfig
 from sae_lens.synthetic import (
     ActivationGenerator,
     ClassificationMetrics,
@@ -15,6 +13,8 @@ from sae_lens.synthetic import (
     mean_correlation_coefficient,
 )
 from sae_lens.synthetic.evals import ExplainedVarianceCalculator
+from sae_lens.training.activation_scaler import ActivationScaler
+from tests.helpers import random_params
 
 
 class TestSyntheticDataEvalResultToLogDict:
@@ -171,12 +171,11 @@ class TestMeanCorrelationCoefficient:
         assert 0.0 <= mcc <= 1.0
 
 
-EvalSetup = tuple[TrainingSAE[Any], FeatureDictionary, ActivationGenerator]
+EvalSetup = tuple[StandardTrainingSAE, FeatureDictionary, ActivationGenerator]
 
 
 @pytest.fixture
 def eval_setup() -> EvalSetup:
-    """Create a minimal setup for testing eval_sae_on_synthetic_data."""
     hidden_dim = 8
     num_features = 10
 
@@ -187,21 +186,12 @@ def eval_setup() -> EvalSetup:
         firing_probabilities=0.1,
     )
 
-    sae = TrainingSAE.from_dict(
-        {
-            "architecture": "standard",
-            "d_in": hidden_dim,
-            "d_sae": num_features,
-            "activation_fn_str": "relu",
-            "normalize_sae_decoder": False,
-            "apply_b_dec_to_input": True,
-            "dtype": "float32",
-            "device": "cpu",
-            "model_name": "test",
-            "hook_name": "test",
-            "hook_layer": 0,
-        }
+    cfg = StandardTrainingSAEConfig(
+        d_in=hidden_dim,
+        d_sae=num_features,
+        apply_b_dec_to_input=True,
     )
+    sae = StandardTrainingSAE(cfg)
 
     return sae, feature_dict, activations_gen
 
@@ -329,21 +319,12 @@ class TestEvalSaeOnSyntheticData:
             firing_probabilities=0.1,
         )
 
-        sae = TrainingSAE.from_dict(
-            {
-                "architecture": "standard",
-                "d_in": hidden_dim,
-                "d_sae": num_features,
-                "activation_fn_str": "relu",
-                "normalize_sae_decoder": False,
-                "apply_b_dec_to_input": False,
-                "dtype": "float32",
-                "device": "cpu",
-                "model_name": "test",
-                "hook_name": "test",
-                "hook_layer": 0,
-            }
+        cfg = StandardTrainingSAEConfig(
+            d_in=hidden_dim,
+            d_sae=num_features,
+            apply_b_dec_to_input=False,
         )
+        sae = StandardTrainingSAE(cfg)
 
         # Initialize SAE decoder to match ground truth features
         with torch.no_grad():
@@ -373,21 +354,8 @@ class TestEvalSaeOnSyntheticData:
             firing_probabilities=0.1,
         )
 
-        sae = TrainingSAE.from_dict(
-            {
-                "architecture": "standard",
-                "d_in": hidden_dim,
-                "d_sae": num_features,
-                "activation_fn_str": "relu",
-                "normalize_sae_decoder": False,
-                "apply_b_dec_to_input": True,
-                "dtype": "float32",
-                "device": "cpu",
-                "model_name": "test",
-                "hook_name": "test",
-                "hook_layer": 0,
-            }
-        )
+        cfg = StandardTrainingSAEConfig(d_in=hidden_dim, d_sae=num_features)
+        sae = StandardTrainingSAE(cfg)
 
         # Both should run without error
         result_small = eval_sae_on_synthetic_data(
@@ -465,21 +433,8 @@ class TestEvalSaeOnSyntheticData:
             firing_probabilities=0.2,
         )
 
-        sae = TrainingSAE.from_dict(
-            {
-                "architecture": "standard",
-                "d_in": hidden_dim,
-                "d_sae": num_features,
-                "activation_fn_str": "relu",
-                "normalize_sae_decoder": False,
-                "apply_b_dec_to_input": True,
-                "dtype": "float32",
-                "device": "cpu",
-                "model_name": "test",
-                "hook_name": "test",
-                "hook_layer": 0,
-            }
-        )
+        cfg = StandardTrainingSAEConfig(d_in=hidden_dim, d_sae=num_features)
+        sae = StandardTrainingSAE(cfg)
 
         # Run multiple times and check statistical consistency
         num_samples = 10000
@@ -504,6 +459,72 @@ class TestEvalSaeOnSyntheticData:
         for result in results:
             assert result.mcc == results[0].mcc
             assert result.uniqueness == results[0].uniqueness
+
+
+class TestEvalSaeOnSyntheticDataWithActivationScaling:
+    def test_scaled_eval_matches_folded_sae_eval(self) -> None:
+        hidden_dim = 6
+        num_features = 8
+        scaling_factor = 3.0
+
+        feature_dict = FeatureDictionary(
+            num_features=num_features,
+            hidden_dim=hidden_dim,
+        )
+        activations_gen = ActivationGenerator(
+            num_features=num_features,
+            firing_probabilities=0.2,
+        )
+
+        # Create SAE with random weights
+        cfg = StandardTrainingSAEConfig(d_in=hidden_dim, d_sae=num_features)
+        sae = StandardTrainingSAE(cfg)
+        random_params(sae)
+
+        # Create a copy for folding
+        folded_cfg = StandardTrainingSAEConfig(d_in=hidden_dim, d_sae=num_features)
+        folded_sae = StandardTrainingSAE(folded_cfg)
+        folded_sae.load_state_dict(sae.state_dict())
+
+        # Fold the scaling factor into the SAE weights
+        folded_sae.fold_activation_norm_scaling_factor(scaling_factor)
+
+        # Run eval with scaling on original SAE
+        result_with_scaling = eval_sae_on_synthetic_data(
+            sae=sae,
+            feature_dict=feature_dict,
+            activations_generator=activations_gen,
+            num_samples=2_000_000,
+            batch_size=10000,
+            activation_scaler=ActivationScaler(scaling_factor=scaling_factor),
+        )
+
+        # Run eval without scaling on folded SAE
+        result_folded = eval_sae_on_synthetic_data(
+            sae=folded_sae,
+            feature_dict=feature_dict,
+            activations_generator=activations_gen,
+            num_samples=2_000_000,
+            batch_size=10000,
+            activation_scaler=None,
+        )
+
+        # Results should be statistically identical with enough samples
+        assert result_with_scaling.sae_l0 == pytest.approx(
+            result_folded.sae_l0, rel=0.02
+        )
+        assert result_with_scaling.shrinkage == pytest.approx(
+            result_folded.shrinkage, rel=0.02
+        )
+        assert result_with_scaling.explained_variance == pytest.approx(
+            result_folded.explained_variance, rel=0.02
+        )
+        assert result_with_scaling.classification.precision == pytest.approx(
+            result_folded.classification.precision, rel=0.02
+        )
+        assert result_with_scaling.classification.recall == pytest.approx(
+            result_folded.classification.recall, rel=0.02
+        )
 
 
 class TestFeatureUniqueness:
