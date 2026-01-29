@@ -82,6 +82,7 @@ class LoggingConfig:
     log_to_wandb: bool = True
     log_activations_store_to_wandb: bool = False
     log_optimizer_state_to_wandb: bool = False
+    log_weights_to_wandb: bool = True
     wandb_project: str = "sae_lens_training"
     wandb_id: str | None = None
     run_name: str | None = None
@@ -107,7 +108,8 @@ class LoggingConfig:
             type="model",
             metadata=dict(trainer.cfg.__dict__),
         )
-        model_artifact.add_file(str(weights_path))
+        if self.log_weights_to_wandb:
+            model_artifact.add_file(str(weights_path))
         model_artifact.add_file(str(cfg_path))
         wandb.log_artifact(model_artifact, aliases=wandb_aliases)
 
