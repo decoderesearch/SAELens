@@ -59,6 +59,7 @@ mike = "^2.0.0"
 trio = "^0.30.0"
 dictionary-learning = "^0.1.0"
 kaleido = "^1.2.0"
+ipykernel = "^7.1.0"
 
 [tool.poetry.extras]
 mamba = ["mamba-lens"]
