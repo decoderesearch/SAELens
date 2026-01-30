@@ -27,3 +27,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Do not add doc comments to test functions. The test name should be self-explanatory.
 - Never place imports inside of functions. Always import at the top of the file.
 - Use parentheses for tensor shapes in docs and messages, e.g. (batch_size, num_features)
+- Never disable type checking for an entire file, even in tests.
