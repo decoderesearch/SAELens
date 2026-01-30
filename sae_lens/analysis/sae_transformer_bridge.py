@@ -1,12 +1,13 @@
-import logging
+from collections.abc import Callable
 from contextlib import contextmanager
-from typing import Any, Callable
+from typing import Any
 
 import torch
 from transformer_lens.ActivationCache import ActivationCache
 from transformer_lens.hook_points import HookPoint
 from transformer_lens.model_bridge import TransformerBridge
 
+from sae_lens import logger
 from sae_lens.analysis.hooked_sae_transformer import set_deep_attr
 from sae_lens.saes.sae import SAE
 
@@ -49,6 +50,7 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         # Boot parent TransformerBridge
         bridge = TransformerBridge.boot_transformers(model_name, **kwargs)
         # Convert to our class
+        # NOTE: this is super hacky and scary, but I don't know how else to achieve this given TLens' internal code
         bridge.__class__ = cls
         bridge.acts_to_saes = {}  # type: ignore[attr-defined]
         return bridge  # type: ignore[return-value]
@@ -88,7 +90,7 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         if (alias_name not in self.acts_to_saes) and (
             actual_name not in self._hook_registry
         ):
-            logging.warning(
+            logger.warning(
                 f"No hook found for {alias_name}. Skipping. "
                 f"Check model._hook_registry for available hooks."
             )
@@ -118,7 +120,7 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
                 remove the SAE from this hook point. Defaults to None.
         """
         if act_name not in self.acts_to_saes:
-            logging.warning(
+            logger.warning(
                 f"No SAE is attached to {act_name}. There's nothing to reset."
             )
             return
@@ -130,7 +132,7 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
             current_sae.use_error_term = current_sae._original_use_error_term  # type: ignore[attr-defined]
             delattr(current_sae, "_original_use_error_term")
 
-        if prev_sae:
+        if prev_sae is not None:
             set_deep_attr(self, actual_name, prev_sae)
             self._hook_registry[actual_name] = prev_sae  # type: ignore[assignment]
             self.acts_to_saes[act_name] = prev_sae
@@ -321,5 +323,22 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
 
     @property
     def hook_dict(self) -> dict[str, HookPoint]:
-        """Return the hook registry as hook_dict for compatibility."""
-        return self._hook_registry  # type: ignore[return-value]
+        """Return combined hook registry including SAE internal hooks.
+
+        When SAEs are attached, they replace HookPoint entries in the registry.
+        This property returns both the base hooks and any internal hooks from
+        attached SAEs (like hook_sae_acts_post, hook_sae_input, etc.) with
+        their full path names.
+        """
+        hooks: dict[str, HookPoint] = {}
+
+        for name, hook_or_sae in self._hook_registry.items():
+            if isinstance(hook_or_sae, SAE):
+                # Include SAE's internal hooks with full path names
+                for sae_hook_name, sae_hook in hook_or_sae.hook_dict.items():
+                    full_name = f"{name}.{sae_hook_name}"
+                    hooks[full_name] = sae_hook
+            else:
+                hooks[name] = hook_or_sae
+
+        return hooks

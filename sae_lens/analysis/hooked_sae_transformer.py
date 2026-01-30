@@ -126,7 +126,7 @@ class HookedSAETransformer(HookedTransformer):
             current_sae.use_error_term = current_sae._original_use_error_term  # type: ignore
             delattr(current_sae, "_original_use_error_term")
 
-        if prev_sae:
+        if prev_sae is not None:
             set_deep_attr(self, act_name, prev_sae)
             self.acts_to_saes[act_name] = prev_sae
         else:

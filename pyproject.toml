@@ -59,6 +59,7 @@ mike = "^2.0.0"
 trio = "^0.30.0"
 dictionary-learning = "^0.1.0"
 kaleido = "^1.2.0"
+transformer-lens = { version = "3.0.0b1", allow-prereleases = true }
 
 [tool.poetry.extras]
 mamba = ["mamba-lens"]

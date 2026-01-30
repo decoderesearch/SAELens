@@ -11,7 +11,6 @@ from typing import Any, Callable, Literal, TypeVar, overload
 
 import einops
 import torch
-from jaxtyping import Float
 from safetensors.torch import save_file
 from torch import nn
 from transformer_lens.hook_points import HookedRootModule, HookPoint
@@ -397,9 +396,7 @@ class SAE(HookedRootModule):
             sae_out = sae_out + sae_error
         return self.hook_sae_output(sae_out)
 
-    def encode_gated(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_sae"]:
+    def encode_gated(self, x: torch.Tensor) -> torch.Tensor:
         sae_in = self.process_sae_in(x)
 
         # Gating path
@@ -414,9 +411,7 @@ class SAE(HookedRootModule):
 
         return self.hook_sae_acts_post(active_features * feature_magnitudes)
 
-    def encode_jumprelu(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_sae"]:
+    def encode_jumprelu(self, x: torch.Tensor) -> torch.Tensor:
         """
         Calculate SAE features from inputs
         """
@@ -429,9 +424,7 @@ class SAE(HookedRootModule):
             self.activation_fn(hidden_pre) * (hidden_pre > self.threshold)
         )
 
-    def encode_standard(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_sae"]:
+    def encode_standard(self, x: torch.Tensor) -> torch.Tensor:
         """
         Calculate SAE features from inputs
         """
@@ -441,18 +434,14 @@ class SAE(HookedRootModule):
         hidden_pre = self.hook_sae_acts_pre(sae_in @ self.W_enc + self.b_enc)
         return self.hook_sae_acts_post(self.activation_fn(hidden_pre))
 
-    def process_sae_in(
-        self, sae_in: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_sae"]:
+    def process_sae_in(self, sae_in: torch.Tensor) -> torch.Tensor:
         sae_in = sae_in.to(self.dtype)
         sae_in = self.reshape_fn_in(sae_in)
         sae_in = self.hook_sae_input(sae_in)
         sae_in = self.run_time_activation_norm_fn_in(sae_in)
         return sae_in - (self.b_dec * self.cfg.apply_b_dec_to_input)
 
-    def decode(
-        self, feature_acts: Float[torch.Tensor, "... d_sae"]
-    ) -> Float[torch.Tensor, "... d_in"]:
+    def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """Decodes SAE feature activation tensor into a reconstructed input activation tensor."""
         # "... d_sae, d_sae d_in -> ... d_in",
         sae_out = self.hook_sae_recons(

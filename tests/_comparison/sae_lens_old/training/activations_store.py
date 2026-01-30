@@ -13,7 +13,6 @@ import torch
 from datasets import Dataset, DatasetDict, IterableDataset, load_dataset
 from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import HfHubHTTPError
-from jaxtyping import Float, Int
 from requests import HTTPError
 from safetensors.torch import save_file
 from torch.utils.data import DataLoader
@@ -579,8 +578,8 @@ class ActivationsStore:
         d_in: int,
         raise_on_epoch_end: bool,
     ) -> tuple[
-        Float[torch.Tensor, "(total_size context_size) num_layers d_in"],
-        Int[torch.Tensor, "(total_size context_size)"] | None,
+        torch.Tensor,
+        torch.Tensor | None,
     ]:
         """
         Loads `total_size` activations from `cached_activation_dataset`
