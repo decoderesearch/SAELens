@@ -666,7 +666,8 @@ def get_gemma_3_config_from_hf(
         "dataset_path": "monology/pile-uncopyrighted",
         "context_size": 1024,
         "apply_b_dec_to_input": False,
-        "normalize_activations": None,
+        "normalize_activations": "none",
+        "reshape_activations": "none",
         "hf_hook_name": raw_cfg_dict.get("hf_hook_point_in"),
     }
     if hook_name_out is not None:

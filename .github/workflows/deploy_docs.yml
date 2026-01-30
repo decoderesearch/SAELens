@@ -50,10 +50,10 @@ jobs:
         id: cache-sae-config-restore
         uses: actions/cache/restore@v4
         with:
-          key: sae-config-cache-${{ hashFiles('sae_lens/pretrained_saes.yaml') }}
+          key: sae-config-cache-v1-${{ hashFiles('sae_lens/pretrained_saes.yaml') }}
           path: ~/.cache/sae_config_cache
           restore-keys: |
-            sae-config-cache-
+            sae-config-cache-v1-
       - name: Load cached Poetry installation
         id: cached-poetry
         uses: actions/cache@v4

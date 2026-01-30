@@ -230,7 +230,8 @@ def test_get_gemma_3_config_from_hf(
         "dataset_path": "monology/pile-uncopyrighted",
         "context_size": 1024,
         "apply_b_dec_to_input": False,
-        "normalize_activations": None,
+        "normalize_activations": "none",
+        "reshape_activations": "none",
         "device": "cpu",
         **hooks,
     }
@@ -401,7 +402,8 @@ def test_gemma_3_sae_huggingface_loader_with_mocked_download(
         "dataset_path": "monology/pile-uncopyrighted",
         "context_size": 1024,
         "apply_b_dec_to_input": False,
-        "normalize_activations": None,
+        "normalize_activations": "none",
+        "reshape_activations": "none",
         "hf_hook_name": "model.layers.10.output",
         "device": "cpu",
     }
