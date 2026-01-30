@@ -19,11 +19,15 @@ Loss = SingleLoss | LossPerToken
 class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-call]
     """A TransformerBridge subclass that supports attaching SAEs.
 
+    .. warning::
+        This class is in **beta**. The API may change in future versions.
+
     This class provides the same SAE attachment functionality as HookedSAETransformer,
     but for transformer-lens v3's TransformerBridge instead of HookedTransformer.
 
     TransformerBridge is a lightweight wrapper around HuggingFace models that provides
-    hook points without the overhead of HookedTransformer's weight processing.
+    hook points without the overhead of HookedTransformer's weight processing. This is
+    useful for models not natively supported by HookedTransformer, such as Gemma 3.
     """
 
     acts_to_saes: dict[str, SAE[Any]]

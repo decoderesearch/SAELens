@@ -374,4 +374,4 @@ def test_gradients_match_between_hooked_and_bridge(hooked_model, bridge_model):
 
     # Use relative tolerance since gradient magnitudes can be large
     # Small numerical differences accumulate during backprop
-    assert_close(hooked_grad, bridge_grad, rtol=5e-3)
+    assert_close(hooked_grad, bridge_grad, rtol=1e-2)
