@@ -375,3 +375,100 @@ def test_gradients_match_between_hooked_and_bridge(hooked_model, bridge_model):
     # Use relative tolerance since gradient magnitudes can be large
     # Small numerical differences accumulate during backprop
     assert_close(hooked_grad, bridge_grad, rtol=1e-2)
+
+
+def test_add_sae_warns_for_invalid_hook_name(bridge_model, caplog):
+    sae = make_sae(bridge_model.cfg.d_model, "blocks.999.hook_mlp_out")
+
+    with caplog.at_level("WARNING"):
+        bridge_model.add_sae(sae)
+
+    assert "No hook found for blocks.999.hook_mlp_out" in caplog.text
+    assert len(bridge_model.acts_to_saes) == 0
+
+
+def test_reset_sae_warns_for_unattached_sae(bridge_model, caplog):
+    with caplog.at_level("WARNING"):
+        bridge_model._reset_sae("blocks.0.hook_mlp_out")
+
+    assert "No SAE is attached to blocks.0.hook_mlp_out" in caplog.text
+
+
+def test_run_with_cache_with_saes(bridge_model):
+    sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
+
+    logits, cache = bridge_model.run_with_cache_with_saes(PROMPT, saes=[sae])
+
+    assert logits is not None
+    assert "blocks.0.mlp.hook_out.hook_sae_acts_post" in cache
+    assert len(bridge_model.acts_to_saes) == 0
+
+
+def test_run_with_hooks_with_saes():
+    # Use a fresh model to avoid state issues from module-scoped fixtures
+    model = SAETransformerBridge.boot_transformers(MODEL, device="cpu")
+    sae = make_sae(model.cfg.d_model, "blocks.0.hook_mlp_out")
+    hook_called = []
+
+    def hook_fn(act, hook):
+        hook_called.append(hook.name)
+        return act
+
+    # Hook on the base hook point (not SAE internal hooks, which aren't in the registry)
+    logits = model.run_with_hooks_with_saes(
+        PROMPT,
+        saes=[sae],
+        fwd_hooks=[("blocks.0.hook_in", hook_fn)],
+    )
+
+    assert logits is not None
+    assert "blocks.0.hook_in" in hook_called
+    assert len(model.acts_to_saes) == 0
+
+
+def test_run_with_saes_accepts_single_sae(bridge_model):
+    sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
+
+    logits = bridge_model.run_with_saes(PROMPT, saes=sae)
+
+    assert logits is not None
+    assert len(bridge_model.acts_to_saes) == 0
+
+
+def test_saes_context_manager_accepts_single_sae(bridge_model):
+    sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
+
+    with bridge_model.saes(saes=sae):
+        assert len(bridge_model.acts_to_saes) == 1
+        bridge_model(PROMPT)
+
+    assert len(bridge_model.acts_to_saes) == 0
+
+
+def test_reset_saes_accepts_string_act_name(bridge_model):
+    sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
+    act_name = sae.cfg.metadata.hook_name
+
+    bridge_model.add_sae(sae)
+    assert len(bridge_model.acts_to_saes) == 1
+
+    bridge_model.reset_saes(act_names=act_name)
+    assert len(bridge_model.acts_to_saes) == 0
+
+
+def test_reset_saes_raises_on_mismatched_lengths(bridge_model):
+    sae1 = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
+    sae2 = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_resid_pre")
+
+    bridge_model.add_sae(sae1)
+    bridge_model.add_sae(sae2)
+
+    with pytest.raises(
+        ValueError, match="act_names and prev_saes must have the same length"
+    ):
+        bridge_model.reset_saes(
+            act_names=["blocks.0.hook_mlp_out", "blocks.0.hook_resid_pre"],
+            prev_saes=[None],
+        )
+
+    bridge_model.reset_saes()
