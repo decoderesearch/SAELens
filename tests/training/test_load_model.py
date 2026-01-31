@@ -5,7 +5,11 @@ from mamba_lens import HookedMamba
 from transformer_lens import HookedTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from sae_lens.load_model import HookedProxyLM, _extract_logits_from_output, load_model
+from sae_lens.load_model import (
+    HookedProxyLM,
+    _extract_logits_from_output,
+    load_model,
+)
 from tests.helpers import assert_close
 
 
@@ -251,3 +255,17 @@ def test_HookedProxyLM_forward_raises_error_on_stop_at_layer_with_return_both(
             stop_at_layer=3,
             _names_filter=["transformer.h.0"],
         )
+
+
+def test_load_model_raises_on_unknown_model_class():
+    with pytest.raises(ValueError, match="Unknown model class: FakeModelClass"):
+        load_model(
+            model_class_name="FakeModelClass",
+            model_name="some-model",
+            device="cpu",
+        )
+
+
+def test_extract_logits_from_output_raises_on_unknown_type():
+    with pytest.raises(ValueError, match="Unknown output type"):
+        _extract_logits_from_output("not a valid output type")

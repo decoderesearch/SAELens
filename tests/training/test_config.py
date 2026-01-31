@@ -6,6 +6,8 @@ from sae_lens.config import (
     CacheActivationsRunnerConfig,
     LanguageModelSAERunnerConfig,
     _default_cached_activations_path,
+    json_dict,
+    special_token,
 )
 from sae_lens.saes.jumprelu_sae import JumpReLUTrainingSAEConfig
 from sae_lens.saes.standard_sae import StandardTrainingSAEConfig
@@ -88,6 +90,18 @@ def test_default_cached_activations_path():
     )
 
 
+def test_default_cached_activations_path_with_hook_head_index():
+    assert (
+        _default_cached_activations_path(
+            dataset_path="ds_path",
+            model_name="model_name",
+            hook_name="hook_name",
+            hook_head_index=5,
+        )
+        == "activations/ds_path/model_name/hook_name_5"
+    )
+
+
 def test_LanguageModelSAERunnerConfig_to_dict_and_from_dict():
     cfg = LanguageModelSAERunnerConfig(
         sae=JumpReLUTrainingSAEConfig(
@@ -129,3 +143,54 @@ def test_LanguageModelSAERunnerConfig_errors_when_loading_from_dict_with_missing
         test_dict = cfg.to_dict()
         del test_dict["logger"]
         LanguageModelSAERunnerConfig.from_dict(test_dict)
+
+
+def test_json_dict_parses_valid_dict():
+    assert json_dict('{"key": "value"}') == {"key": "value"}
+    assert json_dict('{"a": 1, "b": 2}') == {"a": 1, "b": 2}
+    assert json_dict("{}") == {}
+    assert json_dict("null") is None
+
+
+def test_json_dict_raises_on_non_dict():
+    with pytest.raises(ValueError, match="Expected a dictionary"):
+        json_dict("[1, 2, 3]")
+    with pytest.raises(ValueError, match="Expected a dictionary"):
+        json_dict('"just a string"')
+    with pytest.raises(ValueError, match="Expected a dictionary"):
+        json_dict("123")
+
+
+def test_special_token_parses_none():
+    assert special_token("none") is None
+    assert special_token("None") is None
+    assert special_token("NONE") is None
+
+
+def test_special_token_parses_special_strings():
+    assert special_token("bos") == "bos"
+    assert special_token("eos") == "eos"
+    assert special_token("sep") == "sep"
+
+
+def test_special_token_parses_integers():
+    assert special_token("0") == 0
+    assert special_token("42") == 42
+    assert special_token("-1") == -1
+
+
+def test_special_token_raises_on_invalid():
+    with pytest.raises(ValueError, match="Expected 'bos', 'eos', 'sep', an integer"):
+        special_token("invalid")
+    with pytest.raises(ValueError, match="Expected 'bos', 'eos', 'sep', an integer"):
+        special_token("foo")
+
+
+def test_LanguageModelSAERunnerConfig_exclude_special_tokens_validation():
+    with pytest.raises(
+        ValueError, match="exclude_special_tokens list must contain only integers"
+    ):
+        LanguageModelSAERunnerConfig(
+            sae=StandardTrainingSAEConfig(d_in=10, d_sae=10),
+            exclude_special_tokens=["not", "integers"],  # type: ignore
+        )
