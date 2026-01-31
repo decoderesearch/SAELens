@@ -1,4 +1,3 @@
-# type: ignore
 """Tests for SAETransformerBridge.
 
 These tests verify that SAETransformerBridge behaves identically to HookedSAETransformer
@@ -6,10 +5,12 @@ for the functionality it supports.
 """
 
 import pytest
+import torch
+from transformer_lens.hook_points import HookPoint
 
 from sae_lens.analysis.hooked_sae_transformer import HookedSAETransformer
 from sae_lens.analysis.sae_transformer_bridge import SAETransformerBridge
-from sae_lens.saes.sae import SAE, SAEMetadata
+from sae_lens.saes.sae import SAEMetadata
 from sae_lens.saes.standard_sae import StandardSAE, StandardSAEConfig
 from tests.helpers import TINYSTORIES_MODEL, assert_close, assert_not_close
 
@@ -17,7 +18,7 @@ MODEL = TINYSTORIES_MODEL
 PROMPT = "Hello World!"
 
 
-def make_sae(d_model: int, act_name: str) -> SAE:
+def make_sae(d_model: int, act_name: str) -> StandardSAE:
     sae_cfg = StandardSAEConfig(
         d_in=d_model,
         d_sae=d_model * 2,
@@ -55,13 +56,17 @@ def bridge_model():
 # =============================================================================
 
 
-def test_both_models_produce_same_logits_without_saes(hooked_model, bridge_model):
+def test_both_models_produce_same_logits_without_saes(
+    hooked_model: HookedSAETransformer, bridge_model: SAETransformerBridge
+) -> None:
     hooked_logits = hooked_model(PROMPT)
     bridge_logits = bridge_model(PROMPT)
     assert_close(hooked_logits, bridge_logits, atol=1e-4)
 
 
-def test_both_models_produce_same_logits_with_sae(hooked_model, bridge_model):
+def test_both_models_produce_same_logits_with_sae(
+    hooked_model: HookedSAETransformer, bridge_model: SAETransformerBridge
+) -> None:
     sae = make_sae(hooked_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     hooked_model.add_sae(sae)
@@ -75,7 +80,9 @@ def test_both_models_produce_same_logits_with_sae(hooked_model, bridge_model):
     assert_close(hooked_logits, bridge_logits, atol=1e-4)
 
 
-def test_both_models_produce_same_logits_with_multiple_saes(hooked_model, bridge_model):
+def test_both_models_produce_same_logits_with_multiple_saes(
+    hooked_model: HookedSAETransformer, bridge_model: SAETransformerBridge
+) -> None:
     d_model = hooked_model.cfg.d_model
     saes = [
         make_sae(d_model, "blocks.0.hook_mlp_out"),
@@ -95,7 +102,9 @@ def test_both_models_produce_same_logits_with_multiple_saes(hooked_model, bridge
     assert_close(hooked_logits, bridge_logits, atol=1e-4)
 
 
-def test_use_error_term_preserves_original_output(hooked_model, bridge_model):
+def test_use_error_term_preserves_original_output(
+    hooked_model: HookedSAETransformer, bridge_model: SAETransformerBridge
+) -> None:
     sae = make_sae(hooked_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     hooked_original = hooked_model(PROMPT)
@@ -115,18 +124,24 @@ def test_use_error_term_preserves_original_output(hooked_model, bridge_model):
     assert_close(hooked_with_sae, bridge_with_sae, atol=1e-4)
 
 
-def test_run_with_saes_matches(hooked_model, bridge_model):
+def test_run_with_saes_matches(
+    hooked_model: HookedSAETransformer, bridge_model: SAETransformerBridge
+) -> None:
     sae = make_sae(hooked_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     hooked_logits = hooked_model.run_with_saes(PROMPT, saes=[sae])
     bridge_logits = bridge_model.run_with_saes(PROMPT, saes=[sae])
 
+    assert isinstance(hooked_logits, torch.Tensor)
+    assert isinstance(bridge_logits, torch.Tensor)
     assert_close(hooked_logits, bridge_logits, atol=1e-4)
     assert len(hooked_model.acts_to_saes) == 0
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_saes_context_manager_matches(hooked_model, bridge_model):
+def test_saes_context_manager_matches(
+    hooked_model: HookedSAETransformer, bridge_model: SAETransformerBridge
+) -> None:
     sae = make_sae(hooked_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     with hooked_model.saes(saes=[sae]):
@@ -140,7 +155,9 @@ def test_saes_context_manager_matches(hooked_model, bridge_model):
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_run_with_cache_captures_sae_activations(hooked_model, bridge_model):
+def test_run_with_cache_captures_sae_activations(
+    hooked_model: HookedSAETransformer, bridge_model: SAETransformerBridge
+) -> None:
     sae = make_sae(hooked_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     hooked_model.add_sae(sae)
@@ -151,6 +168,8 @@ def test_run_with_cache_captures_sae_activations(hooked_model, bridge_model):
     bridge_logits, bridge_cache = bridge_model.run_with_cache(PROMPT)
     bridge_model.reset_saes()
 
+    assert isinstance(hooked_logits, torch.Tensor)
+    assert isinstance(bridge_logits, torch.Tensor)
     assert_close(hooked_logits, bridge_logits, atol=1e-4)
 
     # Check SAE activations are in cache (hook names differ due to alias resolution)
@@ -167,13 +186,13 @@ def test_run_with_cache_captures_sae_activations(hooked_model, bridge_model):
 # =============================================================================
 
 
-def test_boot_transformers_loads_model(bridge_model):
+def test_boot_transformers_loads_model(bridge_model: SAETransformerBridge) -> None:
     assert isinstance(bridge_model, SAETransformerBridge)
     assert hasattr(bridge_model, "acts_to_saes")
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_add_sae_changes_output(bridge_model):
+def test_add_sae_changes_output(bridge_model: SAETransformerBridge) -> None:
     original_logits = bridge_model(PROMPT)
 
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
@@ -184,9 +203,10 @@ def test_add_sae_changes_output(bridge_model):
     assert_not_close(original_logits, logits_with_sae)
 
 
-def test_add_sae_updates_acts_to_saes(bridge_model):
+def test_add_sae_updates_acts_to_saes(bridge_model: SAETransformerBridge) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
     act_name = sae.cfg.metadata.hook_name
+    assert act_name is not None
 
     bridge_model.add_sae(sae)
     assert len(bridge_model.acts_to_saes) == 1
@@ -194,10 +214,11 @@ def test_add_sae_updates_acts_to_saes(bridge_model):
     bridge_model.reset_saes()
 
 
-def test_add_sae_overwrites_previous_sae(bridge_model):
+def test_add_sae_overwrites_previous_sae(bridge_model: SAETransformerBridge) -> None:
     sae1 = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
     sae2 = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
     act_name = sae1.cfg.metadata.hook_name
+    assert act_name is not None
 
     bridge_model.add_sae(sae1)
     assert bridge_model.acts_to_saes[act_name] == sae1
@@ -208,9 +229,10 @@ def test_add_sae_overwrites_previous_sae(bridge_model):
     bridge_model.reset_saes()
 
 
-def test_reset_sae_removes_sae(bridge_model):
+def test_reset_sae_removes_sae(bridge_model: SAETransformerBridge) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
     act_name = sae.cfg.metadata.hook_name
+    assert act_name is not None
 
     bridge_model.add_sae(sae)
     assert len(bridge_model.acts_to_saes) == 1
@@ -219,7 +241,7 @@ def test_reset_sae_removes_sae(bridge_model):
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_reset_saes_removes_all_saes(bridge_model):
+def test_reset_saes_removes_all_saes(bridge_model: SAETransformerBridge) -> None:
     d_model = bridge_model.cfg.d_model
     saes = [
         make_sae(d_model, "blocks.0.hook_mlp_out"),
@@ -234,7 +256,9 @@ def test_reset_saes_removes_all_saes(bridge_model):
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_saes_context_manager_removes_saes_after(bridge_model):
+def test_saes_context_manager_removes_saes_after(
+    bridge_model: SAETransformerBridge,
+) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     assert len(bridge_model.acts_to_saes) == 0
@@ -244,11 +268,14 @@ def test_saes_context_manager_removes_saes_after(bridge_model):
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_saes_context_manager_restores_previous_state(bridge_model):
+def test_saes_context_manager_restores_previous_state(
+    bridge_model: SAETransformerBridge,
+) -> None:
     d_model = bridge_model.cfg.d_model
     sae1 = make_sae(d_model, "blocks.0.hook_mlp_out")
     sae2 = make_sae(d_model, "blocks.0.hook_mlp_out")
     act_name = sae1.cfg.metadata.hook_name
+    assert act_name is not None
 
     bridge_model.add_sae(sae1)
     assert bridge_model.acts_to_saes[act_name] == sae1
@@ -260,19 +287,22 @@ def test_saes_context_manager_restores_previous_state(bridge_model):
     bridge_model.reset_saes()
 
 
-def test_run_with_saes_removes_saes_after(bridge_model):
+def test_run_with_saes_removes_saes_after(bridge_model: SAETransformerBridge) -> None:
     original_logits = bridge_model(PROMPT)
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     logits = bridge_model.run_with_saes(PROMPT, saes=[sae])
 
+    assert isinstance(logits, torch.Tensor)
+    assert isinstance(original_logits, torch.Tensor)
     assert_not_close(logits, original_logits)
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_add_sae_with_use_error_term_flag(bridge_model):
+def test_add_sae_with_use_error_term_flag(bridge_model: SAETransformerBridge) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
     act_name = sae.cfg.metadata.hook_name
+    assert act_name is not None
     original_use_error_term = sae.use_error_term
 
     bridge_model.add_sae(sae, use_error_term=True)
@@ -287,7 +317,9 @@ def test_add_sae_with_use_error_term_flag(bridge_model):
     bridge_model.reset_saes()
 
 
-def test_use_error_term_restored_after_exception(bridge_model):
+def test_use_error_term_restored_after_exception(
+    bridge_model: SAETransformerBridge,
+) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
     original_use_error_term = sae.use_error_term
 
@@ -301,7 +333,9 @@ def test_use_error_term_restored_after_exception(bridge_model):
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_hook_dict_includes_sae_hooks_when_attached(bridge_model):
+def test_hook_dict_includes_sae_hooks_when_attached(
+    bridge_model: SAETransformerBridge,
+) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
     bridge_model.add_sae(sae)
 
@@ -314,7 +348,9 @@ def test_hook_dict_includes_sae_hooks_when_attached(bridge_model):
     bridge_model.reset_saes()
 
 
-def test_sae_activations_same_regardless_of_use_error_term(bridge_model):
+def test_sae_activations_same_regardless_of_use_error_term(
+    bridge_model: SAETransformerBridge,
+) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     bridge_model.add_sae(sae, use_error_term=False)
@@ -331,7 +367,9 @@ def test_sae_activations_same_regardless_of_use_error_term(bridge_model):
     assert_close(acts_without, acts_with)
 
 
-def test_sae_activations_match_manual_calculation(bridge_model):
+def test_sae_activations_match_manual_calculation(
+    bridge_model: SAETransformerBridge,
+) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     # Get activations without SAE inserted
@@ -351,7 +389,9 @@ def test_sae_activations_match_manual_calculation(bridge_model):
     assert_close(manual_sae_acts, cached_sae_acts)
 
 
-def test_gradients_match_between_hooked_and_bridge(hooked_model, bridge_model):
+def test_gradients_match_between_hooked_and_bridge(
+    hooked_model: HookedSAETransformer, bridge_model: SAETransformerBridge
+) -> None:
     sae = make_sae(hooked_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     # Run hooked model with gradients
@@ -359,6 +399,7 @@ def test_gradients_match_between_hooked_and_bridge(hooked_model, bridge_model):
     hooked_logits = hooked_model(PROMPT)
     hooked_loss = hooked_logits.sum()
     hooked_loss.backward()
+    assert sae.W_enc.grad is not None
     hooked_grad = sae.W_enc.grad.clone()
     sae.zero_grad()
     hooked_model.reset_saes()
@@ -368,6 +409,7 @@ def test_gradients_match_between_hooked_and_bridge(hooked_model, bridge_model):
     bridge_logits = bridge_model(PROMPT)
     bridge_loss = bridge_logits.sum()
     bridge_loss.backward()
+    assert sae.W_enc.grad is not None
     bridge_grad = sae.W_enc.grad.clone()
     sae.zero_grad()
     bridge_model.reset_saes()
@@ -377,7 +419,9 @@ def test_gradients_match_between_hooked_and_bridge(hooked_model, bridge_model):
     assert_close(hooked_grad, bridge_grad, rtol=1e-2)
 
 
-def test_add_sae_warns_for_invalid_hook_name(bridge_model, caplog):
+def test_add_sae_warns_for_invalid_hook_name(
+    bridge_model: SAETransformerBridge, caplog: pytest.LogCaptureFixture
+) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.999.hook_mlp_out")
 
     with caplog.at_level("WARNING"):
@@ -387,14 +431,16 @@ def test_add_sae_warns_for_invalid_hook_name(bridge_model, caplog):
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_reset_sae_warns_for_unattached_sae(bridge_model, caplog):
+def test_reset_sae_warns_for_unattached_sae(
+    bridge_model: SAETransformerBridge, caplog: pytest.LogCaptureFixture
+) -> None:
     with caplog.at_level("WARNING"):
         bridge_model._reset_sae("blocks.0.hook_mlp_out")
 
     assert "No SAE is attached to blocks.0.hook_mlp_out" in caplog.text
 
 
-def test_run_with_cache_with_saes(bridge_model):
+def test_run_with_cache_with_saes(bridge_model: SAETransformerBridge) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     logits, cache = bridge_model.run_with_cache_with_saes(PROMPT, saes=[sae])
@@ -404,13 +450,14 @@ def test_run_with_cache_with_saes(bridge_model):
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_run_with_hooks_with_saes():
+def test_run_with_hooks_with_saes() -> None:
     # Use a fresh model to avoid state issues from module-scoped fixtures
     model = SAETransformerBridge.boot_transformers(MODEL, device="cpu")
     sae = make_sae(model.cfg.d_model, "blocks.0.hook_mlp_out")
-    hook_called = []
+    hook_called: list[str] = []
 
-    def hook_fn(act, hook):
+    def hook_fn(act: torch.Tensor, hook: HookPoint) -> torch.Tensor:
+        assert hook.name is not None
         hook_called.append(hook.name)
         return act
 
@@ -426,7 +473,7 @@ def test_run_with_hooks_with_saes():
     assert len(model.acts_to_saes) == 0
 
 
-def test_run_with_saes_accepts_single_sae(bridge_model):
+def test_run_with_saes_accepts_single_sae(bridge_model: SAETransformerBridge) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     logits = bridge_model.run_with_saes(PROMPT, saes=sae)
@@ -435,7 +482,9 @@ def test_run_with_saes_accepts_single_sae(bridge_model):
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_saes_context_manager_accepts_single_sae(bridge_model):
+def test_saes_context_manager_accepts_single_sae(
+    bridge_model: SAETransformerBridge,
+) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     with bridge_model.saes(saes=sae):
@@ -445,7 +494,7 @@ def test_saes_context_manager_accepts_single_sae(bridge_model):
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_reset_saes_accepts_string_act_name(bridge_model):
+def test_reset_saes_accepts_string_act_name(bridge_model: SAETransformerBridge) -> None:
     sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
     act_name = sae.cfg.metadata.hook_name
 
@@ -456,7 +505,9 @@ def test_reset_saes_accepts_string_act_name(bridge_model):
     assert len(bridge_model.acts_to_saes) == 0
 
 
-def test_reset_saes_raises_on_mismatched_lengths(bridge_model):
+def test_reset_saes_raises_on_mismatched_lengths(
+    bridge_model: SAETransformerBridge,
+) -> None:
     sae1 = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
     sae2 = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_resid_pre")
 
