@@ -3,6 +3,7 @@ import pytest
 
 from sae_lens.loading.pretrained_saes_directory import (
     PretrainedSAELookup,
+    get_config_overrides,
     get_pretrained_saes_directory,
     get_releases_for_repo_id,
     get_repo_id_and_folder_name,
@@ -149,3 +150,17 @@ def test_get_releases_for_repo_id_found():
 def test_get_releases_for_repo_id_not_found():
     releases = get_releases_for_repo_id("nonexistent/repo")
     assert releases == []
+
+
+def test_get_config_overrides_with_known_release():
+    config_overrides = get_config_overrides(
+        "gpt2-small-res-jb", sae_id="blocks.0.hook_resid_pre"
+    )
+    assert "model_from_pretrained_kwargs" in config_overrides
+    assert config_overrides["model_from_pretrained_kwargs"]["center_writing_weights"]
+    assert config_overrides["neuronpedia_id"] == "gpt2-small/0-res-jb"
+
+
+def test_get_config_overrides_with_unknown_release():
+    config_overrides = get_config_overrides("nonexistent-release", sae_id="sae1")
+    assert config_overrides == {}
