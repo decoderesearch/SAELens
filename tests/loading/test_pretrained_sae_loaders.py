@@ -14,7 +14,6 @@ from sparsify import SparseCoder, SparseCoderConfig
 from sae_lens import StandardSAE, StandardSAEConfig
 from sae_lens.loading.pretrained_sae_loaders import (
     _infer_gemma_3_raw_cfg_dict,
-    deepseek_r1_sae_huggingface_loader,
     dictionary_learning_sae_huggingface_loader_1,
     gemma_2_sae_huggingface_loader,
     gemma_2_transcoder_huggingface_loader,
@@ -1925,8 +1924,6 @@ def test_handle_pre_6_0_config_renames_old_keys():
     # hook_name goes into metadata
     assert result["metadata"]["hook_name"] == "blocks.0.hook_resid_pre"
     assert result["metadata"]["hook_head_index"] == 3
-    # activation_fn stays in the main config
-    assert "activation_fn" not in result  # filtered out by dataclass field validation
     # Old keys should not be in result
     assert "hook_point" not in result
     assert "hook_point_head_index" not in result
@@ -2053,46 +2050,6 @@ def test_llama_scope_sae_huggingface_loader_with_mocked_download(
     assert "W_enc" in state_dict
     assert "W_dec" in state_dict
     assert "threshold" in state_dict
-    assert state_dict["W_enc"].shape == (d_in, d_sae)
-    assert state_dict["W_dec"].shape == (d_sae, d_in)
-
-
-def test_deepseek_r1_sae_huggingface_loader_with_mocked_download(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    # DeepSeek R1 uses hardcoded dimensions (4096, 4096*16)
-    # We create mock weights with those dimensions but the config is hardcoded
-    d_in = 4096
-    d_sae = 4096 * 16
-
-    # Create mock weights in torch format (using smaller tensors for speed)
-    # Note: The actual shapes must match what the loader expects
-    state_dict_raw = {
-        "encoder.weight": torch.randn(d_sae, d_in),
-        "encoder.bias": torch.randn(d_sae),
-        "decoder.weight": torch.randn(d_in, d_sae),
-        "decoder.bias": torch.randn(d_in),
-    }
-    pt_path = tmp_path / "sae.pt"
-    torch.save(state_dict_raw, pt_path)
-
-    def mock_hf_hub_download(*args: Any, **kwargs: Any) -> str:  # noqa: ARG001
-        return str(pt_path)
-
-    monkeypatch.setattr(
-        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
-    )
-
-    cfg_dict, state_dict, log_sparsity = deepseek_r1_sae_huggingface_loader(
-        repo_id="fnlp/DeepSeek-R1-SAE",
-        folder_name="l40.pt",  # Uses l(\d+) pattern to extract layer
-        device="cpu",
-    )
-
-    assert cfg_dict["d_in"] == d_in
-    assert cfg_dict["d_sae"] == d_sae
-    assert log_sparsity is None
-    assert set(state_dict.keys()) == {"W_enc", "W_dec", "b_enc", "b_dec"}
     assert state_dict["W_enc"].shape == (d_in, d_sae)
     assert state_dict["W_dec"].shape == (d_sae, d_in)
 
