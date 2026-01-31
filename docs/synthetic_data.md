@@ -9,6 +9,11 @@ Training SAEs on synthetic data allows you to work with a known ground truth, en
 For a hands-on walkthrough, see the [tutorial notebook](https://github.com/decoderesearch/SAELens/blob/main/tutorials/training_saes_on_synthetic_data.ipynb)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/training_saes_on_synthetic_data.ipynb).
 
+<!-- prettier-ignore-start -->
+!!! info "Beta feature"
+    The synthetic data utilities should be considered in beta, and their API and functionality may change over the next few months. If this is a concern, we recommend pinning your SAELens version to avoid breaking changes.
+<!-- prettier-ignore-end -->
+
 ## Core Concepts
 
 ### Feature Dictionary
