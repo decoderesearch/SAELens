@@ -26,6 +26,7 @@ from sae_lens.loading.pretrained_sae_loaders import (
     get_llama_scope_r1_distill_config_from_hf,
     get_mntss_clt_layer_config_from_hf,
     get_mwhanna_transcoder_config_from_hf,
+    handle_pre_6_0_config,
     load_sae_config_from_huggingface,
     mntss_clt_layer_huggingface_loader,
     read_sae_components_from_disk,
@@ -1868,3 +1869,78 @@ def test_from_pretrained_warns_when_using_registered_repo_id_directly(
             sae_id="blocks.0.hook_resid_pre",
             device="cpu",
         )
+
+
+def test_handle_pre_6_0_config_normalize_activations_bool_true():
+    cfg_dict = {
+        "d_in": 768,
+        "d_sae": 24576,
+        "hook_name": "blocks.0.hook_resid_pre",
+        "normalize_activations": True,
+    }
+    result = handle_pre_6_0_config(cfg_dict)
+    assert result["normalize_activations"] == "expected_average_only_in"
+
+
+def test_handle_pre_6_0_config_normalize_activations_bool_false():
+    cfg_dict = {
+        "d_in": 768,
+        "d_sae": 24576,
+        "hook_name": "blocks.0.hook_resid_pre",
+        "normalize_activations": False,
+    }
+    result = handle_pre_6_0_config(cfg_dict)
+    assert result["normalize_activations"] == "none"
+
+
+def test_handle_pre_6_0_config_topk_architecture():
+    cfg_dict = {
+        "d_in": 768,
+        "d_sae": 24576,
+        "hook_name": "blocks.0.hook_resid_pre",
+        "activation_fn": "topk",
+        "activation_fn_kwargs": {"k": 32},
+    }
+    result = handle_pre_6_0_config(cfg_dict)
+    assert result["architecture"] == "topk"
+    assert result["k"] == 32
+
+
+def test_handle_pre_6_0_config_renames_old_keys():
+    cfg_dict = {
+        "d_in": 768,
+        "d_sae": 24576,
+        "hook_point": "blocks.0.hook_resid_pre",
+        "hook_point_head_index": 3,
+        "activation_fn_str": "relu",
+    }
+    result = handle_pre_6_0_config(cfg_dict)
+    # hook_name goes into metadata
+    assert result["metadata"]["hook_name"] == "blocks.0.hook_resid_pre"
+    assert result["metadata"]["hook_head_index"] == 3
+    # activation_fn stays in the main config
+    assert "activation_fn" not in result  # filtered out by dataclass field validation
+    # Old keys should not be in result
+    assert "hook_point" not in result
+    assert "hook_point_head_index" not in result
+    assert "activation_fn_str" not in result
+
+
+def test_handle_pre_6_0_config_hook_z_reshape():
+    cfg_dict = {
+        "d_in": 768,
+        "d_sae": 24576,
+        "hook_name": "blocks.0.attn.hook_z",
+    }
+    result = handle_pre_6_0_config(cfg_dict)
+    assert result["reshape_activations"] == "hook_z"
+
+
+def test_handle_pre_6_0_config_non_hook_z_no_reshape():
+    cfg_dict = {
+        "d_in": 768,
+        "d_sae": 24576,
+        "hook_name": "blocks.0.hook_resid_pre",
+    }
+    result = handle_pre_6_0_config(cfg_dict)
+    assert result["reshape_activations"] == "none"
