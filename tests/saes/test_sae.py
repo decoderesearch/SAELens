@@ -422,10 +422,6 @@ def test_SAE_from_pretrained_uses_meta_device_optimization(tmp_path: Path):
             "sae_lens.saes.sae.get_config_overrides",
             return_value={},
         ),
-        patch(
-            "sae_lens.saes.sae.get_norm_scaling_factor",
-            return_value=None,
-        ),
     ):
         loaded_sae = SAE.from_pretrained(
             "mock-release", "mock-sae-id", device="cpu", dtype="float32"

@@ -57,28 +57,6 @@ def get_pretrained_saes_directory() -> dict[str, PretrainedSAELookup]:
     return directory
 
 
-def get_norm_scaling_factor(release: str, sae_id: str) -> float | None:
-    """
-    Retrieve the norm_scaling_factor for a specific SAE if it exists.
-
-    Args:
-        release (str): The release name of the SAE.
-        sae_id (str): The ID of the specific SAE.
-
-    Returns:
-        float | None: The norm_scaling_factor if it exists, None otherwise.
-    """
-    package = "sae_lens"
-    yaml_file = files(package).joinpath("pretrained_saes.yaml")
-    with yaml_file.open("r") as file:
-        data = yaml.safe_load(file)
-        if release in data:
-            for sae_info in data[release]["saes"]:
-                if sae_info["id"] == sae_id:
-                    return sae_info.get("norm_scaling_factor")
-    return None
-
-
 def get_repo_id_and_folder_name(release: str, sae_id: str) -> tuple[str, str]:
     saes_directory = get_pretrained_saes_directory()
     sae_info = saes_directory.get(release, None)
