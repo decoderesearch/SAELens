@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,9 @@ from sparsify import SparseCoder, SparseCoderConfig
 from sae_lens import StandardSAE, StandardSAEConfig
 from sae_lens.loading.pretrained_sae_loaders import (
     _infer_gemma_3_raw_cfg_dict,
+    deepseek_r1_sae_huggingface_loader,
     dictionary_learning_sae_huggingface_loader_1,
+    gemma_2_sae_huggingface_loader,
     gemma_2_transcoder_huggingface_loader,
     gemma_3_sae_huggingface_loader,
     get_deepseek_r1_config_from_hf,
@@ -27,11 +30,15 @@ from sae_lens.loading.pretrained_sae_loaders import (
     get_mntss_clt_layer_config_from_hf,
     get_mwhanna_transcoder_config_from_hf,
     handle_pre_6_0_config,
+    llama_scope_r1_distill_sae_huggingface_loader,
+    llama_scope_sae_huggingface_loader,
     load_sae_config_from_huggingface,
     mntss_clt_layer_huggingface_loader,
+    mwhanna_transcoder_huggingface_loader,
     read_sae_components_from_disk,
     sparsify_disk_loader,
     sparsify_huggingface_loader,
+    temporal_sae_huggingface_loader,
 )
 from sae_lens.saes.sae import SAE
 from tests.helpers import assert_close, random_params
@@ -1944,3 +1951,328 @@ def test_handle_pre_6_0_config_non_hook_z_no_reshape():
     }
     result = handle_pre_6_0_config(cfg_dict)
     assert result["reshape_activations"] == "none"
+
+
+def test_gemma_2_sae_huggingface_loader_with_mocked_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # Use smaller dimensions to speed up tests
+    d_in = 128
+    d_sae = 512
+
+    # Create mock weights in npz format
+    W_enc = np.random.randn(d_in, d_sae).astype(np.float32)
+    W_dec = np.random.randn(d_sae, d_in).astype(np.float32)
+    b_enc = np.random.randn(d_sae).astype(np.float32)
+    b_dec = np.random.randn(d_in).astype(np.float32)
+    threshold = np.random.randn(d_sae).astype(np.float32)
+
+    npz_file_path = tmp_path / "params.npz"
+    np.savez(
+        npz_file_path,
+        w_enc=W_enc,
+        w_dec=W_dec,
+        b_enc=b_enc,
+        b_dec=b_dec,
+        threshold=threshold,
+    )
+
+    def mock_hf_hub_download(*args: Any, **kwargs: Any) -> str:  # noqa: ARG001
+        return str(npz_file_path)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+    cfg_dict, state_dict, log_sparsity = gemma_2_sae_huggingface_loader(
+        repo_id="google/gemma-scope-2b-pt-res",
+        folder_name="layer_20/width_16k/average_l0_71",
+        device="cpu",
+    )
+
+    # Config uses hardcoded dimensions from get_gemma_2_config_from_hf, not our mock
+    assert "d_in" in cfg_dict
+    assert "d_sae" in cfg_dict
+    assert log_sparsity is None
+    assert set(state_dict.keys()) == {"W_enc", "W_dec", "b_enc", "b_dec", "threshold"}
+    assert state_dict["W_enc"].shape == (d_in, d_sae)
+    assert state_dict["W_dec"].shape == (d_sae, d_in)
+
+
+def test_llama_scope_sae_huggingface_loader_with_mocked_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # Use smaller dimensions to speed up tests
+    d_in = 128
+    d_sae = 512
+
+    # Create mock config file
+    config_dir = tmp_path / "layer_20" / "k65536"
+    config_dir.mkdir(parents=True)
+    hyperparams = {
+        "d_model": d_in,
+        "d_sae": d_sae,
+        "hook_point_in": "blocks.20.hook_resid_pre",
+        "jump_relu_threshold": 0.001,
+        "dataset_average_activation_norm": {"in": 50.0},
+    }
+    with open(config_dir / "hyperparams.json", "w") as f:
+        json.dump(hyperparams, f)
+
+    # Create mock weights in safetensors format
+    state_dict_raw = {
+        "encoder.weight": torch.randn(d_sae, d_in),
+        "encoder.bias": torch.randn(d_sae),
+        "decoder.weight": torch.randn(d_in, d_sae),
+        "decoder.bias": torch.randn(d_in),
+    }
+    checkpoint_dir = config_dir / "checkpoints"
+    checkpoint_dir.mkdir()
+    safetensors_path = checkpoint_dir / "final.safetensors"
+    save_file(state_dict_raw, str(safetensors_path))
+
+    def mock_hf_hub_download(*args: Any, **kwargs: Any) -> str:  # noqa: ARG001
+        filename = args[1] if len(args) >= 2 else kwargs.get("filename", "")
+        if "hyperparams.json" in filename:
+            return str(config_dir / "hyperparams.json")
+        return str(safetensors_path)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+    cfg_dict, state_dict, log_sparsity = llama_scope_sae_huggingface_loader(
+        repo_id="furonghuang-lab/llama-scope-8b",
+        folder_name="layer_20/k65536",
+        device="cpu",
+    )
+
+    assert cfg_dict["d_in"] == d_in
+    assert cfg_dict["d_sae"] == d_sae
+    assert log_sparsity is None
+    assert "W_enc" in state_dict
+    assert "W_dec" in state_dict
+    assert "threshold" in state_dict
+    assert state_dict["W_enc"].shape == (d_in, d_sae)
+    assert state_dict["W_dec"].shape == (d_sae, d_in)
+
+
+def test_deepseek_r1_sae_huggingface_loader_with_mocked_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # DeepSeek R1 uses hardcoded dimensions (4096, 4096*16)
+    # We create mock weights with those dimensions but the config is hardcoded
+    d_in = 4096
+    d_sae = 4096 * 16
+
+    # Create mock weights in torch format (using smaller tensors for speed)
+    # Note: The actual shapes must match what the loader expects
+    state_dict_raw = {
+        "encoder.weight": torch.randn(d_sae, d_in),
+        "encoder.bias": torch.randn(d_sae),
+        "decoder.weight": torch.randn(d_in, d_sae),
+        "decoder.bias": torch.randn(d_in),
+    }
+    pt_path = tmp_path / "sae.pt"
+    torch.save(state_dict_raw, pt_path)
+
+    def mock_hf_hub_download(*args: Any, **kwargs: Any) -> str:  # noqa: ARG001
+        return str(pt_path)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+    cfg_dict, state_dict, log_sparsity = deepseek_r1_sae_huggingface_loader(
+        repo_id="fnlp/DeepSeek-R1-SAE",
+        folder_name="l40.pt",  # Uses l(\d+) pattern to extract layer
+        device="cpu",
+    )
+
+    assert cfg_dict["d_in"] == d_in
+    assert cfg_dict["d_sae"] == d_sae
+    assert log_sparsity is None
+    assert set(state_dict.keys()) == {"W_enc", "W_dec", "b_enc", "b_dec"}
+    assert state_dict["W_enc"].shape == (d_in, d_sae)
+    assert state_dict["W_dec"].shape == (d_sae, d_in)
+
+
+def test_llama_scope_r1_distill_sae_huggingface_loader_with_mocked_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # Use smaller dimensions to speed up tests
+    d_in = 128
+    expansion_factor = 4
+    d_sae = d_in * expansion_factor
+
+    # Create mock config file
+    config_dir = tmp_path / "layer_40" / "k65536"
+    config_dir.mkdir(parents=True)
+    config = {
+        "d_model": d_in,
+        "expansion_factor": expansion_factor,
+        "hook_point_in": "blocks.40.hook_resid_pre",
+    }
+    with open(config_dir / "config.json", "w") as f:
+        json.dump(config, f)
+
+    # Create mock weights in safetensors format
+    state_dict_raw = {
+        "encoder.weight": torch.randn(d_sae, d_in),
+        "encoder.bias": torch.randn(d_sae),
+        "decoder.weight": torch.randn(d_in, d_sae),
+        "decoder.bias": torch.randn(d_in),
+        "log_jumprelu_threshold": torch.randn(d_sae),
+    }
+    safetensors_path = config_dir / "sae_weights.safetensors"
+    save_file(state_dict_raw, str(safetensors_path))
+
+    def mock_hf_hub_download(*args: Any, **kwargs: Any) -> str:  # noqa: ARG001
+        filename = args[1] if len(args) >= 2 else kwargs.get("filename", "")
+        if "config.json" in filename:
+            return str(config_dir / "config.json")
+        return str(safetensors_path)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+    cfg_dict, state_dict, log_sparsity = llama_scope_r1_distill_sae_huggingface_loader(
+        repo_id="fnlp/Llama-Scope-R1-Distill",
+        folder_name="layer_40/k65536",
+        device="cpu",
+    )
+
+    assert cfg_dict["d_in"] == d_in
+    assert cfg_dict["d_sae"] == d_sae
+    assert log_sparsity is None
+    assert "W_enc" in state_dict
+    assert "W_dec" in state_dict
+    assert "threshold" in state_dict
+    assert state_dict["W_enc"].shape == (d_in, d_sae)
+    assert state_dict["W_dec"].shape == (d_sae, d_in)
+
+
+def test_mwhanna_transcoder_huggingface_loader_with_mocked_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # Use smaller dimensions to avoid memory issues
+    d_in = 128
+    d_sae = 512
+
+    # Create mock config files
+    wandb_config = {
+        "d_model": {"value": d_in},
+        "d_feature": {"value": d_sae},
+        "batch_size": {"value": 1024},
+    }
+    with open(tmp_path / "wandb-config.yaml", "w") as f:
+        yaml.dump(wandb_config, f)
+
+    base_config = {"model_name": "meta-llama/Llama-3.1-8B"}
+    with open(tmp_path / "config.yaml", "w") as f:
+        yaml.dump(base_config, f)
+
+    # Create mock weights in safetensors format
+    state_dict_raw = {
+        "W_enc": torch.randn(d_sae, d_in),
+        "W_dec": torch.randn(d_sae, d_in),  # d_out same as d_in for transcoder
+        "b_enc": torch.randn(d_sae),
+        "b_dec": torch.randn(d_in),
+        "threshold": torch.randn(d_sae),
+    }
+    safetensors_path = tmp_path / "layer_0.safetensors"
+    save_file(state_dict_raw, str(safetensors_path))
+
+    def mock_hf_hub_download(*args: Any, **kwargs: Any) -> str:  # noqa: ARG001
+        filename = args[1] if len(args) >= 2 else kwargs.get("filename", "")
+        if "wandb-config.yaml" in filename:
+            return str(tmp_path / "wandb-config.yaml")
+        if "config.yaml" in filename:
+            return str(tmp_path / "config.yaml")
+        return str(safetensors_path)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+    cfg_dict, state_dict, log_sparsity = mwhanna_transcoder_huggingface_loader(
+        repo_id="mwhanna/llama3.1_8B_transcoders",
+        folder_name="layer_0.safetensors",
+        device="cpu",
+    )
+
+    assert cfg_dict["d_in"] == d_in
+    assert cfg_dict["d_out"] == d_in  # d_out same as d_in
+    assert cfg_dict["d_sae"] == d_sae
+    assert log_sparsity is None
+    assert "W_enc" in state_dict
+    assert "W_dec" in state_dict
+    # W_enc is transposed in the loader
+    assert state_dict["W_enc"].shape == (d_in, d_sae)
+    assert state_dict["W_dec"].shape == (d_sae, d_in)
+
+
+def test_temporal_sae_huggingface_loader_with_mocked_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # Use smaller dimensions to avoid memory issues
+    d_in = 64
+    exp_factor = 4
+    d_sae = int(d_in * exp_factor)
+
+    # Create mock config file with correct structure for temporal SAE
+    config_dir = tmp_path / "layer_0" / "temporal"
+    config_dir.mkdir(parents=True)
+    conf_yaml = {
+        "llm": {"dimin": d_in},
+        "sae": {
+            "exp_factor": exp_factor,
+            "n_heads": 4,
+            "n_attn_layers": 2,
+            "bottleneck_factor": 4,
+            "sae_diff_type": "standard",
+            "kval_topk": 32,
+            "tied_weights": False,
+            "scaling_factor": 1.0,
+        },
+        "data": {"dtype": "float32"},
+    }
+    with open(config_dir / "conf.yaml", "w") as f:
+        yaml.dump(conf_yaml, f)
+
+    # Create mock weights in safetensors format
+    state_dict_raw = {
+        "D": torch.randn(d_sae, d_in),  # decoder
+        "E": torch.randn(d_sae, d_in),  # encoder
+        "b": torch.randn(d_in),  # bias
+        "attn_layers.0.weight": torch.randn(d_sae, d_sae),
+        "attn_layers.1.weight": torch.randn(d_sae, d_sae),
+    }
+    safetensors_path = config_dir / "latest_ckpt.safetensors"
+    save_file(state_dict_raw, str(safetensors_path))
+
+    def mock_hf_hub_download(*args: Any, **kwargs: Any) -> str:  # noqa: ARG001
+        filename = args[1] if len(args) >= 2 else kwargs.get("filename", "")
+        if "conf.yaml" in filename:
+            return str(config_dir / "conf.yaml")
+        return str(safetensors_path)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+    cfg_dict, state_dict, log_sparsity = temporal_sae_huggingface_loader(
+        repo_id="canrager/temporalSAEs",
+        folder_name="layer_0/temporal",
+        device="cpu",
+    )
+
+    assert cfg_dict["d_in"] == d_in
+    assert cfg_dict["d_sae"] == d_sae
+    assert log_sparsity is None
+    assert "W_enc" in state_dict
+    assert "W_dec" in state_dict
+    assert "b_dec" in state_dict
+    assert state_dict["W_enc"].shape == (d_sae, d_in)
+    assert state_dict["W_dec"].shape == (d_sae, d_in)
