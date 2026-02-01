@@ -128,7 +128,11 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
             return
 
         # Always use wrapper - it handles both SAEs and transcoders uniformly
-        wrapper = _SAEWrapper(sae, use_error_term=bool(use_error_term))
+        # If use_error_term not specified, respect SAE's existing setting
+        effective_use_error_term = (
+            use_error_term if use_error_term is not None else sae.use_error_term
+        )
+        wrapper = _SAEWrapper(sae, use_error_term=effective_use_error_term)
 
         # For transcoders (input != output), capture input at input hook
         if input_hook_alias != output_hook_alias:

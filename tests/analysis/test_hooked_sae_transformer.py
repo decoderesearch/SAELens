@@ -496,12 +496,38 @@ def test_add_sae_with_use_error_term(model: HookedSAETransformer, hooked_sae: SA
     assert isinstance(wrapper, _SAEWrapper)
     assert wrapper.use_error_term is False
 
+    # None defaults to SAE's setting (currently False)
     model.add_sae(hooked_sae, use_error_term=None)
     wrapper = get_deep_attr(model, act_name)
     assert isinstance(wrapper, _SAEWrapper)
-    assert wrapper.use_error_term is False  # None defaults to False
+    assert wrapper.use_error_term is False  # SAE's use_error_term is False
 
     model.reset_saes()
+
+
+def test_add_sae_respects_sae_use_error_term_setting(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    """Verifies that add_sae respects the SAE's use_error_term when None is passed."""
+    act_name = hooked_sae.cfg.metadata.hook_name
+
+    # When SAE has use_error_term=True and we pass None, should use SAE's setting
+    hooked_sae._use_error_term = True  # Set directly to avoid deprecation warning
+    model.add_sae(hooked_sae, use_error_term=None)
+    wrapper = get_deep_attr(model, act_name)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.use_error_term is True  # Respects SAE's setting
+
+    model.reset_saes()
+
+    # Explicit False should override SAE's True
+    model.add_sae(hooked_sae, use_error_term=False)
+    wrapper = get_deep_attr(model, act_name)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.use_error_term is False
+
+    model.reset_saes()
+    hooked_sae._use_error_term = False  # Reset to original
 
 
 def test_saes_context_manager_with_use_error_term(

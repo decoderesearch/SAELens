@@ -321,12 +321,39 @@ def test_add_sae_with_use_error_term_flag(bridge_model: SAETransformerBridge) ->
     assert isinstance(wrapper, _SAEWrapper)
     assert wrapper.use_error_term is False
 
+    # None defaults to SAE's setting (currently False)
     bridge_model.add_sae(sae, use_error_term=None)
     wrapper = get_deep_attr(bridge_model, actual_hook)
     assert isinstance(wrapper, _SAEWrapper)
-    assert wrapper.use_error_term is False  # None defaults to False
+    assert wrapper.use_error_term is False  # SAE's use_error_term is False
 
     bridge_model.reset_saes()
+
+
+def test_add_sae_respects_sae_use_error_term_setting(
+    bridge_model: SAETransformerBridge,
+) -> None:
+    hook_name = "blocks.0.hook_mlp_out"
+    sae = make_sae(bridge_model.cfg.d_model, hook_name)
+    actual_hook = bridge_model._resolve_hook_name(hook_name)
+
+    # When SAE has use_error_term=True and we pass None, should use SAE's setting
+    sae._use_error_term = True  # Set directly to avoid deprecation warning
+    bridge_model.add_sae(sae, use_error_term=None)
+    wrapper = get_deep_attr(bridge_model, actual_hook)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.use_error_term is True  # Respects SAE's setting
+
+    bridge_model.reset_saes()
+
+    # Explicit False should override SAE's True
+    bridge_model.add_sae(sae, use_error_term=False)
+    wrapper = get_deep_attr(bridge_model, actual_hook)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.use_error_term is False
+
+    bridge_model.reset_saes()
+    sae._use_error_term = False  # Reset to original
 
 
 def test_use_error_term_restored_after_exception(

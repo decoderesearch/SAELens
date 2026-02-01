@@ -304,3 +304,75 @@ def test_multiple_hook_points_match_old(
 
     new_model.reset_saes()
     old_model.reset_saes()
+
+
+def test_sae_with_use_error_term_preset_matches_old(
+    new_model: HookedSAETransformer, old_model: OldHookedSAETransformer
+):
+    """Verify that when SAE has use_error_term=True set, add_sae() respects it."""
+    act_name = "blocks.0.hook_mlp_out"
+    new_sae = make_sae(new_model, act_name)
+    old_sae = make_old_sae(old_model, act_name)
+    sync_weights(new_sae, old_sae)
+
+    # Set use_error_term=True on SAEs before adding (without explicit arg to add_sae)
+    new_sae._use_error_term = True  # Set directly to avoid deprecation warning
+    old_sae.use_error_term = True
+
+    # Add without specifying use_error_term - should respect SAE's setting
+    new_model.add_sae(new_sae)
+    old_model.add_sae(old_sae)
+
+    new_output = new_model(PROMPT)
+    old_output = old_model(PROMPT)
+
+    assert_close(new_output, old_output, atol=1e-4)
+
+    new_model.reset_saes()
+    old_model.reset_saes()
+
+
+def test_sae_with_use_error_term_preset_gradients_match_old(
+    new_model: HookedSAETransformer, old_model: OldHookedSAETransformer
+):
+    """Verify gradients match when SAE has use_error_term=True set before add_sae()."""
+    act_name = "blocks.0.hook_mlp_out"
+    new_sae = make_sae(new_model, act_name)
+    old_sae = make_old_sae(old_model, act_name)
+    sync_weights(new_sae, old_sae)
+
+    # Set use_error_term=True on SAEs before adding
+    new_sae._use_error_term = True
+    old_sae.use_error_term = True
+
+    # Forward + backward with new model
+    new_model.add_sae(new_sae)
+    new_output = new_model(PROMPT)
+    new_output.sum().backward()
+    new_grads = {
+        name: p.grad.clone()
+        for name, p in new_sae.named_parameters()
+        if p.grad is not None
+    }
+    new_sae.zero_grad()
+    new_model.reset_saes()
+
+    # Forward + backward with old model
+    old_model.add_sae(old_sae)
+    old_output = old_model(PROMPT)
+    old_output.sum().backward()
+    old_grads = {
+        name: p.grad.clone()
+        for name, p in old_sae.named_parameters()
+        if p.grad is not None
+    }
+    old_sae.zero_grad()
+    old_model.reset_saes()
+
+    # Compare outputs
+    assert_close(new_output, old_output, atol=1e-4)
+
+    # Compare gradients
+    for name in new_grads:
+        if name in old_grads:
+            assert_close(new_grads[name], old_grads[name], atol=1e-4)
