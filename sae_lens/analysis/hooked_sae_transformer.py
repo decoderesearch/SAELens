@@ -47,11 +47,6 @@ class _SAEWrapper(nn.Module):
     def sae(self) -> SAE[Any]:
         return self.__dict__["_sae"]
 
-    @property
-    def cfg(self) -> Any:
-        """Delegate to underlying SAE's config for backwards compatibility."""
-        return self.sae.cfg
-
     def capture_input(self, x: torch.Tensor) -> None:
         """Capture input at input hook (for transcoders).
 
@@ -84,10 +79,6 @@ class _SAEWrapper(nn.Module):
         finally:
             self.sae.use_error_term = sae_use_error_term
             self._captured_input = None
-
-    @property
-    def hook_dict(self) -> dict[str, HookPoint]:
-        return self.sae.hook_dict
 
 
 def get_deep_attr(obj: Any, path: str):

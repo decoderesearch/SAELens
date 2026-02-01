@@ -151,6 +151,52 @@ def test_add_sae(model: HookedTransformer, hooked_sae: SAE):
     model.reset_saes()
 
 
+def test_acts_to_saes_property_returns_unwrapped_saes(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    """Verifies that acts_to_saes property returns unwrapped SAEs, not wrappers."""
+    act_name = hooked_sae.cfg.metadata.hook_name
+    model.add_sae(hooked_sae)
+
+    # The property should return the underlying SAE, not the wrapper
+    assert act_name in model.acts_to_saes
+    assert model.acts_to_saes[act_name] == hooked_sae
+    assert not isinstance(model.acts_to_saes[act_name], _SAEWrapper)
+
+    # The internal dict should have wrappers
+    assert isinstance(model._acts_to_saes[act_name], _SAEWrapper)
+
+    model.reset_saes()
+
+
+def test_add_sae_warns_for_invalid_hook(
+    model: HookedSAETransformer, caplog: pytest.LogCaptureFixture
+):
+    """Verifies that add_sae logs a warning when given an invalid hook name."""
+    cfg = StandardSAEConfig(
+        d_in=model.cfg.d_model,
+        d_sae=model.cfg.d_model * 2,
+        metadata=SAEMetadata(hook_name="invalid.hook.name"),
+    )
+    sae = StandardSAE(cfg)
+
+    with caplog.at_level("WARNING"):
+        model.add_sae(sae)
+
+    assert "No hook found for invalid.hook.name" in caplog.text
+    assert len(model._acts_to_saes) == 0
+
+
+def test_reset_sae_warns_for_unattached_sae(
+    model: HookedSAETransformer, caplog: pytest.LogCaptureFixture
+):
+    """Verifies that reset_sae logs a warning when no SAE is attached."""
+    with caplog.at_level("WARNING"):
+        model._reset_sae("blocks.0.hook_mlp_out")
+
+    assert "No SAE is attached to blocks.0.hook_mlp_out" in caplog.text
+
+
 def test_add_sae_overwrites_prev_sae(model: HookedTransformer, hooked_sae: SAE):
     """Verifies that add_sae correctly updates the model's _acts_to_saes dictionary and replaces the HookPoint."""
 
