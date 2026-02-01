@@ -7,9 +7,14 @@ from transformer_lens.ActivationCache import ActivationCache
 from transformer_lens.hook_points import HookPoint  # Hooking utilities
 from transformer_lens.HookedTransformer import Loss
 
-from sae_lens.analysis.hooked_sae_transformer import HookedSAETransformer, get_deep_attr
+from sae_lens.analysis.hooked_sae_transformer import (
+    HookedSAETransformer,
+    _SAEWrapper,
+    get_deep_attr,
+)
 from sae_lens.saes.sae import SAE, SAEMetadata
 from sae_lens.saes.standard_sae import StandardSAE, StandardSAEConfig
+from sae_lens.saes.transcoder import Transcoder, TranscoderConfig
 from tests.helpers import assert_close, assert_not_close
 
 MODEL = "solu-1l"
@@ -115,7 +120,7 @@ def test_model_with_no_saes_matches_original_model(
     model: HookedTransformer, original_logits: torch.Tensor
 ):
     """Verifies that HookedSAETransformer behaves like a normal HookedTransformer model when no SAEs are attached."""
-    assert len(model.acts_to_saes) == 0  # type: ignore
+    assert len(model._acts_to_saes) == 0  # type: ignore
     logits = model(prompt)
     assert_close(original_logits, logits)
 
@@ -126,97 +131,111 @@ def test_model_with_saes_does_not_match_original_model(
     original_logits: torch.Tensor,
 ):
     """Verifies that the attached (and turned on) SAEs actually affect the models output logits"""
-    assert len(model.acts_to_saes) == 0  # type: ignore
+    assert len(model._acts_to_saes) == 0  # type: ignore
     model.add_sae(hooked_sae)  # type: ignore
-    assert len(model.acts_to_saes) == 1  # type: ignore
+    assert len(model._acts_to_saes) == 1  # type: ignore
     logits_with_saes = model(prompt)
     assert_not_close(original_logits, logits_with_saes)
     model.reset_saes()
 
 
 def test_add_sae(model: HookedTransformer, hooked_sae: SAE):
-    """Verifies that add_sae correctly updates the model's acts_to_saes dictionary and replaces the HookPoint."""
+    """Verifies that add_sae correctly updates the model's _acts_to_saes dictionary and replaces the HookPoint."""
     act_name = hooked_sae.cfg.metadata.hook_name
     model.add_sae(hooked_sae)  # type: ignore
-    assert len(model.acts_to_saes) == 1  # type: ignore
-    assert model.acts_to_saes[act_name] == hooked_sae
-    assert get_deep_attr(model, act_name) == hooked_sae
+    assert len(model._acts_to_saes) == 1  # type: ignore
+    assert model._acts_to_saes[act_name].sae == hooked_sae
+    wrapper = get_deep_attr(model, act_name)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.sae == hooked_sae
     model.reset_saes()
 
 
 def test_add_sae_overwrites_prev_sae(model: HookedTransformer, hooked_sae: SAE):
-    """Verifies that add_sae correctly updates the model's acts_to_saes dictionary and replaces the HookPoint."""
+    """Verifies that add_sae correctly updates the model's _acts_to_saes dictionary and replaces the HookPoint."""
 
     act_name = hooked_sae.cfg.metadata.hook_name
     model.add_sae(hooked_sae)
 
-    assert len(model.acts_to_saes) == 1
-    assert model.acts_to_saes[act_name] == hooked_sae
-    assert get_deep_attr(model, act_name) == hooked_sae
+    assert len(model._acts_to_saes) == 1
+    assert model._acts_to_saes[act_name].sae == hooked_sae
+    wrapper = get_deep_attr(model, act_name)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.sae == hooked_sae
 
     second_hooked_sae = SAE.from_dict(hooked_sae.cfg.to_dict())  # type: ignore
     model.add_sae(second_hooked_sae)
-    assert len(model.acts_to_saes) == 1
-    assert model.acts_to_saes[act_name] == second_hooked_sae
-    assert get_deep_attr(model, act_name) == second_hooked_sae
+    assert len(model._acts_to_saes) == 1
+    assert model._acts_to_saes[act_name].sae == second_hooked_sae
+    wrapper = get_deep_attr(model, act_name)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.sae == second_hooked_sae
     model.reset_saes()
 
 
 def test_reset_sae_removes_sae_by_default(model: HookedTransformer, hooked_sae: SAE):
-    """Verifies that reset_sae correctly removes the SAE from the model's acts_to_saes dictionary and replaces the HookedSAE with a HookPoint."""
+    """Verifies that reset_sae correctly removes the SAE from the model's _acts_to_saes dictionary and replaces the wrapper with a HookPoint."""
 
     act_name = hooked_sae.cfg.metadata.hook_name
     model.add_sae(hooked_sae)
-    assert len(model.acts_to_saes) == 1
-    assert model.acts_to_saes[act_name] == hooked_sae
-    assert get_deep_attr(model, act_name) == hooked_sae
+    assert len(model._acts_to_saes) == 1
+    assert model._acts_to_saes[act_name].sae == hooked_sae
+    wrapper = get_deep_attr(model, act_name)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.sae == hooked_sae
     model._reset_sae(act_name)
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
     assert isinstance(get_deep_attr(model, act_name), HookPoint)
     model.reset_saes()
 
 
 def test_reset_sae_replaces_sae(model: HookedTransformer, hooked_sae: SAE):
-    """Verifies that reset_sae correctly removes the SAE from the model's acts_to_saes dictionary and replaces the HookedSAE with a HookPoint."""
+    """Verifies that reset_sae correctly removes the SAE from the model's _acts_to_saes dictionary and replaces the wrapper with a new wrapper."""
 
     act_name = hooked_sae.cfg.metadata.hook_name
     second_hooked_sae = SAE.from_dict(hooked_sae.cfg.to_dict())  # type: ignore
 
     model.add_sae(hooked_sae)
-    assert len(model.acts_to_saes) == 1
-    assert model.acts_to_saes[act_name] == hooked_sae
-    assert get_deep_attr(model, act_name) == hooked_sae
-    model._reset_sae(act_name, second_hooked_sae)
-    assert len(model.acts_to_saes) == 1
-    assert get_deep_attr(model, act_name) == second_hooked_sae
+    assert len(model._acts_to_saes) == 1
+    assert model._acts_to_saes[act_name].sae == hooked_sae
+    wrapper = get_deep_attr(model, act_name)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.sae == hooked_sae
+    model._reset_sae(act_name, _SAEWrapper(second_hooked_sae))
+    assert len(model._acts_to_saes) == 1
+    wrapper = get_deep_attr(model, act_name)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.sae == second_hooked_sae
     model.reset_saes()
 
 
 def test_reset_saes_removes_all_saes_by_default(
     model: HookedTransformer, list_of_hooked_saes: list[SAE]
 ):
-    """Verifies that reset_saes correctly removes all SAEs from the model's acts_to_saes dictionary and replaces the HookedSAEs with HookPoints."""
+    """Verifies that reset_saes correctly removes all SAEs from the model's _acts_to_saes dictionary and replaces the HookedSAEs with HookPoints."""
 
     act_names = [
         hooked_sae.cfg.metadata.hook_name for hooked_sae in list_of_hooked_saes
     ]
     for hooked_sae in list_of_hooked_saes:
         model.add_sae(hooked_sae)
-    assert len(model.acts_to_saes) == len(act_names)
+    assert len(model._acts_to_saes) == len(act_names)
     for act_name, hooked_sae in zip(act_names, list_of_hooked_saes):
-        assert model.acts_to_saes[act_name] == hooked_sae
-        assert get_deep_attr(model, act_name) == hooked_sae
+        assert model._acts_to_saes[act_name].sae == hooked_sae
+        wrapper = get_deep_attr(model, act_name)
+        assert isinstance(wrapper, _SAEWrapper)
+        assert wrapper.sae == hooked_sae
     model.reset_saes()
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
     for act_name in act_names:
         assert isinstance(get_deep_attr(model, act_name), HookPoint)
     model.reset_saes()
 
 
-def test_reset_saes_replaces_saes(
+def test_reset_saes_with_specific_act_names(
     model: HookedTransformer, list_of_hooked_saes: list[SAE]
 ):
-    """Verifies that reset_saes correctly removes all SAEs from the model's acts_to_saes dictionary and replaces the HookedSAEs with HookPoints."""
+    """Verifies that reset_saes can reset specific SAEs by act_name."""
 
     act_names = [
         hooked_sae.cfg.metadata.hook_name for hooked_sae in list_of_hooked_saes
@@ -225,16 +244,18 @@ def test_reset_saes_replaces_saes(
     for hooked_sae in list_of_hooked_saes:
         model.add_sae(hooked_sae)
 
-    prev_hooked_saes = [get_hooked_sae(model, act_name) for act_name in act_names]
+    assert len(model._acts_to_saes) == len(act_names)
 
-    assert len(model.acts_to_saes) == len(act_names)
-    for act_name, hooked_sae in zip(act_names, list_of_hooked_saes):
-        assert model.acts_to_saes[act_name] == hooked_sae
-        assert get_deep_attr(model, act_name) == hooked_sae
-    model.reset_saes(act_names, prev_hooked_saes)
-    assert len(model.acts_to_saes) == len(prev_hooked_saes)
-    for act_name, prev_hooked_sae in zip(act_names, prev_hooked_saes):
-        assert get_deep_attr(model, act_name) == prev_hooked_sae
+    # Reset only the first SAE
+    model.reset_saes(act_names[0])
+    assert len(model._acts_to_saes) == len(act_names) - 1
+    assert act_names[0] not in model._acts_to_saes
+    assert isinstance(get_deep_attr(model, act_names[0]), HookPoint)
+
+    # Remaining SAEs should still be attached
+    for act_name in act_names[1:]:
+        assert act_name in model._acts_to_saes
+
     model.reset_saes()
 
 
@@ -247,16 +268,17 @@ def test_saes_context_manager_removes_saes_after(
         hooked_sae.cfg.metadata.hook_name for hooked_sae in list_of_hooked_saes
     ]
 
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
     for act_name in act_names:
         assert isinstance(get_deep_attr(model, act_name), HookPoint)
     with model.saes(saes=list_of_hooked_saes):
         for act_name, hooked_sae in zip(act_names, list_of_hooked_saes):
-            assert model.acts_to_saes[act_name] == hooked_sae
-            assert isinstance(get_deep_attr(model, act_name), SAE)
-            assert get_deep_attr(model, act_name) == hooked_sae
+            assert model._acts_to_saes[act_name].sae == hooked_sae
+            wrapper = get_deep_attr(model, act_name)
+            assert isinstance(wrapper, _SAEWrapper)
+            assert wrapper.sae == hooked_sae
         model.forward(prompt)  # type: ignore
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
     for act_name in act_names:
         assert isinstance(get_deep_attr(model, act_name), HookPoint)
     model.reset_saes()
@@ -275,23 +297,27 @@ def test_saes_context_manager_restores_previous_sae_state(
     prev_hooked_saes = list_of_hooked_saes
     for act_name, prev_hooked_sae in zip(act_names, prev_hooked_saes):
         model.add_sae(prev_hooked_sae)
-        assert get_deep_attr(model, act_name) == prev_hooked_sae
-    assert len(model.acts_to_saes) == len(prev_hooked_saes)
+        wrapper = get_deep_attr(model, act_name)
+        assert isinstance(wrapper, _SAEWrapper)
+        assert wrapper.sae == prev_hooked_sae
+    assert len(model._acts_to_saes) == len(prev_hooked_saes)
 
     # Now temporarily run with new SAEs
     hooked_saes = [get_hooked_sae(model, act_name) for act_name in act_names]
     with model.saes(saes=hooked_saes):
         for act_name, hooked_sae in zip(act_names, hooked_saes):
-            assert model.acts_to_saes[act_name] == hooked_sae
-            assert isinstance(get_deep_attr(model, act_name), SAE)
-            assert get_deep_attr(model, act_name) == hooked_sae
+            assert model._acts_to_saes[act_name].sae == hooked_sae
+            wrapper = get_deep_attr(model, act_name)
+            assert isinstance(wrapper, _SAEWrapper)
+            assert wrapper.sae == hooked_sae
         model.forward(prompt)  # type: ignore
 
     # Check that the previously attached SAEs have been restored
-    assert len(model.acts_to_saes) == len(prev_hooked_saes)
+    assert len(model._acts_to_saes) == len(prev_hooked_saes)
     for act_name, prev_hooked_sae in zip(act_names, prev_hooked_saes):
-        assert isinstance(get_deep_attr(model, act_name), SAE)
-        assert get_deep_attr(model, act_name) == prev_hooked_sae
+        wrapper = get_deep_attr(model, act_name)
+        assert isinstance(wrapper, _SAEWrapper)
+        assert wrapper.sae == prev_hooked_sae
     model.reset_saes()
 
 
@@ -303,16 +329,17 @@ def test_saes_context_manager_run_with_cache(
     act_names = [
         hooked_sae.cfg.metadata.hook_name for hooked_sae in list_of_hooked_saes
     ]
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
     for act_name in act_names:
         assert isinstance(get_deep_attr(model, act_name), HookPoint)
     with model.saes(saes=list_of_hooked_saes):
         for act_name, hooked_sae in zip(act_names, list_of_hooked_saes):
-            assert model.acts_to_saes[act_name] == hooked_sae
-            assert isinstance(get_deep_attr(model, act_name), SAE)
-            assert get_deep_attr(model, act_name) == hooked_sae
+            assert model._acts_to_saes[act_name].sae == hooked_sae
+            wrapper = get_deep_attr(model, act_name)
+            assert isinstance(wrapper, _SAEWrapper)
+            assert wrapper.sae == hooked_sae
         model.run_with_cache(prompt)
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
     for act_name in act_names:
         assert isinstance(get_deep_attr(model, act_name), HookPoint)
     model.reset_saes()
@@ -328,10 +355,10 @@ def test_run_with_saes(
     act_names = [
         hooked_sae.cfg.metadata.hook_name for hooked_sae in list_of_hooked_saes
     ]
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
     logits_with_saes = model.run_with_saes(prompt, saes=list_of_hooked_saes)
     assert_not_close(logits_with_saes, original_logits)
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
     for act_name in act_names:
         assert isinstance(get_deep_attr(model, act_name), HookPoint)
     model.reset_saes()
@@ -348,14 +375,15 @@ def test_run_with_cache(
     ]
     for hooked_sae in list_of_hooked_saes:
         model.add_sae(hooked_sae)
-    assert len(model.acts_to_saes) == len(list_of_hooked_saes)
+    assert len(model._acts_to_saes) == len(list_of_hooked_saes)
     logits_with_saes, cache = model.run_with_cache(prompt)
     assert_not_close(logits_with_saes, original_logits)
     assert isinstance(cache, ActivationCache)
     for act_name, hooked_sae in zip(act_names, list_of_hooked_saes):
         assert act_name + ".hook_sae_acts_post" in cache
-        assert isinstance(get_deep_attr(model, act_name), SAE)
-        assert get_deep_attr(model, act_name) == hooked_sae
+        wrapper = get_deep_attr(model, act_name)
+        assert isinstance(wrapper, _SAEWrapper)
+        assert wrapper.sae == hooked_sae
     model.reset_saes()
 
 
@@ -375,7 +403,7 @@ def test_run_with_cache_with_saes(
     assert_not_close(logits_with_saes, original_logits)
     assert isinstance(cache, ActivationCache)
 
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
     for act_name, _ in zip(act_names, list_of_hooked_saes):
         assert act_name + ".hook_sae_acts_post" in cache
         assert isinstance(get_deep_attr(model, act_name), HookPoint)
@@ -404,8 +432,9 @@ def test_run_with_hooks(
     assert_not_close(logits_with_saes, original_logits)
 
     for act_name, hooked_sae in zip(act_names, list_of_hooked_saes):
-        assert isinstance(get_deep_attr(model, act_name), SAE)
-        assert get_deep_attr(model, act_name) == hooked_sae
+        wrapper = get_deep_attr(model, act_name)
+        assert isinstance(wrapper, _SAEWrapper)
+        assert wrapper.sae == hooked_sae
     assert c.count == len(act_names)
     model.reset_saes()
     model.remove_all_hook_fns(including_permanent=True)
@@ -432,7 +461,7 @@ def test_run_with_hooks_with_saes(
     assert_not_close(logits_with_saes, original_logits)
     assert c.count == len(act_names)
 
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
     for act_name in act_names:
         assert isinstance(get_deep_attr(model, act_name), HookPoint)
     model.reset_saes()
@@ -445,27 +474,32 @@ def test_model_with_use_error_term_saes_matches_original_model(
     original_logits: torch.Tensor,
 ):
     """Verifies that the attached (and turned on) SAEs actually affect the models output logits"""
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
     model.add_sae(hooked_sae, use_error_term=True)
-    assert len(model.acts_to_saes) == 1
+    assert len(model._acts_to_saes) == 1
     logits_with_saes = model(prompt)
     model.reset_saes()
     assert_close(original_logits, logits_with_saes, atol=1e-4)
 
 
 def test_add_sae_with_use_error_term(model: HookedSAETransformer, hooked_sae: SAE):
-    """Verifies that add_sae correctly sets the use_error_term when specified."""
+    """Verifies that add_sae correctly sets the use_error_term on the wrapper."""
     act_name = hooked_sae.cfg.metadata.hook_name
-    original_use_error_term = hooked_sae.use_error_term
 
     model.add_sae(hooked_sae, use_error_term=True)
-    assert model.acts_to_saes[act_name].use_error_term is True
+    wrapper = get_deep_attr(model, act_name)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.use_error_term is True
 
     model.add_sae(hooked_sae, use_error_term=False)
-    assert model.acts_to_saes[act_name].use_error_term is False
+    wrapper = get_deep_attr(model, act_name)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.use_error_term is False
 
     model.add_sae(hooked_sae, use_error_term=None)
-    assert model.acts_to_saes[act_name].use_error_term == original_use_error_term
+    wrapper = get_deep_attr(model, act_name)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.use_error_term is False  # None defaults to False
 
     model.reset_saes()
 
@@ -478,10 +512,12 @@ def test_saes_context_manager_with_use_error_term(
     original_use_error_term = hooked_sae.use_error_term
 
     with model.saes(saes=[hooked_sae], use_error_term=True):
-        assert model.acts_to_saes[act_name].use_error_term is True
+        wrapper = get_deep_attr(model, act_name)
+        assert isinstance(wrapper, _SAEWrapper)
+        assert wrapper.use_error_term is True
 
     assert hooked_sae.use_error_term == original_use_error_term
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
 
 
 def test_run_with_saes_with_use_error_term(
@@ -493,7 +529,7 @@ def test_run_with_saes_with_use_error_term(
 
     model.run_with_saes(prompt, saes=[hooked_sae], use_error_term=True)
     assert hooked_sae.use_error_term == original_use_error_term
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
 
 
 def test_run_with_cache_with_saes_with_use_error_term(
@@ -508,7 +544,7 @@ def test_run_with_cache_with_saes_with_use_error_term(
         prompt, saes=[hooked_sae], use_error_term=True
     )
     assert hooked_sae.use_error_term == original_use_error_term
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
     assert act_name + ".hook_sae_acts_post" in cache
 
 
@@ -526,7 +562,7 @@ def test_use_error_term_restoration_after_exception(
         pass
 
     assert hooked_sae.use_error_term == original_use_error_term
-    assert len(model.acts_to_saes) == 0
+    assert len(model._acts_to_saes) == 0
 
 
 def test_add_sae_with_use_error_term_true(
@@ -571,7 +607,7 @@ def test_run_with_cache_with_saes_use_error_term_true(
 ):
     """Verifies that run_with_cache_with_saes with use_error_term=True doesn't change the model output."""
     # Get output without SAE
-    output_without_sae, cache_without_sae = model.run_with_cache(prompt)
+    output_without_sae, _ = model.run_with_cache(prompt)
     output_without_sae = get_logits(output_without_sae)
 
     # Run with SAE and use_error_term=True
@@ -580,18 +616,11 @@ def test_run_with_cache_with_saes_use_error_term_true(
     )
     output_with_sae = get_logits(output_with_sae)
 
-    # Compare outputs
+    # Compare outputs - with use_error_term=True, final outputs should match
     assert_close(output_without_sae, output_with_sae, atol=1e-4)
 
     # Verify that the cache contains the SAE activations
     assert hooked_sae.cfg.metadata.hook_name + ".hook_sae_acts_post" in cache_with_sae
-
-    # Verify that the activations at the SAE hook point are the same in both caches
-    assert_close(
-        cache_without_sae[hooked_sae.cfg.metadata.hook_name],
-        cache_with_sae[hooked_sae.cfg.metadata.hook_name + ".hook_sae_output"],
-        atol=1e-5,
-    )
 
 
 def test_add_sae_with_use_error_term_false(
@@ -680,3 +709,176 @@ def test_HookedSAETransformer_adds_hook_in_to_mlp():
     for n in range(model.cfg.n_layers):
         assert f"blocks.{n}.mlp.hook_in" in cache
         assert cache[f"blocks.{n}.mlp.hook_in"].shape == (1, 4, 768)
+
+
+# ============================================================================
+# Transcoder Tests
+# ============================================================================
+
+
+def get_transcoder(model: HookedTransformer) -> Transcoder:
+    """Create a transcoder: blocks.0.mlp.hook_in -> blocks.0.hook_mlp_out."""
+    cfg = TranscoderConfig(
+        d_in=model.cfg.d_model,
+        d_sae=model.cfg.d_model * 2,
+        d_out=model.cfg.d_model,
+        apply_b_dec_to_input=False,
+        metadata=SAEMetadata(
+            hook_name="blocks.0.mlp.hook_in",
+            hook_name_out="blocks.0.hook_mlp_out",
+        ),
+    )
+    return Transcoder(cfg)
+
+
+@pytest.fixture(scope="module")
+def transcoder(model: HookedTransformer) -> Transcoder:
+    return get_transcoder(model)
+
+
+def test_add_transcoder_changes_output(
+    model: HookedSAETransformer,
+    transcoder: Transcoder,
+    original_logits: torch.Tensor,
+):
+    model.add_sae(transcoder)
+    assert len(model._acts_to_saes) == 1
+    logits_with_transcoder = model(prompt)
+    assert_not_close(original_logits, logits_with_transcoder)
+    model.reset_saes()
+
+
+def test_transcoder_with_error_term_preserves_output(
+    model: HookedSAETransformer,
+    transcoder: Transcoder,
+    original_logits: torch.Tensor,
+):
+    model.add_sae(transcoder, use_error_term=True)
+    assert len(model._acts_to_saes) == 1
+    logits_with_transcoder = model(prompt)
+    model.reset_saes()
+    assert_close(original_logits, logits_with_transcoder, atol=1e-4)
+
+
+def test_transcoder_reset_removes_transcoder(
+    model: HookedSAETransformer,
+    transcoder: Transcoder,
+):
+    act_name = transcoder.cfg.metadata.hook_name
+    model.add_sae(transcoder)
+    assert len(model._acts_to_saes) == 1
+    assert act_name in model._acts_to_saes
+    model.reset_saes()
+    assert len(model._acts_to_saes) == 0
+    assert isinstance(get_deep_attr(model, act_name), HookPoint)
+
+
+def test_transcoder_context_manager(
+    model: HookedSAETransformer,
+    transcoder: Transcoder,
+    original_logits: torch.Tensor,
+):
+    act_name = transcoder.cfg.metadata.hook_name
+
+    assert len(model._acts_to_saes) == 0
+    with model.saes(saes=[transcoder]):
+        assert len(model._acts_to_saes) == 1
+        assert act_name in model._acts_to_saes
+        logits_with_transcoder = model(prompt)
+        assert_not_close(original_logits, logits_with_transcoder)
+
+    assert len(model._acts_to_saes) == 0
+    assert isinstance(get_deep_attr(model, act_name), HookPoint)
+
+
+def test_transcoder_context_manager_with_error_term(
+    model: HookedSAETransformer,
+    transcoder: Transcoder,
+    original_logits: torch.Tensor,
+):
+    with model.saes(saes=[transcoder], use_error_term=True):
+        logits_with_transcoder = model(prompt)
+        assert_close(original_logits, logits_with_transcoder, atol=1e-4)
+
+    assert len(model._acts_to_saes) == 0
+
+
+def test_transcoder_run_with_cache(
+    model: HookedSAETransformer,
+    transcoder: Transcoder,
+    original_logits: torch.Tensor,
+):
+    # For transcoders, the wrapper is placed at output_hook with SAE as submodule
+    output_hook = transcoder.cfg.metadata.hook_name_out
+
+    logits_with_transcoder, cache = model.run_with_cache_with_saes(
+        prompt, saes=[transcoder]
+    )
+    assert_not_close(original_logits, logits_with_transcoder)
+    assert isinstance(cache, ActivationCache)
+    # Hooks are copied directly to wrapper, so cache key doesn't include .sae. prefix
+    assert output_hook + ".hook_sae_acts_post" in cache
+    assert len(model._acts_to_saes) == 0
+
+
+def test_mixed_sae_and_transcoder(
+    model: HookedSAETransformer,
+    transcoder: Transcoder,
+    original_logits: torch.Tensor,
+):
+    sae = get_hooked_sae(model, "blocks.0.hook_resid_pre")
+    transcoder_act_name = transcoder.cfg.metadata.hook_name
+    sae_act_name = sae.cfg.metadata.hook_name
+
+    model.add_sae(sae)
+    model.add_sae(transcoder)
+    assert len(model._acts_to_saes) == 2
+    assert sae_act_name in model._acts_to_saes
+    assert transcoder_act_name in model._acts_to_saes
+
+    logits = model(prompt)
+    assert_not_close(original_logits, logits)
+    model.reset_saes()
+    assert len(model._acts_to_saes) == 0
+
+
+def test_run_with_saes_with_transcoder(
+    model: HookedSAETransformer,
+    transcoder: Transcoder,
+    original_logits: torch.Tensor,
+):
+    logits = model.run_with_saes(prompt, saes=[transcoder])
+    assert_not_close(original_logits, logits)
+    assert len(model._acts_to_saes) == 0
+
+
+def test_transcoder_gradients_flow(model: HookedSAETransformer, transcoder: Transcoder):
+    model.add_sae(transcoder, use_error_term=False)
+    output = model(prompt)
+    loss = output.sum()
+    loss.backward()
+
+    assert transcoder.W_enc.grad is not None
+    assert transcoder.W_dec.grad is not None
+    assert transcoder.W_enc.grad.abs().sum() > 0
+    assert transcoder.W_dec.grad.abs().sum() > 0
+
+    transcoder.zero_grad()
+    model.reset_saes()
+
+
+def test_transcoder_with_error_term_gradients_flow(
+    model: HookedSAETransformer, transcoder: Transcoder
+):
+    model.add_sae(transcoder, use_error_term=True)
+    output = model(prompt)
+    loss = output.sum()
+    loss.backward()
+
+    assert transcoder.W_enc.grad is not None
+    assert transcoder.W_dec.grad is not None
+    assert transcoder.W_enc.grad.abs().sum() > 0
+    assert transcoder.W_dec.grad.abs().sum() > 0
+
+    transcoder.zero_grad()
+    model.reset_saes()

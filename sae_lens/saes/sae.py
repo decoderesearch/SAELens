@@ -229,7 +229,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
     cfg: T_SAE_CONFIG
     dtype: torch.dtype
     device: torch.device
-    use_error_term: bool
+    _use_error_term: bool
 
     # For type checking only - don't provide default values
     # These will be initialized by subclasses
@@ -254,7 +254,9 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         self.dtype = str_to_dtype(cfg.dtype)
         self.device = torch.device(cfg.device)
-        self.use_error_term = use_error_term
+        self._use_error_term = False  # Set directly to avoid warning during init
+        if use_error_term:
+            self.use_error_term = True  # Use property setter to trigger warning
 
         # Set up activation function
         self.activation_fn = self.get_activation_fn()
@@ -280,6 +282,22 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         self._setup_activation_normalization()
 
         self.setup()  # Required for HookedRootModule
+
+    @property
+    def use_error_term(self) -> bool:
+        return self._use_error_term
+
+    @use_error_term.setter
+    def use_error_term(self, value: bool) -> None:
+        if value and not self._use_error_term:
+            warnings.warn(
+                "Setting use_error_term directly on SAE is deprecated. "
+                "Use HookedSAETransformer.add_sae(sae, use_error_term=True) instead. "
+                "This will be removed in a future version.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        self._use_error_term = value
 
     @torch.no_grad()
     def fold_activation_norm_scaling_factor(self, scaling_factor: float):

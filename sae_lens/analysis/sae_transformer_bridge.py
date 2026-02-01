@@ -8,7 +8,11 @@ from transformer_lens.hook_points import HookPoint
 from transformer_lens.model_bridge import TransformerBridge
 
 from sae_lens import logger
-from sae_lens.analysis.hooked_sae_transformer import set_deep_attr
+from sae_lens.analysis.hooked_sae_transformer import (
+    _SAEWrapper,
+    get_deep_attr,
+    set_deep_attr,
+)
 from sae_lens.saes.sae import SAE
 
 SingleLoss = torch.Tensor  # Type alias for a single element tensor
@@ -30,11 +34,18 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
     useful for models not natively supported by HookedTransformer, such as Gemma 3.
     """
 
-    acts_to_saes: dict[str, SAE[Any]]
+    _acts_to_saes: dict[str, _SAEWrapper]
 
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
-        self.acts_to_saes = {}
+        self._acts_to_saes = {}
+        # Track output hooks used by transcoders for cleanup
+        self._transcoder_output_hooks: dict[str, str] = {}
+
+    @property
+    def acts_to_saes(self) -> dict[str, SAE[Any]]:
+        """Returns a dict mapping hook names to attached SAEs."""
+        return {name: wrapper.sae for name, wrapper in self._acts_to_saes.items()}
 
     @classmethod
     def boot_transformers(  # type: ignore[override]
@@ -56,7 +67,8 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         # Convert to our class
         # NOTE: this is super hacky and scary, but I don't know how else to achieve this given TLens' internal code
         bridge.__class__ = cls
-        bridge.acts_to_saes = {}  # type: ignore[attr-defined]
+        bridge._acts_to_saes = {}  # type: ignore[attr-defined]
+        bridge._transcoder_output_hooks = {}  # type: ignore[attr-defined]
         return bridge  # type: ignore[return-value]
 
     def _resolve_hook_name(self, hook_name: str) -> str:
@@ -75,110 +87,125 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         return resolved if isinstance(resolved, str) else hook_name
 
     def add_sae(self, sae: SAE[Any], use_error_term: bool | None = None) -> None:
-        """Attaches an SAE to the model.
+        """Attaches an SAE or Transcoder to the model.
 
         WARNING: This SAE will be permanently attached until you remove it with
         reset_saes. This function will also overwrite any existing SAE attached
         to the same hook point.
 
         Args:
-            sae: The SAE to attach to the model
-            use_error_term: If provided, will set the use_error_term attribute of
-                the SAE to this value. Determines whether the SAE returns input
-                or reconstruction. Defaults to None.
+            sae: The SAE or Transcoder to attach to the model.
+            use_error_term: If True, computes error term so output matches what the
+                model would have produced without the SAE. This works for both SAEs
+                (where input==output hook) and transcoders (where they differ).
+                Defaults to None (uses SAE's existing setting).
         """
-        alias_name = sae.cfg.metadata.hook_name
-        actual_name = self._resolve_hook_name(alias_name)
+        input_hook_alias = sae.cfg.metadata.hook_name
+        output_hook_alias = sae.cfg.metadata.hook_name_out or input_hook_alias
+        input_hook_actual = self._resolve_hook_name(input_hook_alias)
+        output_hook_actual = self._resolve_hook_name(output_hook_alias)
 
-        # Check if hook exists (either as alias or actual name)
-        if (alias_name not in self.acts_to_saes) and (
-            actual_name not in self._hook_registry
+        # Check if hooks exist
+        if (input_hook_alias not in self._acts_to_saes) and (
+            input_hook_actual not in self._hook_registry
         ):
             logger.warning(
-                f"No hook found for {alias_name}. Skipping. "
+                f"No hook found for {input_hook_alias}. Skipping. "
                 f"Check model._hook_registry for available hooks."
             )
             return
 
-        if use_error_term is not None:
-            if not hasattr(sae, "_original_use_error_term"):
-                sae._original_use_error_term = sae.use_error_term  # type: ignore[attr-defined]
-            sae.use_error_term = use_error_term
+        # Check if output hook exists (either as registry entry or already has SAE attached)
+        output_hook_exists = (
+            output_hook_actual in self._hook_registry
+            or input_hook_alias in self._acts_to_saes
+            or any(
+                v == output_hook_actual for v in self._transcoder_output_hooks.values()
+            )
+        )
+        if not output_hook_exists:
+            logger.warning(f"No hook found for output {output_hook_alias}. Skipping.")
+            return
 
-        # Replace hook and update registry
-        set_deep_attr(self, actual_name, sae)
-        self._hook_registry[actual_name] = sae  # type: ignore[assignment]
-        self.acts_to_saes[alias_name] = sae
+        # Always use wrapper - it handles both SAEs and transcoders uniformly
+        wrapper = _SAEWrapper(sae, use_error_term=bool(use_error_term))
 
-    def _reset_sae(self, act_name: str, prev_sae: SAE[Any] | None = None) -> None:
+        # For transcoders (input != output), capture input at input hook
+        if input_hook_alias != output_hook_alias:
+            input_hook_point = get_deep_attr(self, input_hook_actual)
+            if isinstance(input_hook_point, HookPoint):
+                input_hook_point.add_hook(
+                    lambda tensor, hook: (wrapper.capture_input(tensor), tensor)[1],  # noqa: ARG005
+                    dir="fwd",
+                    is_permanent=True,
+                )
+            self._transcoder_output_hooks[input_hook_alias] = output_hook_actual
+
+        # Store wrapper in _acts_to_saes and at output hook
+        set_deep_attr(self, output_hook_actual, wrapper)
+        self._hook_registry[output_hook_actual] = wrapper  # type: ignore[assignment]
+        self._acts_to_saes[input_hook_alias] = wrapper
+
+    def _reset_sae(
+        self, act_name: str, prev_wrapper: _SAEWrapper | None = None
+    ) -> None:
         """Resets an SAE that was attached to the model.
 
         By default will remove the SAE from that hook_point.
-        If prev_sae is provided, will replace the current SAE with the provided one.
-        This is mainly used to restore previously attached SAEs after temporarily
-        running with different SAEs (e.g., with run_with_saes).
+        If prev_wrapper is provided, will restore that wrapper's SAE with its settings.
 
         Args:
             act_name: The hook_name of the SAE to reset
-            prev_sae: The SAE to replace the current one with. If None, will just
+            prev_wrapper: The previous wrapper to restore. If None, will just
                 remove the SAE from this hook point. Defaults to None.
         """
-        if act_name not in self.acts_to_saes:
+        if act_name not in self._acts_to_saes:
             logger.warning(
                 f"No SAE is attached to {act_name}. There's nothing to reset."
             )
             return
 
         actual_name = self._resolve_hook_name(act_name)
-        current_sae = self.acts_to_saes[act_name]
 
-        if hasattr(current_sae, "_original_use_error_term"):
-            current_sae.use_error_term = current_sae._original_use_error_term  # type: ignore[attr-defined]
-            delattr(current_sae, "_original_use_error_term")
+        # Determine output hook location (different from input for transcoders)
+        output_hook = self._transcoder_output_hooks.pop(act_name, actual_name)
 
-        if prev_sae is not None:
-            set_deep_attr(self, actual_name, prev_sae)
-            self._hook_registry[actual_name] = prev_sae  # type: ignore[assignment]
-            self.acts_to_saes[act_name] = prev_sae
-        else:
-            new_hook = HookPoint()
-            new_hook.name = actual_name
-            set_deep_attr(self, actual_name, new_hook)
-            self._hook_registry[actual_name] = new_hook
-            del self.acts_to_saes[act_name]
+        # For transcoders, clear permanent hooks from input hook point
+        if output_hook != actual_name:
+            input_hook_point = get_deep_attr(self, actual_name)
+            if isinstance(input_hook_point, HookPoint):
+                input_hook_point.remove_hooks(dir="fwd", including_permanent=True)
+
+        # Reset output hook location
+        new_hook = HookPoint()
+        new_hook.name = output_hook
+        set_deep_attr(self, output_hook, new_hook)
+        self._hook_registry[output_hook] = new_hook
+        del self._acts_to_saes[act_name]
+
+        if prev_wrapper is not None:
+            self.add_sae(prev_wrapper.sae, use_error_term=prev_wrapper.use_error_term)
 
     def reset_saes(
         self,
         act_names: str | list[str] | None = None,
-        prev_saes: list[SAE[Any] | None] | None = None,
     ) -> None:
         """Reset the SAEs attached to the model.
 
         If act_names are provided will just reset SAEs attached to those hooks.
         Otherwise will reset all SAEs attached to the model.
-        Optionally can provide a list of prev_saes to reset to. This is mainly
-        used to restore previously attached SAEs after temporarily running with
-        different SAEs (e.g., with run_with_saes).
 
         Args:
             act_names: The act_names of the SAEs to reset. If None, will reset all
                 SAEs attached to the model. Defaults to None.
-            prev_saes: List of SAEs to replace the current ones with. If None, will
-                just remove the SAEs. Defaults to None.
         """
         if isinstance(act_names, str):
             act_names = [act_names]
         elif act_names is None:
-            act_names = list(self.acts_to_saes.keys())
+            act_names = list(self._acts_to_saes.keys())
 
-        if prev_saes:
-            if len(act_names) != len(prev_saes):
-                raise ValueError("act_names and prev_saes must have the same length")
-        else:
-            prev_saes = [None] * len(act_names)  # type: ignore[assignment]
-
-        for act_name, prev_sae in zip(act_names, prev_saes):  # type: ignore[arg-type]
-            self._reset_sae(act_name, prev_sae)
+        for act_name in act_names:
+            self._reset_sae(act_name)
 
     def run_with_saes(
         self,
@@ -310,20 +337,20 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
             use_error_term: If provided, will set the use_error_term attribute of
                 all SAEs attached during this run to this value. Defaults to None.
         """
-        act_names_to_reset: list[str] = []
-        prev_saes: list[SAE[Any] | None] = []
+        saes_to_restore: list[tuple[str, _SAEWrapper | None]] = []
         if isinstance(saes, SAE):
             saes = [saes]
         try:
             for sae in saes:
-                act_names_to_reset.append(sae.cfg.metadata.hook_name)
-                prev_sae = self.acts_to_saes.get(sae.cfg.metadata.hook_name, None)
-                prev_saes.append(prev_sae)
+                act_name = sae.cfg.metadata.hook_name
+                prev_wrapper = self._acts_to_saes.get(act_name, None)
+                saes_to_restore.append((act_name, prev_wrapper))
                 self.add_sae(sae, use_error_term=use_error_term)
             yield self
         finally:
             if reset_saes_end:
-                self.reset_saes(act_names_to_reset, prev_saes)
+                for act_name, prev_wrapper in saes_to_restore:
+                    self._reset_sae(act_name, prev_wrapper)
 
     @property
     def hook_dict(self) -> dict[str, HookPoint]:
@@ -337,9 +364,9 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         hooks: dict[str, HookPoint] = {}
 
         for name, hook_or_sae in self._hook_registry.items():
-            if isinstance(hook_or_sae, SAE):
+            if isinstance(hook_or_sae, _SAEWrapper):
                 # Include SAE's internal hooks with full path names
-                for sae_hook_name, sae_hook in hook_or_sae.hook_dict.items():
+                for sae_hook_name, sae_hook in hook_or_sae.sae.hook_dict.items():
                     full_name = f"{name}.{sae_hook_name}"
                     hooks[full_name] = sae_hook
             else:
