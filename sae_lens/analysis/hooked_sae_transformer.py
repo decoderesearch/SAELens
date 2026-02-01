@@ -1,4 +1,3 @@
-import logging
 from contextlib import contextmanager
 from typing import Any, Callable
 
@@ -9,6 +8,7 @@ from transformer_lens.components.mlps.can_be_used_as_mlp import CanBeUsedAsMLP
 from transformer_lens.hook_points import HookPoint  # Hooking utilities
 from transformer_lens.HookedTransformer import HookedTransformer
 
+from sae_lens import logger
 from sae_lens.saes.sae import SAE
 
 SingleLoss = torch.Tensor  # Type alias for a single element tensor
@@ -23,13 +23,19 @@ class _SAEWrapper(nn.Module):
     the forward argument directly. For transcoders, _captured_input is set at
     the input hook via capture_input().
 
-    The SAE is stored without registering as a submodule to keep cache paths clean
-    (avoids adding .sae. prefix to hook names).
+    Implementation Note:
+        The SAE is stored in __dict__ directly rather than as a registered submodule.
+        This is intentional: PyTorch's module registration would add a ".sae." prefix
+        to all hook names in the cache (e.g., "blocks.0.hook_mlp_out.sae.hook_sae_input"
+        instead of "blocks.0.hook_mlp_out.hook_sae_input"). By storing in __dict__ and
+        copying hooks directly to the wrapper, we preserve the expected cache paths
+        for backwards compatibility.
     """
 
     def __init__(self, sae: SAE[Any], use_error_term: bool = False):
         super().__init__()
-        # Store SAE without registering as submodule (keeps cache paths clean)
+        # Store SAE in __dict__ to avoid registering as submodule. This keeps cache
+        # paths clean by avoiding a ".sae." prefix on hook names. See class docstring.
         self.__dict__["_sae"] = sae
         # Copy SAE's hooks directly to wrapper so they appear at the right path
         for name, hook in sae.hook_dict.items():
@@ -47,8 +53,12 @@ class _SAEWrapper(nn.Module):
         return self.sae.cfg
 
     def capture_input(self, x: torch.Tensor) -> None:
-        """Capture input at input hook (for transcoders)."""
-        self._captured_input = x.clone()
+        """Capture input at input hook (for transcoders).
+
+        Note: We don't clone the tensor here - the input should not be modified
+        in-place between capture and use, and avoiding clone preserves memory.
+        """
+        self._captured_input = x
 
     def forward(self, original_output: torch.Tensor) -> torch.Tensor:
         """Run SAE/transcoder at output hook location."""
@@ -65,15 +75,15 @@ class _SAEWrapper(nn.Module):
         self.sae.use_error_term = False
         try:
             sae_out = self.sae(sae_input)
+
+            if self.use_error_term:
+                error = original_output - sae_out.detach()
+                sae_out = sae_out + error
+
+            return sae_out
         finally:
             self.sae.use_error_term = sae_use_error_term
-
-        if self.use_error_term:
-            error = original_output - sae_out.detach()
-            sae_out = sae_out + error
-
-        self._captured_input = None
-        return sae_out
+            self._captured_input = None
 
     @property
     def hook_dict(self) -> dict[str, HookPoint]:
@@ -172,7 +182,7 @@ class HookedSAETransformer(HookedTransformer):
         if (input_hook not in self._acts_to_saes) and (
             input_hook not in self.hook_dict
         ):
-            logging.warning(
+            logger.warning(
                 f"No hook found for {input_hook}. Skipping. Check model.hook_dict for available hooks."
             )
             return
@@ -184,7 +194,7 @@ class HookedSAETransformer(HookedTransformer):
             or any(v == output_hook for v in self._transcoder_output_hooks.values())
         )
         if not output_hook_exists:
-            logging.warning(f"No hook found for output {output_hook}. Skipping.")
+            logger.warning(f"No hook found for output {output_hook}. Skipping.")
             return
 
         # Always use wrapper - it handles both SAEs and transcoders uniformly
@@ -224,7 +234,7 @@ class HookedSAETransformer(HookedTransformer):
                 remove the SAE from this hook point. Defaults to None.
         """
         if act_name not in self._acts_to_saes:
-            logging.warning(
+            logger.warning(
                 f"No SAE is attached to {act_name}. There's nothing to reset."
             )
             return

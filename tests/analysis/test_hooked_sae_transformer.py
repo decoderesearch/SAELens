@@ -15,9 +15,9 @@ from sae_lens.analysis.hooked_sae_transformer import (
 from sae_lens.saes.sae import SAE, SAEMetadata
 from sae_lens.saes.standard_sae import StandardSAE, StandardSAEConfig
 from sae_lens.saes.transcoder import Transcoder, TranscoderConfig
-from tests.helpers import assert_close, assert_not_close
+from tests.helpers import TINYSTORIES_MODEL, assert_close, assert_not_close
 
-MODEL = "solu-1l"
+MODEL = TINYSTORIES_MODEL
 prompt = "Hello World!"
 
 
@@ -907,4 +907,86 @@ def test_transcoder_with_error_term_gradients_flow(
     assert transcoder.W_dec.grad.abs().sum() > 0
 
     transcoder.zero_grad()
+    model.reset_saes()
+
+
+def test_multiple_chained_transcoders_get_gradients():
+    """Test that multiple transcoders in sequence all receive gradients correctly."""
+    model = HookedSAETransformer.from_pretrained(MODEL, device="cpu")
+
+    # Create transcoders for layers 0, 1, and 2
+    transcoders = []
+    for layer in range(3):
+        cfg = TranscoderConfig(
+            d_in=model.cfg.d_model,
+            d_sae=model.cfg.d_model * 2,
+            d_out=model.cfg.d_model,
+            apply_b_dec_to_input=False,
+            metadata=SAEMetadata(
+                hook_name=f"blocks.{layer}.mlp.hook_in",
+                hook_name_out=f"blocks.{layer}.hook_mlp_out",
+            ),
+        )
+        transcoders.append(Transcoder(cfg))
+
+    # Attach all transcoders
+    for tc in transcoders:
+        model.add_sae(tc)
+
+    assert len(model._acts_to_saes) == 3
+
+    # Forward and backward pass
+    output = model(prompt)
+    loss = output.sum()
+    loss.backward()
+
+    # Verify all transcoders got gradients
+    for i, tc in enumerate(transcoders):
+        assert tc.W_enc.grad is not None, f"Transcoder {i} W_enc has no gradient"
+        assert tc.W_dec.grad is not None, f"Transcoder {i} W_dec has no gradient"
+        assert tc.W_enc.grad.abs().sum() > 0, f"Transcoder {i} W_enc gradient is zero"
+        assert tc.W_dec.grad.abs().sum() > 0, f"Transcoder {i} W_dec gradient is zero"
+        tc.zero_grad()
+
+    model.reset_saes()
+
+
+def test_multiple_saes_get_gradients():
+    """Test that multiple SAEs attached simultaneously all receive gradients correctly."""
+    model = HookedSAETransformer.from_pretrained(MODEL, device="cpu")
+
+    # Create SAEs for different hook points across layers
+    hook_names = [
+        "blocks.0.hook_mlp_out",
+        "blocks.1.hook_mlp_out",
+        "blocks.2.hook_resid_pre",
+    ]
+    saes = []
+    for hook_name in hook_names:
+        cfg = StandardSAEConfig(
+            d_in=model.cfg.d_model,
+            d_sae=model.cfg.d_model * 2,
+            metadata=SAEMetadata(hook_name=hook_name),
+        )
+        saes.append(StandardSAE(cfg))
+
+    # Attach all SAEs
+    for sae in saes:
+        model.add_sae(sae)
+
+    assert len(model._acts_to_saes) == 3
+
+    # Forward and backward pass
+    output = model(prompt)
+    loss = output.sum()
+    loss.backward()
+
+    # Verify all SAEs got gradients
+    for i, sae in enumerate(saes):
+        assert sae.W_enc.grad is not None, f"SAE {i} W_enc has no gradient"
+        assert sae.W_dec.grad is not None, f"SAE {i} W_dec has no gradient"
+        assert sae.W_enc.grad.abs().sum() > 0, f"SAE {i} W_enc gradient is zero"
+        assert sae.W_dec.grad.abs().sum() > 0, f"SAE {i} W_dec gradient is zero"
+        sae.zero_grad()
+
     model.reset_saes()
