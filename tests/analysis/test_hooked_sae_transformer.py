@@ -595,6 +595,7 @@ def test_saes_context_manager_with_use_error_term(
 def test_run_with_saes_with_use_error_term(
     model: HookedSAETransformer,
     hooked_sae: SAE,
+    recwarn: pytest.WarningsRecorder,
 ):
     """Verifies that run_with_saes correctly handles use_error_term."""
     original_use_error_term = hooked_sae.use_error_term
@@ -602,6 +603,15 @@ def test_run_with_saes_with_use_error_term(
     model.run_with_saes(prompt, saes=[hooked_sae], use_error_term=True)
     assert hooked_sae.use_error_term == original_use_error_term
     assert len(model._acts_to_saes) == 0
+
+    # Also test with SAE that already has use_error_term=True (legacy usage)
+    hooked_sae._use_error_term = True  # Set directly to avoid warning during setup
+    model.run_with_saes(prompt, saes=[hooked_sae])
+    hooked_sae._use_error_term = original_use_error_term  # Restore
+
+    # Verify no use_error_term deprecation warning was triggered
+    use_error_term_warnings = [w for w in recwarn if "use_error_term" in str(w.message)]
+    assert len(use_error_term_warnings) == 0
 
 
 def test_run_with_cache_with_saes_with_use_error_term(
@@ -891,6 +901,37 @@ def test_transcoder_run_with_cache(
     # Hooks are copied directly to wrapper, so cache key doesn't include .sae. prefix
     assert output_hook + ".hook_sae_acts_post" in cache
     assert len(model._acts_to_saes) == 0
+
+
+def test_transcoder_activations_match_manual_calculation(
+    model: HookedSAETransformer,
+    transcoder: Transcoder,
+):
+    input_hook = transcoder.cfg.metadata.hook_name
+    output_hook = transcoder.cfg.metadata.hook_name_out
+    assert output_hook is not None
+
+    # Get activations without transcoder inserted
+    _, cache_no_transcoder = model.run_with_cache(prompt)
+    mlp_input = cache_no_transcoder[input_hook]
+
+    # Get transcoder activations with transcoder inserted
+    model.add_sae(transcoder)
+    _, cache_with_transcoder = model.run_with_cache(prompt)
+    model.reset_saes()
+
+    # Manually compute transcoder encode/decode
+    manual_transcoder_acts = transcoder.encode(mlp_input)
+    manual_transcoder_output = transcoder.decode(manual_transcoder_acts)
+
+    # Compare cached activations with manual calculation
+    cached_transcoder_acts = cache_with_transcoder[output_hook + ".hook_sae_acts_post"]
+    assert_close(manual_transcoder_acts, cached_transcoder_acts)
+
+    # Compare cached output with manual calculation
+    # This verifies the output hook location is correctly overridden
+    cached_transcoder_output = cache_with_transcoder[output_hook + ".hook_sae_recons"]
+    assert_close(manual_transcoder_output, cached_transcoder_output)
 
 
 def test_mixed_sae_and_transcoder(

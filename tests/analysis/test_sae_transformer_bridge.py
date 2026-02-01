@@ -661,6 +661,46 @@ def test_transcoder_run_with_cache(
     assert len(bridge_model._acts_to_saes) == 0
 
 
+def test_transcoder_activations_match_manual_calculation(
+    bridge_model: SAETransformerBridge,
+    transcoder: Transcoder,
+) -> None:
+    input_hook = transcoder.cfg.metadata.hook_name
+    output_hook = transcoder.cfg.metadata.hook_name_out
+    assert input_hook is not None
+    assert output_hook is not None
+
+    # Resolve aliases to actual hook names for cache lookup
+    input_hook_actual = bridge_model._resolve_hook_name(input_hook)
+    output_hook_actual = bridge_model._resolve_hook_name(output_hook)
+
+    # Get activations without transcoder inserted
+    _, cache_no_transcoder = bridge_model.run_with_cache(PROMPT)
+    mlp_input = cache_no_transcoder[input_hook_actual]
+
+    # Get transcoder activations with transcoder inserted
+    bridge_model.add_sae(transcoder)
+    _, cache_with_transcoder = bridge_model.run_with_cache(PROMPT)
+    bridge_model.reset_saes()
+
+    # Manually compute transcoder encode/decode
+    manual_transcoder_acts = transcoder.encode(mlp_input)
+    manual_transcoder_output = transcoder.decode(manual_transcoder_acts)
+
+    # Compare cached activations with manual calculation
+    cached_transcoder_acts = cache_with_transcoder[
+        output_hook_actual + ".hook_sae_acts_post"
+    ]
+    assert_close(manual_transcoder_acts, cached_transcoder_acts)
+
+    # Compare cached output with manual calculation
+    # This verifies the output hook location is correctly overridden
+    cached_transcoder_output = cache_with_transcoder[
+        output_hook_actual + ".hook_sae_recons"
+    ]
+    assert_close(manual_transcoder_output, cached_transcoder_output)
+
+
 def test_mixed_sae_and_transcoder(
     bridge_model: SAETransformerBridge,
     transcoder: Transcoder,

@@ -66,8 +66,9 @@ class _SAEWrapper(nn.Module):
         )
 
         # Temporarily disable SAE's internal use_error_term - we handle it here
-        sae_use_error_term = self.sae.use_error_term
-        self.sae.use_error_term = False
+        # Use _use_error_term directly to avoid triggering deprecation warning
+        sae_use_error_term = self.sae._use_error_term
+        self.sae._use_error_term = False
         try:
             sae_out = self.sae(sae_input)
 
@@ -77,7 +78,7 @@ class _SAEWrapper(nn.Module):
 
             return sae_out
         finally:
-            self.sae.use_error_term = sae_use_error_term
+            self.sae._use_error_term = sae_use_error_term
             self._captured_input = None
 
 
