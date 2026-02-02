@@ -69,9 +69,9 @@ class TestFixCorrelationMatrix:
         # A correlation matrix with conflicting high correlations can be non-PSD
         bad_matrix = torch.tensor([[1.0, 0.9, -0.9], [0.9, 1.0, 0.9], [-0.9, 0.9, 1.0]])
         eigenvals_before = torch.linalg.eigvalsh(bad_matrix)
-        assert torch.any(eigenvals_before < 0), (
-            f"Expected negative eigenvalues, got {eigenvals_before}"
-        )
+        assert torch.any(
+            eigenvals_before < 0
+        ), f"Expected negative eigenvalues, got {eigenvals_before}"
 
         fixed = _fix_correlation_matrix(bad_matrix)
         eigenvals_after = torch.linalg.eigvalsh(fixed)
