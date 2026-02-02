@@ -800,3 +800,69 @@ def test_transcoder_with_error_term_matches_hooked_transformer(
     bridge_model.reset_saes()
 
     assert_close(hooked_logits, bridge_logits, atol=1e-4)
+
+
+def test_error_term_unchanged_when_latents_ablated(
+    hooked_model: HookedSAETransformer, bridge_model: SAETransformerBridge
+) -> None:
+    act_name = "blocks.0.hook_mlp_out"
+    sae = make_sae(hooked_model.cfg.d_model, act_name)
+
+    # Run HookedSAETransformer without intervention to get baseline
+    _, hooked_cache_baseline = hooked_model.run_with_cache_with_saes(
+        PROMPT, saes=[sae], use_error_term=True
+    )
+    hooked_error_baseline = hooked_cache_baseline[act_name + ".hook_sae_error"]
+    hooked_acts_baseline = hooked_cache_baseline[act_name + ".hook_sae_acts_post"]
+
+    # Run SAETransformerBridge without intervention to get baseline
+    # Bridge uses different hook naming (blocks.0.mlp.hook_out vs blocks.0.hook_mlp_out)
+    bridge_act_name = "blocks.0.mlp.hook_out"
+    _, bridge_cache_baseline = bridge_model.run_with_cache_with_saes(
+        PROMPT, saes=[sae], use_error_term=True
+    )
+    bridge_error_baseline = bridge_cache_baseline[bridge_act_name + ".hook_sae_error"]
+    bridge_acts_baseline = bridge_cache_baseline[
+        bridge_act_name + ".hook_sae_acts_post"
+    ]
+
+    # Verify baselines have non-zero activations
+    assert hooked_acts_baseline.abs().sum() > 0
+    assert bridge_acts_baseline.abs().sum() > 0
+
+    # Define hook to ablate all latents to zero
+    def ablate_latents(tensor: torch.Tensor, hook: HookPoint) -> torch.Tensor:  # noqa: ARG001
+        return tensor * 0
+
+    # Run with ablation intervention for HookedSAETransformer
+    hooked_model.add_sae(sae, use_error_term=True)
+    with hooked_model.hooks(
+        fwd_hooks=[(act_name + ".hook_sae_acts_post", ablate_latents)]
+    ):
+        _, hooked_cache_ablated = hooked_model.run_with_cache(PROMPT)
+    hooked_model.reset_saes()
+
+    hooked_error_ablated = hooked_cache_ablated[act_name + ".hook_sae_error"]
+    hooked_acts_ablated = hooked_cache_ablated[act_name + ".hook_sae_acts_post"]
+
+    # Run with ablation intervention for SAETransformerBridge
+    bridge_model.add_sae(sae, use_error_term=True)
+    with bridge_model.hooks(
+        fwd_hooks=[(bridge_act_name + ".hook_sae_acts_post", ablate_latents)]
+    ):
+        _, bridge_cache_ablated = bridge_model.run_with_cache(PROMPT)
+    bridge_model.reset_saes()
+
+    bridge_error_ablated = bridge_cache_ablated[bridge_act_name + ".hook_sae_error"]
+    bridge_acts_ablated = bridge_cache_ablated[bridge_act_name + ".hook_sae_acts_post"]
+
+    # Verify latents are all zero after ablation
+    assert hooked_acts_ablated.abs().sum() == 0
+    assert bridge_acts_ablated.abs().sum() == 0
+
+    # Verify error term is unchanged despite ablation
+    assert_close(hooked_error_ablated, hooked_error_baseline, atol=1e-5)
+    assert_close(bridge_error_ablated, bridge_error_baseline, atol=1e-5)
+
+    # Verify both implementations match
+    assert_close(hooked_error_ablated, bridge_error_ablated, atol=1e-5)

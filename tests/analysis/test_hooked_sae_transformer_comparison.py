@@ -15,7 +15,7 @@ from tests._comparison.sae_lens_old.analysis.hooked_sae_transformer import (
     HookedSAETransformer as OldHookedSAETransformer,
 )
 from tests._comparison.sae_lens_old.sae import SAE as OldSAE
-from tests.helpers import TINYSTORIES_MODEL, assert_close
+from tests.helpers import TINYSTORIES_MODEL, assert_close, random_params
 
 MODEL = TINYSTORIES_MODEL
 PROMPT = "Hello World!"
@@ -44,7 +44,9 @@ def make_sae(model: HookedTransformer, act_name: str) -> StandardSAE:
             prepend_bos=True,
         ),
     )
-    return StandardSAE(sae_cfg)
+    sae = StandardSAE(sae_cfg)
+    random_params(sae)
+    return sae
 
 
 def make_old_sae(model: HookedTransformer, act_name: str) -> OldSAE:
@@ -220,8 +222,7 @@ def test_gradients_match_old_with_error_term(
 
     # Compare gradients
     for name in new_grads:
-        if name in old_grads:
-            assert_close(new_grads[name], old_grads[name], atol=1e-4)
+        assert_close(new_grads[name], old_grads[name], atol=1e-4)
 
 
 @pytest.mark.parametrize("use_error_term", [False, True])
@@ -281,8 +282,11 @@ def test_context_manager_matches_old(
     assert_close(new_output, old_output, atol=1e-5)
 
 
+@pytest.mark.parametrize("use_error_term", [False, True])
 def test_multiple_hook_points_match_old(
-    new_model: HookedSAETransformer, old_model: OldHookedSAETransformer
+    new_model: HookedSAETransformer,
+    old_model: OldHookedSAETransformer,
+    use_error_term: bool,
 ):
     act_names = ["blocks.0.hook_mlp_out", "blocks.0.hook_resid_pre"]
 
@@ -292,50 +296,26 @@ def test_multiple_hook_points_match_old(
     for new_sae, old_sae in zip(new_saes, old_saes):
         sync_weights(new_sae, old_sae)
 
-    for new_sae in new_saes:
-        new_model.add_sae(new_sae, use_error_term=False)
-    for old_sae in old_saes:
-        old_model.add_sae(old_sae, use_error_term=False)
-
-    new_output = new_model(PROMPT)
-    old_output = old_model(PROMPT)
+    new_output, new_cache = new_model.run_with_cache_with_saes(
+        PROMPT, saes=new_saes, use_error_term=use_error_term
+    )
+    old_output, old_cache = old_model.run_with_cache_with_saes(
+        PROMPT, saes=old_saes, use_error_term=use_error_term
+    )
 
     assert_close(new_output, old_output, atol=1e-5)
 
-    new_model.reset_saes()
-    old_model.reset_saes()
+    # Verify all keys from old cache exist in new cache (backwards compatibility)
+    assert set(old_cache.keys()).issubset(set(new_cache.keys()))
 
-
-def test_sae_with_use_error_term_preset_matches_old(
-    new_model: HookedSAETransformer, old_model: OldHookedSAETransformer
-):
-    """Verify that when SAE has use_error_term=True set, add_sae() respects it."""
-    act_name = "blocks.0.hook_mlp_out"
-    new_sae = make_sae(new_model, act_name)
-    old_sae = make_old_sae(old_model, act_name)
-    sync_weights(new_sae, old_sae)
-
-    # Set use_error_term=True on SAEs before adding (without explicit arg to add_sae)
-    new_sae._use_error_term = True  # Set directly to avoid deprecation warning
-    old_sae.use_error_term = True
-
-    # Add without specifying use_error_term - should respect SAE's setting
-    new_model.add_sae(new_sae)
-    old_model.add_sae(old_sae)
-
-    new_output = new_model(PROMPT)
-    old_output = old_model(PROMPT)
-
-    assert_close(new_output, old_output, atol=1e-4)
-
-    new_model.reset_saes()
-    old_model.reset_saes()
+    # Verify all cache values match for keys present in both
+    for key in old_cache:
+        assert_close(new_cache[key], old_cache[key], atol=1e-5)
 
 
 def test_sae_with_use_error_term_preset_gradients_match_old(
     new_model: HookedSAETransformer, old_model: OldHookedSAETransformer
 ):
-    """Verify gradients match when SAE has use_error_term=True set before add_sae()."""
     act_name = "blocks.0.hook_mlp_out"
     new_sae = make_sae(new_model, act_name)
     old_sae = make_old_sae(old_model, act_name)
@@ -374,5 +354,4 @@ def test_sae_with_use_error_term_preset_gradients_match_old(
 
     # Compare gradients
     for name in new_grads:
-        if name in old_grads:
-            assert_close(new_grads[name], old_grads[name], atol=1e-4)
+        assert_close(new_grads[name], old_grads[name], atol=1e-4)

@@ -9,7 +9,7 @@ from transformer_lens.hook_points import HookPoint  # Hooking utilities
 from transformer_lens.HookedTransformer import HookedTransformer
 
 from sae_lens import logger
-from sae_lens.saes.sae import SAE
+from sae_lens.saes.sae import SAE, _disable_hooks
 
 SingleLoss = torch.Tensor  # Type alias for a single element tensor
 LossPerToken = torch.Tensor
@@ -30,6 +30,10 @@ class _SAEWrapper(nn.Module):
         instead of "blocks.0.hook_mlp_out.hook_sae_input"). By storing in __dict__ and
         copying hooks directly to the wrapper, we preserve the expected cache paths
         for backwards compatibility.
+
+        The wrapper creates its own hook_sae_error and hook_sae_output HookPoints
+        rather than copying from the SAE, because the wrapper handles error term
+        computation and needs to call these hooks with the correct values.
     """
 
     def __init__(self, sae: SAE[Any], use_error_term: bool = False):
@@ -38,8 +42,13 @@ class _SAEWrapper(nn.Module):
         # paths clean by avoiding a ".sae." prefix on hook names. See class docstring.
         self.__dict__["_sae"] = sae
         # Copy SAE's hooks directly to wrapper so they appear at the right path
+        # EXCEPT for hook_sae_error and hook_sae_output which the wrapper manages
         for name, hook in sae.hook_dict.items():
-            setattr(self, name, hook)
+            if name not in ("hook_sae_error", "hook_sae_output"):
+                setattr(self, name, hook)
+        # Create new hooks for error and output that the wrapper manages
+        self.hook_sae_error = HookPoint()
+        self.hook_sae_output = HookPoint()
         self.use_error_term = use_error_term
         self._captured_input: torch.Tensor | None = None
 
@@ -65,20 +74,23 @@ class _SAEWrapper(nn.Module):
             else original_output
         )
 
-        # Temporarily disable SAE's internal use_error_term - we handle it here
-        # Use _use_error_term directly to avoid triggering deprecation warning
-        sae_use_error_term = self.sae._use_error_term
-        self.sae._use_error_term = False
         try:
-            sae_out = self.sae(sae_input)
+            # Call encode and decode directly so we can control hook_sae_output
+            feature_acts = self.sae.encode(sae_input)
+            sae_out = self.sae.decode(feature_acts)
 
             if self.use_error_term:
-                error = original_output - sae_out.detach()
-                sae_out = sae_out + error
+                with torch.no_grad():
+                    # Recompute without hooks to get true error term
+                    # This ensures interventions on features don't get masked by error
+                    with _disable_hooks(self.sae):
+                        feature_acts_clean = self.sae.encode(sae_input)
+                        sae_out_clean = self.sae.decode(feature_acts_clean)
+                    sae_error = self.hook_sae_error(original_output - sae_out_clean)
+                sae_out = sae_out + sae_error
 
-            return sae_out
+            return self.hook_sae_output(sae_out)
         finally:
-            self.sae._use_error_term = sae_use_error_term
             self._captured_input = None
 
 

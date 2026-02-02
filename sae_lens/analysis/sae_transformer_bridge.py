@@ -150,6 +150,14 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         self._hook_registry[output_hook_actual] = wrapper  # type: ignore[assignment]
         self._acts_to_saes[input_hook_alias] = wrapper
 
+        # Register wrapper's internal hooks in the registry so they appear in cache
+        # and can be targeted by fwd_hooks
+        for hook_name, hook in wrapper.named_modules():
+            if isinstance(hook, HookPoint) and hook_name:
+                full_name = f"{output_hook_actual}.{hook_name}"
+                hook.name = full_name
+                self._hook_registry[full_name] = hook
+
     def _reset_sae(
         self, act_name: str, prev_wrapper: _SAEWrapper | None = None
     ) -> None:
@@ -180,11 +188,20 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
             if isinstance(input_hook_point, HookPoint):
                 input_hook_point.remove_hooks(dir="fwd", including_permanent=True)
 
+        # Get wrapper before resetting to clean up its hooks
+        wrapper = self._acts_to_saes[act_name]
+
+        # Remove wrapper's internal hooks from registry
+        for hook_name, hook in wrapper.named_modules():
+            if isinstance(hook, HookPoint) and hook_name:
+                self._hook_registry.pop(f"{output_hook}.{hook_name}", None)
+
         # Reset output hook location
         new_hook = HookPoint()
         new_hook.name = output_hook
         set_deep_attr(self, output_hook, new_hook)
         self._hook_registry[output_hook] = new_hook
+
         del self._acts_to_saes[act_name]
 
         if prev_wrapper is not None:

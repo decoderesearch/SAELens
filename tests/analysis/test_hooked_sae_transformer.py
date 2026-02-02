@@ -1077,3 +1077,48 @@ def test_multiple_saes_get_gradients():
         sae.zero_grad()
 
     model.reset_saes()
+
+
+def test_error_term_unchanged_when_latents_ablated():
+    model = HookedSAETransformer.from_pretrained(MODEL, device="cpu")
+    act_name = "blocks.0.hook_mlp_out"
+
+    sae_cfg = StandardSAEConfig(
+        d_in=model.cfg.d_model,
+        d_sae=model.cfg.d_model * 2,
+        metadata=SAEMetadata(hook_name=act_name),
+    )
+    sae = StandardSAE(sae_cfg)
+
+    # Run without intervention to get baseline error term
+    output_baseline, cache_baseline = model.run_with_cache_with_saes(
+        prompt, saes=[sae], use_error_term=True
+    )
+
+    error_baseline = cache_baseline[act_name + ".hook_sae_error"]
+    acts_baseline = cache_baseline[act_name + ".hook_sae_acts_post"]
+
+    # Verify baseline has non-zero activations
+    assert acts_baseline.abs().sum() > 0, "Baseline should have non-zero latents"
+
+    # Define hook to ablate all latents to zero
+    def ablate_latents(tensor: torch.Tensor, hook: HookPoint) -> torch.Tensor:  # noqa: ARG001
+        return tensor * 0
+
+    # Run with ablation intervention using context manager for hooks + cache
+    model.add_sae(sae, use_error_term=True)
+    with model.hooks(fwd_hooks=[(act_name + ".hook_sae_acts_post", ablate_latents)]):
+        output_ablated, cache_ablated = model.run_with_cache(prompt)
+    model.reset_saes()
+
+    error_ablated = cache_ablated[act_name + ".hook_sae_error"]
+    acts_ablated = cache_ablated[act_name + ".hook_sae_acts_post"]
+
+    # Verify latents are all zero after ablation
+    assert acts_ablated.abs().sum() == 0, "Ablated latents should be all zero"
+
+    # Verify error term is unchanged despite ablation
+    assert_close(error_ablated, error_baseline, atol=1e-5)
+
+    # Verify outputs changed (ablation had an effect on reconstruction)
+    assert not torch.allclose(output_ablated, output_baseline, atol=1e-5)
