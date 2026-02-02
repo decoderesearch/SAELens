@@ -1,5 +1,108 @@
 # CHANGELOG
 
+## v6.34.2 (2026-02-02)
+
+### Fix
+
+* fix: properly handle hook_sae_error and hook_sae_output in SAE wrapper (#637)
+
+The _SAEWrapper now correctly handles the error term computation and
+hook calls:
+
+- Creates new HookPoints for hook_sae_error and hook_sae_output instead
+  of copying from the SAE, since the wrapper controls these hooks
+- Computes error term from clean reconstruction (without hook
+  interventions) so that feature ablations have their intended effect
+- Calls hook_sae_error and hook_sae_output at the appropriate times
+
+Also fixes SAETransformerBridge to register wrapper&#39;s internal hooks
+in _hook_registry so they appear in cache and can be targeted by
+fwd_hooks.
+
+Adds tests verifying error term is unchanged when latents are ablated. ([`1d35eca`](https://github.com/decoderesearch/SAELens/commit/1d35eca8f2b87a75c0c51e1ad50d99ac5bfffcbb))
+
+## v6.34.1 (2026-02-02)
+
+### Fix
+
+* fix: avoid deprecation warnings in normal usage of HookedSAETransformer (#636) ([`bfad65e`](https://github.com/decoderesearch/SAELens/commit/bfad65ea4d1391ef333e3215db00109179388ddb))
+
+## v6.34.0 (2026-02-01)
+
+### Feature
+
+* feat: support Transcoders in HookedSAETransformer (#635)
+
+Properly handle transcoders in HookedSAETransformer and SAETransformerBridge ([`1fa3245`](https://github.com/decoderesearch/SAELens/commit/1fa3245aafdcdef4de1d437ad723f403950c127d))
+
+## v6.33.0 (2026-02-01)
+
+### Chore
+
+* chore: cleaning up types and adding tests (#633) ([`ad9869e`](https://github.com/decoderesearch/SAELens/commit/ad9869e17ddd3bd831fc9482d5f5dbb5c9252212))
+
+### Feature
+
+* feat: adding stats for correlation/superposition for synth data (#634) ([`927144a`](https://github.com/decoderesearch/SAELens/commit/927144aedc8ba1298511361786653155a36a7ba6))
+
+## v6.32.1 (2026-01-31)
+
+### Fix
+
+* fix: do not apply hook_z reshaping to gemma scope 2 (#632) ([`1dc44a9`](https://github.com/decoderesearch/SAELens/commit/1dc44a9a43572f20b7275319c86c88f4649083fd))
+
+## v6.32.0 (2026-01-30)
+
+### Feature
+
+* feat: SAETransformerBridge (#631) ([`878653e`](https://github.com/decoderesearch/SAELens/commit/878653e72730523ff719cc8d4734baf168ea30c6))
+
+## v6.31.0 (2026-01-29)
+
+### Feature
+
+* feat: Add log_weights_to_wandb option to logging config (#629) ([`25caed5`](https://github.com/decoderesearch/SAELens/commit/25caed582d5e40aa27c2fae722373dabe18eae45))
+
+## v6.30.2 (2026-01-26)
+
+### Chore
+
+* chore: Use correct reference link in temporal_sae.py (#626) ([`1d6f6f0`](https://github.com/decoderesearch/SAELens/commit/1d6f6f098833400287ca99d228dc799f0cc65a9d))
+
+### Fix
+
+* fix: raise error when context_size &gt; training_tokens (#627)
+
+Fixes #581 ([`64ab87b`](https://github.com/decoderesearch/SAELens/commit/64ab87bed0b1c14a90d779f114d88937c7f2f3d4))
+
+* fix: add leave=False to nested tqdm progress bars for Jupyter (#628)
+
+Fixes #495
+
+Nested progress bars without leave=False cause newlines on every
+update in Jupyter notebooks. This adds the parameter to progress
+bars that run inside other loops:
+- activation_scaler.py: norm estimation during training
+- evals.py: reconstruction and sparsity batches during eval ([`da5420e`](https://github.com/decoderesearch/SAELens/commit/da5420e970103eb4752dad1a0b99c3becfa6245f))
+
+## v6.30.1 (2026-01-20)
+
+### Fix
+
+* fix: correct TLens hook names for gemma scope 2 and fix non-affine transcoders (#624) ([`a70ad12`](https://github.com/decoderesearch/SAELens/commit/a70ad1292c4f8f67931771f952868771a00718b5))
+
+## v6.30.0 (2026-01-13)
+
+### Feature
+
+* feat: add neuronpedia entries in pretrained_saes (#623) ([`dc059ae`](https://github.com/decoderesearch/SAELens/commit/dc059ae49acc0f59894c7a4adc06687f97b99d3e))
+
+## v6.29.1 (2026-01-12)
+
+### Performance
+
+* perf: allow using sparse tensors and autocasting for synthetic data (#622) ([`bd7d1e5`](https://github.com/decoderesearch/SAELens/commit/bd7d1e57ce5496fd364ac4deac8befcfe1d92e3b))
+
 ## v6.29.0 (2026-01-11)
 
 ### Feature

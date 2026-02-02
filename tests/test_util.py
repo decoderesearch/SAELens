@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ from sae_lens.util import (
     cosine_similarities,
     dtype_to_str,
     extract_stop_at_layer_from_tlens_hook_name,
+    filter_valid_dataclass_fields,
     get_special_token_ids,
     path_or_tmp_dir,
     str_to_dtype,
@@ -265,3 +267,46 @@ def test_cosine_similarities_symmetric_when_same_matrix():
     mat = torch.randn(5, 10)
     cos_sims = cosine_similarities(mat)
     torch.testing.assert_close(cos_sims, cos_sims.T)
+
+
+@dataclass
+class _DestDataclass:
+    field_a: int
+    field_b: str
+
+
+@dataclass
+class _SourceDataclass:
+    field_a: int
+    field_b: str
+    field_c: float
+
+
+def test_filter_valid_dataclass_fields_from_dict():
+    source = {"field_a": 1, "field_b": "hello", "field_c": 3.14}
+    result = filter_valid_dataclass_fields(source, _DestDataclass)
+    assert result == {"field_a": 1, "field_b": "hello"}
+
+
+def test_filter_valid_dataclass_fields_from_dataclass_instance():
+    source = _SourceDataclass(field_a=1, field_b="hello", field_c=3.14)
+    result = filter_valid_dataclass_fields(source, _DestDataclass)
+    assert result == {"field_a": 1, "field_b": "hello"}
+
+
+def test_filter_valid_dataclass_fields_with_whitelist():
+    source = {"field_a": 1, "field_b": "hello", "field_c": 3.14}
+    result = filter_valid_dataclass_fields(
+        source, _DestDataclass, whitelist_fields=["field_c"]
+    )
+    assert result == {"field_a": 1, "field_b": "hello", "field_c": 3.14}
+
+
+def test_filter_valid_dataclass_fields_raises_on_non_dataclass_destination():
+    with pytest.raises(ValueError, match="is not a dataclass"):
+        filter_valid_dataclass_fields({"field_a": 1}, "not a dataclass")
+
+
+def test_filter_valid_dataclass_fields_raises_on_invalid_source():
+    with pytest.raises(ValueError, match="is not a dict or dataclass"):
+        filter_valid_dataclass_fields("invalid source", _DestDataclass)

@@ -19,8 +19,6 @@ The SAELens training codebase exists to help researchers:
 - Analyse sparse autoencoders and neural network internals.
 - Generate insights which make it easier to create safe and aligned AI systems.
 
-**Please note these docs are in beta. We intend to make them cleaner and more comprehensive over time.**
-
 ## Quick Start
 
 ### Installation
@@ -37,8 +35,8 @@ To load a pretrained sparse autoencoder, you can use `SAE.from_pretrained()` as 
 from sae_lens import SAE
 
 sae = SAE.from_pretrained(
-    release = "gpt2-small-res-jb", # see other options in sae_lens/pretrained_saes.yaml
-    sae_id = "blocks.8.hook_resid_pre", # won't always be a hook point
+    release = "gemma-scope-2b-pt-res-canonical",
+    sae_id = "layer_12/width_16k/canonical",
     device = "cuda"
 )
 ```

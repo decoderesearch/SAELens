@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 import torch
 
@@ -67,9 +69,9 @@ class TestFixCorrelationMatrix:
         # A correlation matrix with conflicting high correlations can be non-PSD
         bad_matrix = torch.tensor([[1.0, 0.9, -0.9], [0.9, 1.0, 0.9], [-0.9, 0.9, 1.0]])
         eigenvals_before = torch.linalg.eigvalsh(bad_matrix)
-        assert torch.any(
-            eigenvals_before < 0
-        ), f"Expected negative eigenvalues, got {eigenvals_before}"
+        assert torch.any(eigenvals_before < 0), (
+            f"Expected negative eigenvalues, got {eigenvals_before}"
+        )
 
         fixed = _fix_correlation_matrix(bad_matrix)
         eigenvals_after = torch.linalg.eigvalsh(fixed)
@@ -559,8 +561,6 @@ class TestGenerateRandomLowRankCorrelationMatrix:
         torch.testing.assert_close(implied_diag, torch.ones(50), atol=1e-5, rtol=0)
 
     def test_logs_warning_when_rows_are_capped(self, caplog: pytest.LogCaptureFixture):
-        import logging
-
         with caplog.at_level(logging.WARNING):
             generate_random_low_rank_correlation_matrix(
                 num_features=50, rank=20, correlation_scale=10.0, seed=42
@@ -575,8 +575,6 @@ class TestGenerateRandomLowRankCorrelationMatrix:
         )
 
     def test_no_warning_when_no_rows_capped(self, caplog: pytest.LogCaptureFixture):
-        import logging
-
         with caplog.at_level(logging.WARNING):
             generate_random_low_rank_correlation_matrix(
                 num_features=50, rank=5, correlation_scale=0.05, seed=42

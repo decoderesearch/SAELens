@@ -206,6 +206,62 @@ logits = model.run_with_hooks(
 )
 ```
 
+## Using SAETransformerBridge (Beta)
+
+For models not natively supported by HookedTransformer (such as Gemma 3), use `SAETransformerBridge`. This wraps TransformerLens v3's `TransformerBridge`, which provides hook points for HuggingFace models without the overhead of weight processing.
+
+<!-- prettier-ignore-start -->
+!!! warning "Beta Feature"
+    `SAETransformerBridge` requires TransformerLens v3, which is currently in beta. Install it with `pip install transformer-lens>=3.0.0b0`. The API may change in future versions.
+<!-- prettier-ignore-end -->
+
+### Setup
+
+```python
+from sae_lens import SAE
+from sae_lens.analysis.sae_transformer_bridge import SAETransformerBridge
+
+# Load model using TransformerBridge
+model = SAETransformerBridge.boot_transformers("google/gemma-3-4b-it", device="cuda")
+
+# Load SAE (Gemma Scope 2 SAEs work with Gemma 3 models)
+sae = SAE.from_pretrained(
+    release="gemma-scope-2-4b-it-res",
+    sae_id="layer_17_width_16k_l0_medium",
+    device="cuda"
+)
+```
+
+### Run with SAEs
+
+The API mirrors `HookedSAETransformer`:
+
+```python
+# Add SAE permanently
+model.add_sae(sae)
+logits = model("Hello, world!")
+model.reset_saes()
+
+# Or use context manager for temporary attachment
+with model.saes(saes=[sae]):
+    logits = model("Hello, world!")
+
+# Run with SAEs (temporary, removed after forward pass)
+logits = model.run_with_saes("Hello, world!", saes=[sae])
+
+# Run with cache to access SAE activations
+logits, cache = model.run_with_cache_with_saes("Hello, world!", saes=[sae])
+```
+
+### Supported Models
+
+`SAETransformerBridge` supports any model that TransformerBridge supports, including:
+
+- Gemma 3 (all sizes)
+- Other HuggingFace models not natively supported by HookedTransformer
+
+For models supported by both HookedTransformer and TransformerBridge (like GPT-2, Gemma 2), prefer `HookedSAETransformer` as it has more mature support.
+
 ## Using SAEs Without TransformerLens
 
 SAEs from SAELens are standard PyTorch modules and can be used with any model or framework. The key is extracting activations from your model and passing them to the SAE's `encode()`, `decode()`, or `forward()` methods. Also note that the names of hook points will be different between TransformerLens and Hugging Face / NNsight.

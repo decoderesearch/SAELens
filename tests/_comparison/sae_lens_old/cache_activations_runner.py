@@ -9,7 +9,6 @@ import torch
 from datasets import Array2D, Dataset, Features, Sequence, Value
 from datasets.fingerprint import generate_fingerprint
 from huggingface_hub import HfApi
-from jaxtyping import Float, Int
 from tqdm import tqdm
 from transformer_lens.HookedTransformer import HookedRootModule
 
@@ -321,8 +320,8 @@ class CacheActivationsRunner:
     def _create_shard(
         self,
         buffer: tuple[
-            Float[torch.Tensor, "(bs context_size) num_layers d_in"],
-            Int[torch.Tensor, "(bs context_size)"] | None,
+            torch.Tensor,
+            torch.Tensor | None,
         ],
     ) -> Dataset:
         hook_names = [self.cfg.hook_name]

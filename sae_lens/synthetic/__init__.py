@@ -90,6 +90,13 @@ from sae_lens.synthetic.plotting import (
     find_best_feature_ordering_from_sae,
     plot_sae_feature_similarity,
 )
+from sae_lens.synthetic.stats import (
+    CorrelationMatrixStats,
+    SuperpositionStats,
+    compute_correlation_matrix_stats,
+    compute_low_rank_correlation_matrix_stats,
+    compute_superposition_stats,
+)
 from sae_lens.synthetic.synthetic_model import (
     SYNTHETIC_MODEL_CONFIG_FILENAME,
     SYNTHETIC_MODEL_HIERARCHY_FILENAME,
@@ -182,6 +189,12 @@ __all__ = [
     "orthogonal_initializer",
     "FeatureDictionaryInitializer",
     "cosine_similarities",
+    # Statistics
+    "compute_correlation_matrix_stats",
+    "compute_low_rank_correlation_matrix_stats",
+    "compute_superposition_stats",
+    "CorrelationMatrixStats",
+    "SuperpositionStats",
     # Training utilities
     "SyntheticActivationIterator",
     "SyntheticDataEvalResult",
