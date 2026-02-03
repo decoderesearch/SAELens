@@ -476,7 +476,7 @@ class CacheActivationsRunnerConfig:
         model_batch_size (int): How many prompts are in the batch of the language model when generating activations.
         hook_name (str): The name of the hook to use.
         d_in (int): Dimension of the model.
-        total_training_tokens (int): Total number of tokens to process.
+        training_tokens (int): Total number of tokens to process.
         context_size (int): Context size to process. Can be left as -1 if the dataset is tokenized.
         model_class_name (str): The name of the class of the model to use. This should be either `HookedTransformer` or `HookedMamba`.
         new_cached_activations_path (str, optional): The path to save the activations.

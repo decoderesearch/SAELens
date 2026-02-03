@@ -595,7 +595,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         Args:
             release: The release name. This will be mapped to a huggingface repo id based on the pretrained_saes.yaml file.
-            id: The id of the SAE to load. This will be mapped to a path in the huggingface repo.
+            sae_id: The id of the SAE to load. This will be mapped to a path in the huggingface repo.
             device: The device to load the SAE on, defaults to "cpu".
             dtype: The dtype to load the SAE on, defaults to "float32".
             force_download: Whether to force download the SAE weights and config, defaults to False.
@@ -626,7 +626,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         Args:
             release: The release name. This will be mapped to a huggingface repo id based on the pretrained_saes.yaml file.
-            id: The id of the SAE to load. This will be mapped to a path in the huggingface repo.
+            sae_id: The id of the SAE to load. This will be mapped to a path in the huggingface repo.
             device: The device to load the SAE on, defaults to "cpu".
             dtype: The dtype to load the SAE on, defaults to "float32".
             force_download: Whether to force download the SAE weights and config, defaults to False.

@@ -223,3 +223,234 @@ activation_gen = ActivationGenerator(
 ```
 
 Pass a list of modifiers to apply them in sequence.
+
+
+## Large-Scale Training with SyntheticModel
+
+For training SAEs on larger synthetic datasets with features like checkpointing, wandb logging, and HuggingFace integration, use [SyntheticModel][sae_lens.synthetic.SyntheticModel] and [SyntheticSAERunner][sae_lens.synthetic.SyntheticSAERunner].
+
+### SyntheticModel
+
+[SyntheticModel][sae_lens.synthetic.SyntheticModel] combines all synthetic data components into a single, configurable model:
+
+```python
+from sae_lens.synthetic import SyntheticModel, SyntheticModelConfig
+
+cfg = SyntheticModelConfig(
+    num_features=10_000,
+    hidden_dim=512,
+)
+
+model = SyntheticModel(cfg)
+
+# Generate training data
+hidden_activations = model.sample(batch_size=1024)
+
+# Or get both hidden activations and ground-truth features
+hidden_acts, feature_acts = model.sample_with_features(batch_size=1024)
+```
+
+### SyntheticModelConfig
+
+[SyntheticModelConfig][sae_lens.synthetic.SyntheticModelConfig] provides declarative configuration for all model properties:
+
+```python
+from sae_lens.synthetic import (
+    SyntheticModelConfig,
+    ZipfianFiringProbabilityConfig,
+    HierarchyConfig,
+    OrthogonalizationConfig,
+    LowRankCorrelationConfig,
+    LinearMagnitudeConfig,
+)
+
+cfg = SyntheticModelConfig(
+    num_features=10_000,
+    hidden_dim=512,
+
+    # Firing probability distribution
+    firing_probability=ZipfianFiringProbabilityConfig(
+        exponent=1.0,
+        max_prob=0.3,
+        min_prob=0.01,
+    ),
+
+    # Hierarchical feature structure
+    hierarchy=HierarchyConfig(
+        total_root_nodes=100,
+        branching_factor=10,
+        max_depth=2,
+        mutually_exclusive_portion=0.3,
+    ),
+
+    # Feature orthogonalization
+    orthogonalization=OrthogonalizationConfig(
+        num_steps=200,
+        lr=0.01,
+    ),
+
+    # Feature correlations
+    correlation=LowRankCorrelationConfig(
+        rank=32,
+        correlation_scale=0.1,
+    ),
+
+    # Per-feature magnitude variation
+    mean_firing_magnitudes=LinearMagnitudeConfig(start=0.5, end=2.0),
+    std_firing_magnitudes=0.1,
+
+    # Reproducibility
+    seed=42,
+)
+
+model = SyntheticModel(cfg, device="cuda")
+```
+
+### Automatic Hierarchy Generation
+
+Use [HierarchyConfig][sae_lens.synthetic.HierarchyConfig] to automatically generate hierarchical feature structures:
+
+```python
+from sae_lens.synthetic import HierarchyConfig
+
+hierarchy_cfg = HierarchyConfig(
+    total_root_nodes=100,           # Number of root features
+    branching_factor=10,            # Children per parent (or tuple for range)
+    max_depth=2,                    # Maximum tree depth
+    mutually_exclusive_portion=0.3, # Fraction of parents with ME children
+    mutually_exclusive_min_depth=0, # Minimum depth for ME
+    compensate_probabilities=False,  # Adjust probs for hierarchy effects
+)
+```
+
+With `compensate_probabilities=True`, firing probabilities are scaled up to compensate for the reduction caused by hierarchy constraints (children only fire when parents fire). This setting likely only makes sense when using a Zipfian firing probability distribution.
+
+### Per-Feature Magnitude Distributions
+
+Configure how firing magnitudes vary across features:
+
+```python
+from sae_lens.synthetic import (
+    ConstantMagnitudeConfig,
+    LinearMagnitudeConfig,
+    ExponentialMagnitudeConfig,
+    FoldedNormalMagnitudeConfig,
+)
+
+# All features have magnitude 1.0
+constant = ConstantMagnitudeConfig(value=1.0)
+
+# Linear interpolation from 0.5 to 2.0 across features
+linear = LinearMagnitudeConfig(start=0.5, end=2.0)
+
+# Exponential interpolation
+exponential = ExponentialMagnitudeConfig(start=0.1, end=10.0)
+
+# Random magnitudes from folded normal distribution
+random = FoldedNormalMagnitudeConfig(mean=1.0, std=0.3)
+```
+
+### Training with SyntheticSAERunner
+
+[SyntheticSAERunner][sae_lens.synthetic.SyntheticSAERunner] provides full training infrastructure:
+
+```python
+from sae_lens.synthetic import SyntheticSAERunner, SyntheticSAERunnerConfig
+from sae_lens import StandardTrainingSAEConfig
+
+runner_cfg = SyntheticSAERunnerConfig(
+    synthetic_model=SyntheticModelConfig(
+        num_features=10_000,
+        hidden_dim=512,
+    ),
+
+    sae=StandardTrainingSAEConfig(
+        d_in=512,  # Must match hidden_dim
+        d_sae=16_000,
+        l1_coefficient=5e-3,
+    ),
+
+    # Training parameters
+    training_samples=100_000_000,
+    batch_size=4096,
+    lr=3e-4,
+
+    # Checkpointing
+    n_checkpoints=5,
+    checkpoint_path="checkpoints",
+    output_path="output",
+
+    # Evaluation
+    eval_frequency=1000,  # Evaluate MCC every N steps
+    eval_samples=100_000,
+)
+
+runner = SyntheticSAERunner(runner_cfg)
+result = runner.run()
+
+print(f"Final MCC: {result.final_eval.mcc:.3f}")
+```
+
+### Saving and Loading Models
+
+Save and load synthetic models for reproducibility:
+
+```python
+# Save to disk
+model.save("./my_synthetic_model")
+
+# Load from disk
+model = SyntheticModel.load_from_disk("./my_synthetic_model")
+
+# Smart loading from various sources
+model = SyntheticModel.load_from_source(cfg)  # From config
+model = SyntheticModel.load_from_source("./path")  # From disk
+model = SyntheticModel.load_from_source("username/repo")  # From HuggingFace
+```
+
+### HuggingFace Integration
+
+Share synthetic models via HuggingFace Hub:
+
+```python
+from sae_lens.synthetic import (
+    SyntheticModel,
+    upload_synthetic_model_to_huggingface,
+)
+
+# Upload a model
+upload_synthetic_model_to_huggingface(
+    model=model,  # Or path to saved model
+    hf_repo_id="username/my-synthetic-model",
+)
+
+# Load from HuggingFace
+model = SyntheticModel.from_pretrained("username/my-synthetic-model")
+
+# Load from a subfolder in a repo
+model = SyntheticModel.from_pretrained(
+    "username/repo",
+    model_path="models/large",
+)
+```
+
+### Using Pretrained Synthetic Models with Runner
+
+Load a pretrained synthetic model for training:
+
+```python
+runner_cfg = SyntheticSAERunnerConfig(
+    # Load from HuggingFace
+    synthetic_model="username/my-synthetic-model",
+
+    # Or from disk
+    # synthetic_model="./path/to/model",
+
+    sae=StandardTrainingSAEConfig(
+        d_in=512,
+        d_sae=16_000,
+        l1_coefficient=5e-3,
+    ),
+    training_samples=100_000_000,
+)
+```

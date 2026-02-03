@@ -600,7 +600,6 @@ class SyntheticModel(nn.Module):
             repo_id: The Hugging Face repository ID (e.g., "username/repo-name")
             model_path: Optional subfolder within the repo. If None, loads from repo root.
             device: Device for tensors (runtime option)
-            use_sparse_tensors: Whether to use sparse tensors (runtime option)
             force_download: Whether to force re-download even if cached
 
         Returns:
