@@ -28,6 +28,20 @@ class FiringProbabilityConfig(ABC):
         """Return the registered name for this generator type."""
         ...
 
+    @abstractmethod
+    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
+        """
+        Generate firing probabilities.
+
+        Args:
+            num_features: Number of features to generate probabilities for
+            seed: Optional random seed for reproducibility (for stochastic generators)
+
+        Returns:
+            Tensor of shape (num_features,) with firing probabilities
+        """
+        ...
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize config to dictionary."""
         result = asdict(self)
@@ -45,55 +59,35 @@ class FiringProbabilityConfig(ABC):
         name = d.pop("generator_name", None)
         if name is None:
             raise ValueError("generator_name required in config dict")
-        cfg_class, _ = FIRING_PROB_REGISTRY.get_or_raise(name)
+        cfg_class = FIRING_PROB_REGISTRY.get_or_raise(name)
         return cfg_class(**d)
-
-
-class FiringProbabilityGenerator(ABC):
-    """Base class for generating firing probabilities."""
-
-    @abstractmethod
-    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
-        """
-        Generate firing probabilities.
-
-        Args:
-            num_features: Number of features to generate probabilities for
-            seed: Optional random seed for reproducibility (for stochastic generators)
-
-        Returns:
-            Tensor of shape (num_features,) with firing probabilities
-        """
-        ...
 
 
 def register_firing_probability(
     name: str,
     config_class: type[FiringProbabilityConfig],
-    generator_class: type[FiringProbabilityGenerator],
 ) -> None:
     """
-    Register a firing probability generator with its config.
+    Register a firing probability config.
 
     Args:
         name: Unique name for this firing probability type
         config_class: Config dataclass for this generator
-        generator_class: Generator class that produces firing probabilities
     """
-    FIRING_PROB_REGISTRY.register(name, (config_class, generator_class))
+    FIRING_PROB_REGISTRY.register(name, config_class)
 
 
 def get_firing_probability_class(
     name: str,
-) -> tuple[type[FiringProbabilityConfig], type[FiringProbabilityGenerator]]:
+) -> type[FiringProbabilityConfig]:
     """
-    Get the config and generator classes for a firing probability type.
+    Get the config class for a firing probability type.
 
     Args:
         name: Name of the firing probability type
 
     Returns:
-        Tuple of (config_class, generator_class)
+        The config class
     """
     return FIRING_PROB_REGISTRY.get_or_raise(name)
 
@@ -224,19 +218,12 @@ class ZipfianFiringProbabilityConfig(FiringProbabilityConfig):
     def generator_name(cls) -> str:
         return "zipfian"
 
-
-class ZipfianFiringProbabilityGenerator(FiringProbabilityGenerator):
-    """Generator for Zipfian firing probabilities."""
-
-    def __init__(self, cfg: ZipfianFiringProbabilityConfig):
-        self.cfg = cfg
-
     def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         return zipfian_firing_probabilities(
             num_features,
-            exponent=self.cfg.exponent,
-            max_prob=self.cfg.max_prob,
-            min_prob=self.cfg.min_prob,
+            exponent=self.exponent,
+            max_prob=self.max_prob,
+            min_prob=self.min_prob,
         )
 
 
@@ -255,18 +242,11 @@ class LinearFiringProbabilityConfig(FiringProbabilityConfig):
     def generator_name(cls) -> str:
         return "linear"
 
-
-class LinearFiringProbabilityGenerator(FiringProbabilityGenerator):
-    """Generator for linear firing probabilities."""
-
-    def __init__(self, cfg: LinearFiringProbabilityConfig):
-        self.cfg = cfg
-
     def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         return linear_firing_probabilities(
             num_features,
-            max_prob=self.cfg.max_prob,
-            min_prob=self.cfg.min_prob,
+            max_prob=self.max_prob,
+            min_prob=self.min_prob,
         )
 
 
@@ -285,18 +265,11 @@ class RandomFiringProbabilityConfig(FiringProbabilityConfig):
     def generator_name(cls) -> str:
         return "random"
 
-
-class RandomFiringProbabilityGenerator(FiringProbabilityGenerator):
-    """Generator for random firing probabilities."""
-
-    def __init__(self, cfg: RandomFiringProbabilityConfig):
-        self.cfg = cfg
-
     def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         return random_firing_probabilities(
             num_features,
-            max_prob=self.cfg.max_prob,
-            min_prob=self.cfg.min_prob,
+            max_prob=self.max_prob,
+            min_prob=self.min_prob,
             seed=seed,
         )
 
@@ -315,30 +288,15 @@ class ConstantFiringProbabilityConfig(FiringProbabilityConfig):
     def generator_name(cls) -> str:
         return "constant"
 
-
-class ConstantFiringProbabilityGenerator(FiringProbabilityGenerator):
-    """Generator for constant firing probabilities."""
-
-    def __init__(self, cfg: ConstantFiringProbabilityConfig):
-        self.cfg = cfg
-
     def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
-        return torch.full((num_features,), self.cfg.probability, dtype=torch.float32)
+        return torch.full((num_features,), self.probability, dtype=torch.float32)
 
 
 # =============================================================================
 # Register built-in generators
 # =============================================================================
 
-register_firing_probability(
-    "zipfian", ZipfianFiringProbabilityConfig, ZipfianFiringProbabilityGenerator
-)
-register_firing_probability(
-    "linear", LinearFiringProbabilityConfig, LinearFiringProbabilityGenerator
-)
-register_firing_probability(
-    "random", RandomFiringProbabilityConfig, RandomFiringProbabilityGenerator
-)
-register_firing_probability(
-    "constant", ConstantFiringProbabilityConfig, ConstantFiringProbabilityGenerator
-)
+register_firing_probability("zipfian", ZipfianFiringProbabilityConfig)
+register_firing_probability("linear", LinearFiringProbabilityConfig)
+register_firing_probability("random", RandomFiringProbabilityConfig)
+register_firing_probability("constant", ConstantFiringProbabilityConfig)

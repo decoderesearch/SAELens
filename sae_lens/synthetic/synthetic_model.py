@@ -35,7 +35,6 @@ from sae_lens.synthetic.firing_magnitudes import (
 from sae_lens.synthetic.firing_probabilities import (
     FiringProbabilityConfig,
     ZipfianFiringProbabilityConfig,
-    get_firing_probability_class,
 )
 from sae_lens.synthetic.hierarchy import (
     Hierarchy,
@@ -361,11 +360,9 @@ class SyntheticModel(nn.Module):
         mean_mag_seed = base_seed + 2 if base_seed is not None else None
 
         # Generate firing probabilities
-        _, generator_class = get_firing_probability_class(
-            self.cfg.firing_probability.generator_name()
+        firing_probs = self.cfg.firing_probability.generate(
+            self.cfg.num_features, seed=firing_prob_seed
         )
-        generator = generator_class(self.cfg.firing_probability)  # type: ignore[call-arg]
-        firing_probs = generator.generate(self.cfg.num_features, seed=firing_prob_seed)
 
         # Apply hierarchy probability compensation if enabled
         if (

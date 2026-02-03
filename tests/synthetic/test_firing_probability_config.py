@@ -3,32 +3,25 @@ import torch
 
 from sae_lens.synthetic import (
     ConstantFiringProbabilityConfig,
-    ConstantFiringProbabilityGenerator,
     FiringProbabilityConfig,
     LinearFiringProbabilityConfig,
-    LinearFiringProbabilityGenerator,
     RandomFiringProbabilityConfig,
-    RandomFiringProbabilityGenerator,
     ZipfianFiringProbabilityConfig,
-    ZipfianFiringProbabilityGenerator,
     get_firing_probability_class,
     register_firing_probability,
 )
 
 
 def test_registry_contains_builtins():
-    assert get_firing_probability_class("zipfian")[0] == ZipfianFiringProbabilityConfig
-    assert get_firing_probability_class("linear")[0] == LinearFiringProbabilityConfig
-    assert get_firing_probability_class("random")[0] == RandomFiringProbabilityConfig
-    assert (
-        get_firing_probability_class("constant")[0] == ConstantFiringProbabilityConfig
-    )
+    assert get_firing_probability_class("zipfian") == ZipfianFiringProbabilityConfig
+    assert get_firing_probability_class("linear") == LinearFiringProbabilityConfig
+    assert get_firing_probability_class("random") == RandomFiringProbabilityConfig
+    assert get_firing_probability_class("constant") == ConstantFiringProbabilityConfig
 
 
-def test_get_firing_probability_class_returns_correct_classes():
-    cfg_class, gen_class = get_firing_probability_class("zipfian")
+def test_get_firing_probability_class_returns_correct_class():
+    cfg_class = get_firing_probability_class("zipfian")
     assert cfg_class == ZipfianFiringProbabilityConfig
-    assert gen_class == ZipfianFiringProbabilityGenerator
 
 
 def test_get_firing_probability_class_raises_for_unknown():
@@ -36,37 +29,33 @@ def test_get_firing_probability_class_raises_for_unknown():
         get_firing_probability_class("nonexistent")
 
 
-def test_zipfian_generator_produces_correct_shape():
+def test_zipfian_config_generates_correct_shape():
     cfg = ZipfianFiringProbabilityConfig(exponent=1.0, max_prob=0.3, min_prob=0.01)
-    gen = ZipfianFiringProbabilityGenerator(cfg)
-    probs = gen.generate(100)
+    probs = cfg.generate(100)
     assert probs.shape == (100,)
     assert probs.min() >= cfg.min_prob - 1e-6
     assert probs.max() <= cfg.max_prob + 1e-6
 
 
-def test_linear_generator_produces_correct_shape():
+def test_linear_config_generates_correct_shape():
     cfg = LinearFiringProbabilityConfig(max_prob=0.3, min_prob=0.01)
-    gen = LinearFiringProbabilityGenerator(cfg)
-    probs = gen.generate(50)
+    probs = cfg.generate(50)
     assert probs.shape == (50,)
     assert abs(probs[0] - cfg.max_prob) < 1e-6
     assert abs(probs[-1] - cfg.min_prob) < 1e-6
 
 
-def test_random_generator_produces_correct_range():
+def test_random_config_generates_correct_range():
     cfg = RandomFiringProbabilityConfig(max_prob=0.5, min_prob=0.1)
-    gen = RandomFiringProbabilityGenerator(cfg)
-    probs = gen.generate(1000, seed=42)
+    probs = cfg.generate(1000, seed=42)
     assert probs.shape == (1000,)
     assert probs.min() >= cfg.min_prob - 1e-6
     assert probs.max() <= cfg.max_prob + 1e-6
 
 
-def test_constant_generator_produces_uniform_values():
+def test_constant_config_generates_uniform_values():
     cfg = ConstantFiringProbabilityConfig(probability=0.15)
-    gen = ConstantFiringProbabilityGenerator(cfg)
-    probs = gen.generate(100)
+    probs = cfg.generate(100)
     assert probs.shape == (100,)
     assert torch.allclose(probs, torch.full((100,), 0.15))
 
@@ -100,5 +89,4 @@ def test_register_duplicate_raises():
         register_firing_probability(
             "zipfian",
             ZipfianFiringProbabilityConfig,
-            ZipfianFiringProbabilityGenerator,
         )

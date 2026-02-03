@@ -49,11 +49,8 @@ class Registry(dict[str, T]):
         return self[name]
 
 
-# Type for config/generator class pairs
-ConfigGeneratorPair = tuple[type[Any], type[Any]]
+# Registry for firing probability config classes
+FIRING_PROB_REGISTRY: Registry[type[Any]] = Registry()
 
-# Registry for firing probability generators
-FIRING_PROB_REGISTRY: Registry[ConfigGeneratorPair] = Registry()
-
-# Registry for magnitude generators
-MAGNITUDE_REGISTRY: Registry[ConfigGeneratorPair] = Registry()
+# Registry for magnitude config classes
+MAGNITUDE_REGISTRY: Registry[type[Any]] = Registry()

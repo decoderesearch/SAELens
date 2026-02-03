@@ -5,13 +5,9 @@ import torch
 
 from sae_lens.synthetic import (
     ConstantMagnitudeConfig,
-    ConstantMagnitudeGenerator,
     ExponentialMagnitudeConfig,
-    ExponentialMagnitudeGenerator,
     FoldedNormalMagnitudeConfig,
-    FoldedNormalMagnitudeGenerator,
     LinearMagnitudeConfig,
-    LinearMagnitudeGenerator,
     MagnitudeConfig,
     generate_magnitudes,
     get_magnitude_class,
@@ -28,10 +24,9 @@ class TestConstantMagnitudeConfig:
         cfg = ConstantMagnitudeConfig(value=2.5)
         assert cfg.value == 2.5
 
-    def test_generator_produces_uniform_tensor(self):
+    def test_config_generates_uniform_tensor(self):
         cfg = ConstantMagnitudeConfig(value=3.0)
-        gen = ConstantMagnitudeGenerator(cfg)
-        result = gen.generate(100)
+        result = cfg.generate(100)
         assert result.shape == (100,)
         assert torch.allclose(result, torch.full((100,), 3.0))
 
@@ -62,10 +57,9 @@ class TestLinearMagnitudeConfig:
         with pytest.raises(ValueError, match="must be positive"):
             LinearMagnitudeConfig(start=0.0, end=0.1)
 
-    def test_generator_produces_linear_interpolation(self):
+    def test_config_generates_linear_interpolation(self):
         cfg = LinearMagnitudeConfig(start=10.0, end=1.0)
-        gen = LinearMagnitudeGenerator(cfg)
-        result = gen.generate(10)
+        result = cfg.generate(10)
         assert result.shape == (10,)
         assert result[0] == pytest.approx(10.0)
         assert result[-1] == pytest.approx(1.0)
@@ -74,15 +68,13 @@ class TestLinearMagnitudeConfig:
 
     def test_single_feature_returns_start(self):
         cfg = LinearMagnitudeConfig(start=5.0, end=1.0)
-        gen = LinearMagnitudeGenerator(cfg)
-        result = gen.generate(1)
+        result = cfg.generate(1)
         assert result.shape == (1,)
         assert result[0] == pytest.approx(5.0)
 
     def test_ascending_values(self):
         cfg = LinearMagnitudeConfig(start=0.1, end=10.0)
-        gen = LinearMagnitudeGenerator(cfg)
-        result = gen.generate(10)
+        result = cfg.generate(10)
         assert result[0] == pytest.approx(0.1)
         assert result[-1] == pytest.approx(10.0)
         assert torch.all(result[1:] > result[:-1])
@@ -110,10 +102,9 @@ class TestExponentialMagnitudeConfig:
         with pytest.raises(ValueError, match="must be positive for exponential"):
             ExponentialMagnitudeConfig(start=0.0, end=0.1)
 
-    def test_generator_produces_exponential_interpolation(self):
+    def test_config_generates_exponential_interpolation(self):
         cfg = ExponentialMagnitudeConfig(start=10.0, end=1.0)
-        gen = ExponentialMagnitudeGenerator(cfg)
-        result = gen.generate(5)
+        result = cfg.generate(5)
         assert result.shape == (5,)
         assert result[0] == pytest.approx(10.0)
         assert result[-1] == pytest.approx(1.0)
@@ -123,15 +114,13 @@ class TestExponentialMagnitudeConfig:
 
     def test_single_feature_returns_start(self):
         cfg = ExponentialMagnitudeConfig(start=5.0, end=1.0)
-        gen = ExponentialMagnitudeGenerator(cfg)
-        result = gen.generate(1)
+        result = cfg.generate(1)
         assert result.shape == (1,)
         assert result[0] == pytest.approx(5.0)
 
     def test_ascending_values(self):
         cfg = ExponentialMagnitudeConfig(start=0.1, end=10.0)
-        gen = ExponentialMagnitudeGenerator(cfg)
-        result = gen.generate(10)
+        result = cfg.generate(10)
         assert result[0] == pytest.approx(0.1)
         assert result[-1] == pytest.approx(10.0)
         assert torch.all(result[1:] > result[:-1])
@@ -182,62 +171,54 @@ class TestFoldedNormalMagnitudeConfig:
         with pytest.raises(ValueError, match="min_value must be <= max_value"):
             FoldedNormalMagnitudeConfig(std=1.0, min_value=2.0, max_value=1.0)
 
-    def test_generator_produces_all_non_negative_values(self):
+    def test_config_generates_all_non_negative_values(self):
         cfg = FoldedNormalMagnitudeConfig(std=1.0)
-        gen = FoldedNormalMagnitudeGenerator(cfg)
-        result = gen.generate(100_000)
+        result = cfg.generate(100_000)
         assert result.shape == (100_000,)
         assert torch.all(result >= 0)
 
-    def test_generator_produces_all_non_negative_values_with_negative_mean(self):
+    def test_config_generates_all_non_negative_values_with_negative_mean(self):
         cfg = FoldedNormalMagnitudeConfig(mean=-2.0, std=1.0)
-        gen = FoldedNormalMagnitudeGenerator(cfg)
-        result = gen.generate(100_000)
+        result = cfg.generate(100_000)
         assert torch.all(result >= 0)
 
-    def test_generator_with_zero_mean_produces_half_normal_mean(self):
+    def test_config_with_zero_mean_produces_half_normal_mean(self):
         std = 2.0
         cfg = FoldedNormalMagnitudeConfig(mean=0.0, std=std)
-        gen = FoldedNormalMagnitudeGenerator(cfg)
-        result = gen.generate(500_000)
+        result = cfg.generate(500_000)
         expected_mean = std * math.sqrt(2 / math.pi)
         actual_mean = result.mean().item()
         assert actual_mean == pytest.approx(expected_mean, rel=0.01)
 
-    def test_generator_with_zero_mean_produces_half_normal_std(self):
+    def test_config_with_zero_mean_produces_half_normal_std(self):
         std = 2.0
         cfg = FoldedNormalMagnitudeConfig(mean=0.0, std=std)
-        gen = FoldedNormalMagnitudeGenerator(cfg)
-        result = gen.generate(500_000)
+        result = cfg.generate(500_000)
         expected_std = std * math.sqrt(1 - 2 / math.pi)
         actual_std = result.std().item()
         assert actual_std == pytest.approx(expected_std, rel=0.01)
 
-    def test_generator_with_large_positive_mean_approaches_normal(self):
+    def test_config_with_large_positive_mean_approaches_normal(self):
         mean = 10.0
         std = 1.0
         cfg = FoldedNormalMagnitudeConfig(mean=mean, std=std)
-        gen = FoldedNormalMagnitudeGenerator(cfg)
-        result = gen.generate(500_000)
+        result = cfg.generate(500_000)
         assert result.mean().item() == pytest.approx(mean, rel=0.01)
         assert result.std().item() == pytest.approx(std, rel=0.01)
 
-    def test_generator_clamps_to_max_value(self):
+    def test_config_clamps_to_max_value(self):
         cfg = FoldedNormalMagnitudeConfig(std=1.0, max_value=0.5)
-        gen = FoldedNormalMagnitudeGenerator(cfg)
-        result = gen.generate(100_000)
+        result = cfg.generate(100_000)
         assert torch.all(result <= 0.5)
 
-    def test_generator_clamps_to_min_value(self):
+    def test_config_clamps_to_min_value(self):
         cfg = FoldedNormalMagnitudeConfig(std=1.0, min_value=0.5)
-        gen = FoldedNormalMagnitudeGenerator(cfg)
-        result = gen.generate(100_000)
+        result = cfg.generate(100_000)
         assert torch.all(result >= 0.5)
 
-    def test_generator_clamps_to_both_min_and_max(self):
+    def test_config_clamps_to_both_min_and_max(self):
         cfg = FoldedNormalMagnitudeConfig(std=1.0, min_value=0.2, max_value=0.8)
-        gen = FoldedNormalMagnitudeGenerator(cfg)
-        result = gen.generate(100_000)
+        result = cfg.generate(100_000)
         assert torch.all(result >= 0.2)
         assert torch.all(result <= 0.8)
 
@@ -302,10 +283,10 @@ class TestGenerateMagnitudes:
 
 class TestMagnitudeRegistry:
     def test_registry_contains_builtins(self):
-        assert get_magnitude_class("constant")[0] == ConstantMagnitudeConfig
-        assert get_magnitude_class("linear")[0] == LinearMagnitudeConfig
-        assert get_magnitude_class("exponential")[0] == ExponentialMagnitudeConfig
-        assert get_magnitude_class("folded_normal")[0] == FoldedNormalMagnitudeConfig
+        assert get_magnitude_class("constant") == ConstantMagnitudeConfig
+        assert get_magnitude_class("linear") == LinearMagnitudeConfig
+        assert get_magnitude_class("exponential") == ExponentialMagnitudeConfig
+        assert get_magnitude_class("folded_normal") == FoldedNormalMagnitudeConfig
 
     def test_get_magnitude_class_raises_for_unknown(self):
         with pytest.raises(ValueError, match="Unknown name"):
@@ -313,9 +294,7 @@ class TestMagnitudeRegistry:
 
     def test_register_duplicate_raises(self):
         with pytest.raises(ValueError, match="already registered"):
-            register_magnitude(
-                "constant", ConstantMagnitudeConfig, ConstantMagnitudeGenerator
-            )
+            register_magnitude("constant", ConstantMagnitudeConfig)
 
     def test_config_from_dict_requires_generator_name(self):
         with pytest.raises(ValueError, match="generator_name required"):

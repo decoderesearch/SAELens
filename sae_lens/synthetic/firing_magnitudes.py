@@ -28,6 +28,20 @@ class MagnitudeConfig(ABC):
         """Return the registered name for this generator type."""
         ...
 
+    @abstractmethod
+    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
+        """
+        Generate magnitude values.
+
+        Args:
+            num_features: Number of features to generate magnitudes for
+            seed: Optional random seed for reproducibility (for stochastic generators)
+
+        Returns:
+            Tensor of shape (num_features,) with magnitude values
+        """
+        ...
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize config to dictionary."""
         result = asdict(self)
@@ -45,55 +59,35 @@ class MagnitudeConfig(ABC):
         name = d.pop("generator_name", None)
         if name is None:
             raise ValueError("generator_name required in config dict")
-        cfg_class, _ = MAGNITUDE_REGISTRY.get_or_raise(name)
+        cfg_class = MAGNITUDE_REGISTRY.get_or_raise(name)
         return cfg_class(**d)
-
-
-class MagnitudeGenerator(ABC):
-    """Base class for generating magnitude values."""
-
-    @abstractmethod
-    def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
-        """
-        Generate magnitude values.
-
-        Args:
-            num_features: Number of features to generate magnitudes for
-            seed: Optional random seed for reproducibility (for stochastic generators)
-
-        Returns:
-            Tensor of shape (num_features,) with magnitude values
-        """
-        ...
 
 
 def register_magnitude(
     name: str,
     config_class: type[MagnitudeConfig],
-    generator_class: type[MagnitudeGenerator],
 ) -> None:
     """
-    Register a magnitude generator with its config.
+    Register a magnitude config.
 
     Args:
         name: Unique name for this magnitude type
         config_class: Config dataclass for this generator
-        generator_class: Generator class that produces magnitudes
     """
-    MAGNITUDE_REGISTRY.register(name, (config_class, generator_class))
+    MAGNITUDE_REGISTRY.register(name, config_class)
 
 
 def get_magnitude_class(
     name: str,
-) -> tuple[type[MagnitudeConfig], type[MagnitudeGenerator]]:
+) -> type[MagnitudeConfig]:
     """
-    Get the config and generator classes for a magnitude type.
+    Get the config class for a magnitude type.
 
     Args:
         name: Name of the magnitude type
 
     Returns:
-        Tuple of (config_class, generator_class)
+        The config class
     """
     return MAGNITUDE_REGISTRY.get_or_raise(name)
 
@@ -117,9 +111,7 @@ def generate_magnitudes(
     if isinstance(config, (int, float)):
         return torch.full((num_features,), float(config), dtype=torch.float32)
 
-    _, generator_class = get_magnitude_class(config.generator_name())
-    generator = generator_class(config)  # type: ignore[call-arg]
-    return generator.generate(num_features, seed=seed)
+    return config.generate(num_features, seed=seed)
 
 
 # =============================================================================
@@ -141,15 +133,8 @@ class ConstantMagnitudeConfig(MagnitudeConfig):
     def generator_name(cls) -> str:
         return "constant"
 
-
-class ConstantMagnitudeGenerator(MagnitudeGenerator):
-    """Generator for constant magnitude values."""
-
-    def __init__(self, cfg: ConstantMagnitudeConfig):
-        self.cfg = cfg
-
     def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
-        return torch.full((num_features,), self.cfg.value, dtype=torch.float32)
+        return torch.full((num_features,), self.value, dtype=torch.float32)
 
 
 @dataclass
@@ -174,17 +159,10 @@ class LinearMagnitudeConfig(MagnitudeConfig):
     def generator_name(cls) -> str:
         return "linear"
 
-
-class LinearMagnitudeGenerator(MagnitudeGenerator):
-    """Generator for linearly interpolated magnitude values."""
-
-    def __init__(self, cfg: LinearMagnitudeConfig):
-        self.cfg = cfg
-
     def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         if num_features == 1:
-            return torch.tensor([self.cfg.start], dtype=torch.float32)
-        return torch.linspace(self.cfg.start, self.cfg.end, num_features)
+            return torch.tensor([self.start], dtype=torch.float32)
+        return torch.linspace(self.start, self.end, num_features)
 
 
 @dataclass
@@ -209,18 +187,11 @@ class ExponentialMagnitudeConfig(MagnitudeConfig):
     def generator_name(cls) -> str:
         return "exponential"
 
-
-class ExponentialMagnitudeGenerator(MagnitudeGenerator):
-    """Generator for exponentially interpolated magnitude values."""
-
-    def __init__(self, cfg: ExponentialMagnitudeConfig):
-        self.cfg = cfg
-
     def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         if num_features == 1:
-            return torch.tensor([self.cfg.start], dtype=torch.float32)
+            return torch.tensor([self.start], dtype=torch.float32)
         t = torch.linspace(0, 1, num_features)
-        return self.cfg.start * (self.cfg.end / self.cfg.start) ** t
+        return self.start * (self.end / self.start) ** t
 
 
 @dataclass
@@ -258,27 +229,17 @@ class FoldedNormalMagnitudeConfig(MagnitudeConfig):
     def generator_name(cls) -> str:
         return "folded_normal"
 
-
-class FoldedNormalMagnitudeGenerator(MagnitudeGenerator):
-    """Generator for folded normal distributed magnitude values."""
-
-    def __init__(self, cfg: FoldedNormalMagnitudeConfig):
-        self.cfg = cfg
-
     def generate(self, num_features: int, seed: int | None = None) -> torch.Tensor:
         generator = None
         if seed is not None:
             generator = torch.Generator().manual_seed(seed)
-        samples = (
-            self.cfg.mean
-            + torch.randn(num_features, generator=generator) * self.cfg.std
-        )
+        samples = self.mean + torch.randn(num_features, generator=generator) * self.std
         samples = torch.abs(samples)
-        if self.cfg.min_value is not None or self.cfg.max_value is not None:
+        if self.min_value is not None or self.max_value is not None:
             samples = torch.clamp(
                 samples,
-                min=self.cfg.min_value,
-                max=self.cfg.max_value,
+                min=self.min_value,
+                max=self.max_value,
             )
         return samples
 
@@ -287,11 +248,7 @@ class FoldedNormalMagnitudeGenerator(MagnitudeGenerator):
 # Register built-in generators
 # =============================================================================
 
-register_magnitude("constant", ConstantMagnitudeConfig, ConstantMagnitudeGenerator)
-register_magnitude("linear", LinearMagnitudeConfig, LinearMagnitudeGenerator)
-register_magnitude(
-    "exponential", ExponentialMagnitudeConfig, ExponentialMagnitudeGenerator
-)
-register_magnitude(
-    "folded_normal", FoldedNormalMagnitudeConfig, FoldedNormalMagnitudeGenerator
-)
+register_magnitude("constant", ConstantMagnitudeConfig)
+register_magnitude("linear", LinearMagnitudeConfig)
+register_magnitude("exponential", ExponentialMagnitudeConfig)
+register_magnitude("folded_normal", FoldedNormalMagnitudeConfig)

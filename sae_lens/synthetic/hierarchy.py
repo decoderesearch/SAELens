@@ -14,7 +14,7 @@ from __future__ import annotations
 import random
 from collections import deque
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import torch
@@ -990,13 +990,8 @@ class HierarchyConfig:
             else list(self.branching_factor)
         )
         return {
-            "total_root_nodes": self.total_root_nodes,
+            **asdict(self),
             "branching_factor": branching,
-            "max_depth": self.max_depth,
-            "mutually_exclusive_portion": self.mutually_exclusive_portion,
-            "mutually_exclusive_min_depth": self.mutually_exclusive_min_depth,
-            "mutually_exclusive_max_depth": self.mutually_exclusive_max_depth,
-            "compensate_probabilities": self.compensate_probabilities,
         }
 
     @classmethod
@@ -1006,8 +1001,6 @@ class HierarchyConfig:
         # Convert list to tuple (JSON doesn't have tuples)
         if "branching_factor" in d and isinstance(d["branching_factor"], list):
             d["branching_factor"] = tuple(d["branching_factor"])
-        # Remove deprecated seed field if present (for backward compatibility)
-        d.pop("seed", None)
         return cls(**d)
 
 
