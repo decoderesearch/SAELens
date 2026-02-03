@@ -112,7 +112,7 @@ def test_get_pretrained_saes_directory_unique_np_ids():
     df_exploded = df_exploded.drop(columns=["neuronpedia_id_list"])
     df_exploded = df_exploded.reset_index(drop=True)
     df_exploded["neuronpedia_set"] = df_exploded["neuronpedia_id"].apply(
-        lambda x: "-".join(x.split("/")[-1].split("-")[1:]) if x is not None else None
+        lambda x: "-".join(x.split("/")[-1].split("-")[1:]) if pd.notna(x) else None
     )
 
     duplicate_ids = df_exploded.groupby("neuronpedia_id").sae_lens_id.apply(
