@@ -86,7 +86,6 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     device: str = "cpu"
     autocast_sae: bool = False
     autocast_data: bool = False
-    use_sparse_tensors: bool = False
 
     # Checkpoints/outputs
     n_checkpoints: int = 0
@@ -98,7 +97,7 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     # Evaluation
     eval_frequency: int = 0  # eval every N training steps (0 = disabled)
     eval_samples: int = 500_000
-    save_final_eval_stats: bool = True
+    run_final_eval: bool = True
 
     # Misc
     dead_feature_window: int = 1000
@@ -244,7 +243,6 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
             self.synthetic_model = SyntheticModel.load_from_source(
                 cfg.synthetic_model,
                 device=cfg.device,
-                use_sparse_tensors=cfg.use_sparse_tensors,
             )
 
         # Ensure SAE dimensions match synthetic model
@@ -309,7 +307,7 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
 
         # Final evaluation
         final_eval = None
-        if self.cfg.eval_samples > 0:
+        if self.cfg.eval_samples > 0 and self.cfg.run_final_eval:
             logger.info("Running final evaluation...")
             final_eval = eval_sae_on_synthetic_data(
                 sae=sae,
@@ -318,8 +316,6 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
                 num_samples=self.cfg.eval_samples,
                 batch_size=self.cfg.batch_size,
             )
-            logger.info(f"Final MCC: {final_eval.mcc:.4f}")
-
             if self.cfg.logger.log_to_wandb:
                 wandb.log(final_eval.to_log_dict(prefix="final/"))
 
@@ -327,7 +323,9 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
         output_path = None
         if self.cfg.output_path is not None:
             output_path = Path(self.cfg.output_path)
-            self._save_outputs(output_path, sae, trainer.log_feature_sparsity)
+            self._save_outputs(
+                output_path, sae, trainer.log_feature_sparsity, final_eval
+            )
 
         if self.cfg.logger.log_to_wandb:
             wandb.finish()
@@ -375,6 +373,7 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
         output_path: Path,
         sae: TrainingSAE[Any],
         log_feature_sparsity: torch.Tensor | None,
+        eval_stats: SyntheticDataEvalResult | None,
     ) -> None:
         """Save final outputs."""
         output_path.mkdir(parents=True, exist_ok=True)
@@ -397,14 +396,7 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
             synthetic_model_path = output_path / "synthetic_model"
             self.synthetic_model.save(synthetic_model_path)
 
-        if self.cfg.save_final_eval_stats:
-            eval_stats = eval_sae_on_synthetic_data(
-                sae=sae,
-                feature_dict=self.synthetic_model.feature_dict,
-                activations_generator=self.synthetic_model.activation_generator,
-                num_samples=self.cfg.eval_samples,
-                batch_size=self.cfg.batch_size,
-            )
+        if eval_stats is not None:
             with open(output_path / "eval_stats.json", "w") as f:
                 json.dump(eval_stats.to_dict(), f, indent=2)
 

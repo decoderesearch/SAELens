@@ -8,7 +8,7 @@ and FeatureDictionary with configuration, hierarchy, correlation, and persistenc
 import json
 import logging
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -163,76 +163,59 @@ class SyntheticModelConfig:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize config to dictionary."""
-        return {
-            "num_features": self.num_features,
-            "hidden_dim": self.hidden_dim,
-            "firing_probability": self.firing_probability.to_dict(),
-            "hierarchy": (
-                self.hierarchy.to_dict() if self.hierarchy is not None else None
-            ),
-            "orthogonalization": (
-                self.orthogonalization.to_dict()
-                if self.orthogonalization is not None
-                else None
-            ),
-            "correlation": (
-                self.correlation.to_dict() if self.correlation is not None else None
-            ),
-            "std_firing_magnitudes": (
-                self.std_firing_magnitudes.to_dict()
-                if isinstance(self.std_firing_magnitudes, MagnitudeConfig)
-                else self.std_firing_magnitudes
-            ),
-            "mean_firing_magnitudes": (
-                self.mean_firing_magnitudes.to_dict()
-                if isinstance(self.mean_firing_magnitudes, MagnitudeConfig)
-                else self.mean_firing_magnitudes
-            ),
-            "bias": self.bias,
-            "dtype": self.dtype,
-            "seed": self.seed,
-        }
+        d = asdict(self)
+
+        # Handle nested configs with their own to_dict methods
+        d["firing_probability"] = self.firing_probability.to_dict()
+        if self.hierarchy is not None:
+            d["hierarchy"] = self.hierarchy.to_dict()
+        if self.orthogonalization is not None:
+            d["orthogonalization"] = self.orthogonalization.to_dict()
+        if self.correlation is not None:
+            d["correlation"] = self.correlation.to_dict()
+        if isinstance(self.std_firing_magnitudes, MagnitudeConfig):
+            d["std_firing_magnitudes"] = self.std_firing_magnitudes.to_dict()
+        if isinstance(self.mean_firing_magnitudes, MagnitudeConfig):
+            d["mean_firing_magnitudes"] = self.mean_firing_magnitudes.to_dict()
+
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "SyntheticModelConfig":
         """Deserialize config from dictionary."""
+        # Parse nested configs
         ortho_dict = d.get("orthogonalization")
-        orthogonalization = (
-            OrthogonalizationConfig.from_dict(ortho_dict)
-            if ortho_dict is not None
-            else None
-        )
         corr_dict = d.get("correlation")
-        correlation = (
-            LowRankCorrelationConfig.from_dict(corr_dict)
-            if corr_dict is not None
-            else None
-        )
         hierarchy_dict = d.get("hierarchy")
-        hierarchy = (
-            HierarchyConfig.from_dict(hierarchy_dict)
-            if hierarchy_dict is not None
-            else None
-        )
-        return cls(
-            num_features=d["num_features"],
-            hidden_dim=d["hidden_dim"],
-            firing_probability=FiringProbabilityConfig.from_dict(
+
+        updated_dict: dict[str, Any] = {
+            **d,
+            "firing_probability": FiringProbabilityConfig.from_dict(
                 d["firing_probability"]
             ),
-            hierarchy=hierarchy,
-            orthogonalization=orthogonalization,
-            correlation=correlation,
-            std_firing_magnitudes=_deserialize_magnitude(
+            "orthogonalization": (
+                OrthogonalizationConfig.from_dict(ortho_dict)
+                if ortho_dict is not None
+                else None
+            ),
+            "correlation": (
+                LowRankCorrelationConfig.from_dict(corr_dict)
+                if corr_dict is not None
+                else None
+            ),
+            "hierarchy": (
+                HierarchyConfig.from_dict(hierarchy_dict)
+                if hierarchy_dict is not None
+                else None
+            ),
+            "std_firing_magnitudes": _deserialize_magnitude(
                 d.get("std_firing_magnitudes", 0.0)
             ),
-            mean_firing_magnitudes=_deserialize_magnitude(
+            "mean_firing_magnitudes": _deserialize_magnitude(
                 d.get("mean_firing_magnitudes", 1.0)
             ),
-            bias=d.get("bias", False),
-            dtype=d.get("dtype", "float32"),
-            seed=d.get("seed"),
-        )
+        }
+        return cls(**updated_dict)
 
 
 # File names for persistence
@@ -274,7 +257,6 @@ class SyntheticModel(nn.Module):
         hierarchy: Hierarchy | None = None,
         correlation_matrix: LowRankCorrelationMatrix | None = None,
         device: str = "cpu",
-        use_sparse_tensors: bool = False,
     ):
         """
         Create a SyntheticModel.
@@ -289,7 +271,6 @@ class SyntheticModel(nn.Module):
             hierarchy: Optional hierarchy structure (generated from cfg.hierarchy if None)
             correlation_matrix: Optional correlation matrix (generated from cfg.correlation if None)
             device: Device for tensors (runtime option, not saved)
-            use_sparse_tensors: Whether to use sparse tensors (runtime option, not saved)
         """
         super().__init__()
         self.cfg = cfg
@@ -299,27 +280,14 @@ class SyntheticModel(nn.Module):
         if cfg.seed is not None:
             torch.manual_seed(cfg.seed)
 
-        # Hierarchy - generate from config if not provided
-        if hierarchy is None:
-            hierarchy = self._create_hierarchy()
-        self.hierarchy = hierarchy
-
-        # Correlation matrix - generate from config if not provided
-        if correlation_matrix is None:
-            correlation_matrix = self._create_correlation_matrix()
-        self.correlation_matrix = correlation_matrix
-
-        # Feature dictionary
-        if feature_dict is None:
-            feature_dict = self._create_feature_dict()
-        self.feature_dict = feature_dict
-
-        # Activation generator
-        if activation_generator is None:
-            activation_generator = self._create_activation_generator(use_sparse_tensors)
-        else:
-            activation_generator.use_sparse_tensors = use_sparse_tensors
-        self.activation_generator = activation_generator
+        self.hierarchy = hierarchy or self._create_hierarchy()
+        self.correlation_matrix = (
+            correlation_matrix or self._create_correlation_matrix()
+        )
+        self.feature_dict = feature_dict or self._create_feature_dict()
+        self.activation_generator = (
+            activation_generator or self._create_activation_generator()
+        )
 
     @property
     def use_sparse_tensors(self) -> bool:
@@ -330,33 +298,6 @@ class SyntheticModel(nn.Module):
     def use_sparse_tensors(self, value: bool) -> None:
         """Set whether to use sparse tensors for activations."""
         self.activation_generator.use_sparse_tensors = value
-
-    @classmethod
-    def from_config(
-        cls,
-        cfg: SyntheticModelConfig,
-        device: str = "cpu",
-        use_sparse_tensors: bool = False,
-    ) -> "SyntheticModel":
-        """
-        Create a new SyntheticModel from configuration.
-
-        This is equivalent to calling `SyntheticModel(cfg, device=device, ...)`.
-        Kept for backwards compatibility.
-
-        Args:
-            cfg: Complete model configuration
-            device: Device for tensors (runtime option)
-            use_sparse_tensors: Whether to use sparse COO tensors (runtime option)
-
-        Returns:
-            Fully initialized SyntheticModel
-        """
-        return cls(
-            cfg=cfg,
-            device=device,
-            use_sparse_tensors=use_sparse_tensors,
-        )
 
     def _create_hierarchy(self) -> Hierarchy | None:
         """Create hierarchy from config if configured."""
@@ -572,11 +513,10 @@ class SyntheticModel(nn.Module):
                 json.dump(self.hierarchy.to_dict(), f, indent=2)
 
     @classmethod
-    def load(
+    def load_from_disk(
         cls,
         path: str | Path,
         device: str = "cpu",
-        use_sparse_tensors: bool = False,
     ) -> "SyntheticModel":
         """
         Load a SyntheticModel from disk.
@@ -584,7 +524,6 @@ class SyntheticModel(nn.Module):
         Args:
             path: Directory containing saved model
             device: Device for tensors (runtime option)
-            use_sparse_tensors: Whether to use sparse tensors (runtime option)
 
         Returns:
             Loaded SyntheticModel
@@ -637,7 +576,6 @@ class SyntheticModel(nn.Module):
             hierarchy=hierarchy,
             correlation_matrix=correlation_matrix,
             device=device,
-            use_sparse_tensors=use_sparse_tensors,
         )
 
         # Override firing probabilities with saved values
@@ -653,7 +591,6 @@ class SyntheticModel(nn.Module):
         repo_id: str,
         model_path: str | None = None,
         device: str = "cpu",
-        use_sparse_tensors: bool = False,
         force_download: bool = False,
     ) -> "SyntheticModel":
         """
@@ -706,9 +643,7 @@ class SyntheticModel(nn.Module):
             except EntryNotFoundError:
                 pass  # No hierarchy file
 
-            return cls.load(
-                tmp_path, device=device, use_sparse_tensors=use_sparse_tensors
-            )
+            return cls.load_from_disk(tmp_path, device=device)
 
     def to(  # type: ignore[override]
         self,
@@ -736,7 +671,6 @@ class SyntheticModel(nn.Module):
         cls,
         source: "SyntheticModelConfig | str",
         device: str = "cpu",
-        use_sparse_tensors: bool = False,
     ) -> "SyntheticModel":
         """
         Load a SyntheticModel from various sources with smart detection.
@@ -754,21 +688,16 @@ class SyntheticModel(nn.Module):
                   "repo_id" or "repo_id:model_path" for models in subfolders
 
             device: Device for tensors (runtime option)
-            use_sparse_tensors: Whether to use sparse tensors (runtime option)
 
         Returns:
             Loaded or created SyntheticModel
         """
         if isinstance(source, SyntheticModelConfig):
-            return cls.from_config(
-                source, device=device, use_sparse_tensors=use_sparse_tensors
-            )
+            return cls(source, device=device)
 
         # String source - determine if local path or HuggingFace
         if _is_local_path(source):
-            return cls.load(
-                source, device=device, use_sparse_tensors=use_sparse_tensors
-            )
+            return cls.load_from_disk(source, device=device)
 
         # Parse HuggingFace format: "repo_id" or "repo_id:model_path"
         if ":" in source:
@@ -776,12 +705,7 @@ class SyntheticModel(nn.Module):
         else:
             repo_id, model_path = source, None
 
-        return cls.from_pretrained(
-            repo_id,
-            model_path=model_path,
-            device=device,
-            use_sparse_tensors=use_sparse_tensors,
-        )
+        return cls.from_pretrained(repo_id, model_path=model_path, device=device)
 
 
 def _is_local_path(path: str) -> bool:

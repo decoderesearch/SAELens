@@ -17,7 +17,7 @@ def test_runner_config_default_values():
     sae_cfg = StandardTrainingSAEConfig(d_in=16, d_sae=32)
     runner_cfg = SyntheticSAERunnerConfig(synthetic_model=model_cfg, sae=sae_cfg)
 
-    assert runner_cfg.training_samples == 10_000_000
+    assert runner_cfg.training_samples == 100_000_000
     assert runner_cfg.batch_size == 1024
     assert runner_cfg.lr == 3e-4
     assert runner_cfg.device == "cpu"
@@ -90,7 +90,7 @@ def test_runner_initializes_with_override_synthetic_model():
         hidden_dim=16,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(model_cfg)
+    model = SyntheticModel(model_cfg)
 
     sae_cfg = StandardTrainingSAEConfig(d_in=16, d_sae=32)
     runner_cfg = SyntheticSAERunnerConfig(

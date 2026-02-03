@@ -76,7 +76,7 @@ def test_synthetic_model_from_config_creates_model():
         orthogonalization=None,
         seed=42,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
     assert model.cfg == cfg
     assert model.feature_dict is not None
     assert model.activation_generator is not None
@@ -90,7 +90,7 @@ def test_synthetic_model_sample_returns_correct_shape():
         hidden_dim=16,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
     samples = model.sample(100)
     assert samples.shape == (100, 16)
 
@@ -101,7 +101,7 @@ def test_synthetic_model_sample_with_features_returns_both():
         hidden_dim=16,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
     hidden_acts, feature_acts = model.sample_with_features(100)
     assert hidden_acts.shape == (100, 16)
     assert feature_acts.shape == (100, 32)
@@ -115,7 +115,7 @@ def test_synthetic_model_with_bias():
         orthogonalization=None,
         seed=42,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
     assert model.feature_dict.bias.norm().item() == pytest.approx(0.5, abs=1e-5)
     assert model.feature_dict.bias.requires_grad
 
@@ -128,7 +128,7 @@ def test_synthetic_model_with_hierarchy():
         orthogonalization=None,
         seed=42,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
     assert model.hierarchy is not None
     assert len(model.hierarchy.roots) > 0
     samples = model.sample(50)
@@ -142,7 +142,7 @@ def test_synthetic_model_with_correlation():
         correlation=LowRankCorrelationConfig(rank=8, correlation_scale=0.1),
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
     assert model.correlation_matrix is not None
     samples = model.sample(50)
     assert samples.shape == (50, 32)
@@ -155,7 +155,7 @@ def test_synthetic_model_save_load_roundtrip():
         orthogonalization=None,
         seed=42,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "test_model"
@@ -166,7 +166,7 @@ def test_synthetic_model_save_load_roundtrip():
         assert (save_path / "synthetic_model.safetensors").exists()
 
         # Load and compare
-        loaded = SyntheticModel.load(save_path)
+        loaded = SyntheticModel.load_from_disk(save_path)
         assert loaded.cfg == cfg
 
         # Feature vectors should be identical
@@ -185,7 +185,7 @@ def test_synthetic_model_save_load_with_hierarchy():
         orthogonalization=None,
         seed=42,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "test_model"
@@ -194,7 +194,7 @@ def test_synthetic_model_save_load_with_hierarchy():
         # Hierarchy file should exist
         assert (save_path / "hierarchy.json").exists()
 
-        loaded = SyntheticModel.load(save_path)
+        loaded = SyntheticModel.load_from_disk(save_path)
         assert loaded.cfg == cfg
         assert loaded.hierarchy is not None
         assert model.hierarchy is not None
@@ -208,13 +208,13 @@ def test_synthetic_model_save_load_with_correlation():
         correlation=LowRankCorrelationConfig(rank=8),
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "test_model"
         model.save(save_path)
 
-        loaded = SyntheticModel.load(save_path)
+        loaded = SyntheticModel.load_from_disk(save_path)
         assert loaded.cfg == cfg
         assert loaded.correlation_matrix is not None
         assert model.correlation_matrix is not None
@@ -234,7 +234,7 @@ def test_synthetic_model_to_device():
         hidden_dim=16,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     # Test moving to same device (cpu)
     model.to("cpu")
@@ -290,7 +290,7 @@ def test_synthetic_model_with_magnitude_configs_generates_samples():
         mean_firing_magnitudes=LinearMagnitudeConfig(start=2.0, end=0.5),
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
     samples = model.sample(100)
     assert samples.shape == (100, 16)
 
@@ -301,7 +301,7 @@ def test_synthetic_model_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> Non
         hidden_dim=16,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "test_model"
@@ -339,7 +339,7 @@ def test_synthetic_model_from_pretrained_with_model_path(
         orthogonalization=None,
         seed=42,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "test_model"
@@ -383,7 +383,7 @@ def test_load_from_source_with_local_path() -> None:
         hidden_dim=16,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "test_model"
@@ -403,7 +403,7 @@ def test_load_from_source_with_relative_path() -> None:
         hidden_dim=16,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "test_model"
@@ -429,7 +429,7 @@ def test_load_from_source_with_huggingface(monkeypatch: pytest.MonkeyPatch) -> N
         hidden_dim=16,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "test_model"
@@ -466,7 +466,7 @@ def test_load_from_source_with_huggingface_subpath(
         hidden_dim=16,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "test_model"
@@ -509,8 +509,8 @@ def test_synthetic_model_seed_produces_identical_models():
         seed=42,
     )
 
-    model1 = SyntheticModel.from_config(cfg)
-    model2 = SyntheticModel.from_config(cfg)
+    model1 = SyntheticModel(cfg)
+    model2 = SyntheticModel(cfg)
 
     # Feature dictionary should be identical
     assert torch.allclose(
@@ -586,8 +586,8 @@ def test_synthetic_model_different_seeds_produce_different_models():
         seed=123,
     )
 
-    model1 = SyntheticModel.from_config(cfg1)
-    model2 = SyntheticModel.from_config(cfg2)
+    model1 = SyntheticModel(cfg1)
+    model2 = SyntheticModel(cfg2)
 
     # Feature dictionary should be different
     assert not torch.allclose(
@@ -638,7 +638,7 @@ def test_synthetic_model_hierarchy_compensation_integration():
         orthogonalization=None,
         seed=42,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     n_samples = 20000
     _, features = model.sample_with_features(n_samples)
@@ -677,7 +677,7 @@ def test_synthetic_model_hierarchy_compensation_clamping(
     )
 
     with caplog.at_level(logging.WARNING, logger="sae_lens.synthetic.synthetic_model"):
-        model = SyntheticModel.from_config(cfg)
+        model = SyntheticModel(cfg)
 
     assert "clamped" in caplog.text.lower()
     assert model.activation_generator.firing_probabilities.max().item() <= 1.0
@@ -696,7 +696,7 @@ def test_synthetic_model_hierarchy_compensation_disabled_by_default():
         orthogonalization=None,
         seed=42,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     n_samples = 10000
     _, features = model.sample_with_features(n_samples)

@@ -77,7 +77,7 @@ def _get_synthetic_model(model: SyntheticModel | Path | str) -> SyntheticModel:
     if isinstance(model, SyntheticModel):
         return model
     path = model if isinstance(model, Path) else Path(model)
-    return SyntheticModel.load(path)
+    return SyntheticModel.load_from_disk(path)
 
 
 def _create_default_readme(

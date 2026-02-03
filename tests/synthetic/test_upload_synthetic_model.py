@@ -23,7 +23,7 @@ def test_create_default_readme_basic() -> None:
         hidden_dim=256,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     readme = _create_default_readme("user/repo", None, model)
 
@@ -42,7 +42,7 @@ def test_create_default_readme_has_valid_yaml_frontmatter() -> None:
         hidden_dim=256,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     readme = _create_default_readme("user/repo", None, model)
 
@@ -68,7 +68,7 @@ def test_create_default_readme_with_hf_path() -> None:
         hidden_dim=128,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     readme = _create_default_readme("user/repo", "my_model", model)
 
@@ -87,7 +87,7 @@ def test_create_default_readme_with_hierarchy() -> None:
         orthogonalization=None,
         seed=42,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     readme = _create_default_readme("user/repo", None, model)
 
@@ -104,7 +104,7 @@ def test_create_default_readme_with_correlation() -> None:
         correlation=LowRankCorrelationConfig(rank=8, correlation_scale=0.2),
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     readme = _create_default_readme("user/repo", None, model)
 
@@ -123,7 +123,7 @@ def test_get_hierarchy_max_depth() -> None:
         orthogonalization=None,
         seed=42,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     assert model.hierarchy is not None
     depth = _get_hierarchy_max_depth(model.hierarchy)
@@ -141,7 +141,7 @@ def test_upload_synthetic_model_calls_api(monkeypatch: pytest.MonkeyPatch) -> No
         hidden_dim=16,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     # Mock HfApi
     mock_api = MagicMock()
@@ -185,7 +185,7 @@ def test_upload_synthetic_model_with_path(monkeypatch: pytest.MonkeyPatch) -> No
         hidden_dim=16,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "test_model"
@@ -223,7 +223,7 @@ def test_upload_synthetic_model_skip_readme(monkeypatch: pytest.MonkeyPatch) -> 
         hidden_dim=16,
         orthogonalization=None,
     )
-    model = SyntheticModel.from_config(cfg)
+    model = SyntheticModel(cfg)
 
     # Mock HfApi
     mock_api = MagicMock()

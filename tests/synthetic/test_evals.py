@@ -22,6 +22,7 @@ class TestSyntheticDataEvalResultToLogDict:
         result = SyntheticDataEvalResult(
             true_l0=1.5,
             sae_l0=2.0,
+            true_l0_at_sae_width=1.2,
             dead_latents=5,
             shrinkage=0.95,
             explained_variance=0.9,
@@ -37,6 +38,7 @@ class TestSyntheticDataEvalResultToLogDict:
         assert log_dict == {
             "test/true_l0": 1.5,
             "test/sae_l0": 2.0,
+            "test/true_l0_at_sae_width": 1.2,
             "test/dead_latents": 5,
             "test/shrinkage": 0.95,
             "test/explained_variance": 0.9,
@@ -52,6 +54,7 @@ class TestSyntheticDataEvalResultToLogDict:
         result = SyntheticDataEvalResult(
             true_l0=1.0,
             sae_l0=2.0,
+            true_l0_at_sae_width=1.0,
             dead_latents=0,
             shrinkage=1.0,
             explained_variance=1.0,
