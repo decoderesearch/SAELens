@@ -6,7 +6,7 @@ training SAEs on synthetic data with full support for all SAE architectures.
 """
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
@@ -71,7 +71,7 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     sae: T_TRAINING_SAE_CONFIG
 
     # Training params
-    training_samples: int = 10_000_000
+    training_samples: int = 100_000_000
     batch_size: int = 1024
     lr: float = 3e-4
     lr_warm_up_steps: int = 0
@@ -91,16 +91,19 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     # Checkpoints/outputs
     n_checkpoints: int = 0
     checkpoint_path: str | None = "checkpoints"
+    save_final_checkpoint: bool = False
     output_path: str | None = "output"
-    save_synthetic_model: bool = True  # Save synthetic model with output
+    save_synthetic_model: bool = False  # Save synthetic model with output
 
     # Evaluation
-    eval_frequency: int = 0  # MCC eval every N training steps (0 = disabled)
-    eval_samples: int = 100_000
+    eval_frequency: int = 0  # eval every N training steps (0 = disabled)
+    eval_samples: int = 500_000
+    save_final_eval_stats: bool = True
 
     # Misc
     dead_feature_window: int = 1000
     feature_sampling_window: int = 2000
+    sae_lens_version: str = field(default_factory=lambda: __version__)
 
     logger: LoggingConfig = field(default_factory=LoggingConfig)
 
@@ -120,50 +123,33 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize config to dictionary."""
+        d = asdict(self)
+
+        # Handle synthetic_model (may be config or path string)
         sm = self.synthetic_model
         if isinstance(sm, SyntheticModelConfig):
-            sm_dict: dict[str, Any] | str = sm.to_dict()
+            d["synthetic_model"] = sm.to_dict()
         else:
-            sm_dict = str(sm)  # Path string
+            d["synthetic_model"] = str(sm)
 
-        return {
-            "synthetic_model": sm_dict,
-            "sae": self.sae.to_dict(),
-            "training_samples": self.training_samples,
-            "batch_size": self.batch_size,
-            "lr": self.lr,
-            "lr_warm_up_steps": self.lr_warm_up_steps,
-            "lr_decay_steps": self.lr_decay_steps,
-            "lr_scheduler_name": self.lr_scheduler_name,
-            "lr_end": self.lr_end,
-            "adam_beta1": self.adam_beta1,
-            "adam_beta2": self.adam_beta2,
-            "n_restart_cycles": self.n_restart_cycles,
-            "device": self.device,
-            "autocast_sae": self.autocast_sae,
-            "autocast_data": self.autocast_data,
-            "use_sparse_tensors": self.use_sparse_tensors,
-            "n_checkpoints": self.n_checkpoints,
-            "checkpoint_path": self.checkpoint_path,
-            "output_path": self.output_path,
-            "save_synthetic_model": self.save_synthetic_model,
-            "eval_frequency": self.eval_frequency,
-            "eval_samples": self.eval_samples,
-            "dead_feature_window": self.dead_feature_window,
-            "feature_sampling_window": self.feature_sampling_window,
-            "logger": {
-                "log_to_wandb": self.logger.log_to_wandb,
-                "wandb_project": self.logger.wandb_project,
-                "run_name": self.logger.run_name,
-                "wandb_log_frequency": self.logger.wandb_log_frequency,
-                "wandb_entity": self.logger.wandb_entity,
-            },
-            "sae_lens_version": __version__,
-        }
+        # Handle nested configs with their own to_dict methods
+        d["sae"] = self.sae.to_dict()
+        d["logger"] = asdict(self.logger)
+
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "SyntheticSAERunnerConfig[Any]":
         """Deserialize config from dictionary."""
+        if "sae" not in d:
+            raise ValueError("sae field is required in the config dictionary")
+        if "architecture" not in d["sae"]:
+            raise ValueError("architecture field is required in the sae dictionary")
+        if "synthetic_model" not in d:
+            raise ValueError(
+                "synthetic_model field is required in the config dictionary"
+            )
+
         # Parse synthetic_model
         sm = d["synthetic_model"]
         if isinstance(sm, dict):
@@ -174,73 +160,27 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
             synthetic_model = str(sm)  # Path
 
         # Parse SAE config
-        sae_dict = d["sae"]
-        sae_cfg_class = get_sae_training_class(sae_dict["architecture"])[1]
-        sae = sae_cfg_class.from_dict(sae_dict)
+        sae_cfg_class = get_sae_training_class(d["sae"]["architecture"])[1]
+        sae_cfg = sae_cfg_class.from_dict(d["sae"])
 
         # Parse logger
-        logger_dict = d.get("logger", {})
-        logger_cfg = LoggingConfig(
-            log_to_wandb=logger_dict.get("log_to_wandb", True),
-            wandb_project=logger_dict.get("wandb_project", "sae_lens_training"),
-            run_name=logger_dict.get("run_name"),
-            wandb_log_frequency=logger_dict.get("wandb_log_frequency", 10),
-            wandb_entity=logger_dict.get("wandb_entity"),
-        )
+        logger_cfg = LoggingConfig(**d.get("logger", {}))
 
-        return cls(
-            synthetic_model=synthetic_model,
-            sae=sae,
-            training_samples=d.get("training_samples", 10_000_000),
-            batch_size=d.get("batch_size", 1024),
-            lr=d.get("lr", 3e-4),
-            lr_warm_up_steps=d.get("lr_warm_up_steps", 0),
-            lr_decay_steps=d.get("lr_decay_steps", 0),
-            lr_scheduler_name=d.get("lr_scheduler_name", "constant"),
-            lr_end=d.get("lr_end"),
-            adam_beta1=d.get("adam_beta1", 0.9),
-            adam_beta2=d.get("adam_beta2", 0.999),
-            n_restart_cycles=d.get("n_restart_cycles", 1),
-            device=d.get("device", "cpu"),
-            autocast_sae=d.get("autocast_sae", False),
-            autocast_data=d.get("autocast_data", False),
-            use_sparse_tensors=d.get("use_sparse_tensors", False),
-            n_checkpoints=d.get("n_checkpoints", 0),
-            checkpoint_path=d.get("checkpoint_path", "checkpoints"),
-            output_path=d.get("output_path", "output"),
-            save_synthetic_model=d.get("save_synthetic_model", True),
-            eval_frequency=d.get("eval_frequency", 0),
-            eval_samples=d.get("eval_samples", 100_000),
-            dead_feature_window=d.get("dead_feature_window", 1000),
-            feature_sampling_window=d.get("feature_sampling_window", 2000),
-            logger=logger_cfg,
-        )
+        updated_dict: dict[str, Any] = {
+            **d,
+            "synthetic_model": synthetic_model,
+            "sae": sae_cfg,
+            "logger": logger_cfg,
+        }
+        return cls(**updated_dict)
 
     def to_sae_trainer_config(self) -> SAETrainerConfig:
         """Convert to SAETrainerConfig for use with SAETrainer."""
-        # Calculate eval frequency in terms of wandb logs
-        # eval_every_n_wandb_logs controls when evals run
-        if self.eval_frequency > 0:
-            wandb_logs_per_eval = max(
-                1, self.eval_frequency // self.logger.wandb_log_frequency
-            )
-        else:
-            # Very large number to effectively disable evals
-            wandb_logs_per_eval = 2**31 - 1
-
-        logger_cfg = LoggingConfig(
-            log_to_wandb=self.logger.log_to_wandb,
-            wandb_project=self.logger.wandb_project,
-            run_name=self.logger.run_name,
-            wandb_log_frequency=self.logger.wandb_log_frequency,
-            wandb_entity=self.logger.wandb_entity,
-            eval_every_n_wandb_logs=wandb_logs_per_eval,
-        )
 
         return SAETrainerConfig(
             n_checkpoints=self.n_checkpoints,
             checkpoint_path=self.checkpoint_path,
-            save_final_checkpoint=False,
+            save_final_checkpoint=self.save_final_checkpoint,
             total_training_samples=self.training_samples,
             device=self.device,
             autocast=self.autocast_sae,
@@ -255,7 +195,7 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
             train_batch_size_samples=self.batch_size,
             dead_feature_window=self.dead_feature_window,
             feature_sampling_window=self.feature_sampling_window,
-            logger=logger_cfg,
+            logger=self.logger,
         )
 
 
@@ -456,5 +396,16 @@ class SyntheticSAERunner(Generic[T_TRAINING_SAE_CONFIG]):
         if self.cfg.save_synthetic_model:
             synthetic_model_path = output_path / "synthetic_model"
             self.synthetic_model.save(synthetic_model_path)
+
+        if self.cfg.save_final_eval_stats:
+            eval_stats = eval_sae_on_synthetic_data(
+                sae=sae,
+                feature_dict=self.synthetic_model.feature_dict,
+                activations_generator=self.synthetic_model.activation_generator,
+                num_samples=self.cfg.eval_samples,
+                batch_size=self.cfg.batch_size,
+            )
+            with open(output_path / "eval_stats.json", "w") as f:
+                json.dump(eval_stats.to_dict(), f, indent=2)
 
         logger.info(f"Saved outputs to {output_path}")

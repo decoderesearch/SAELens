@@ -9,7 +9,7 @@ This module provides helpers for:
 - Initializing SAEs to match feature dictionaries
 """
 
-from dataclasses import dataclass, fields
+from dataclasses import asdict, dataclass, fields
 from typing import Any
 
 import torch
@@ -362,10 +362,13 @@ class SyntheticDataEvalResult:
     """Results from evaluating an SAE on synthetic data."""
 
     true_l0: float
-    """Average L0 of the true feature activations"""
+    """Average L0 of the synthetic model's feature activations"""
 
     sae_l0: float
     """Average L0 of the SAE's latent activations"""
+
+    true_l0_at_sae_width: float
+    """Average L0 of the synthetic model's first d_sae feature activations"""
 
     dead_latents: int
     """Number of SAE latents that never fired"""
@@ -397,6 +400,12 @@ class SyntheticDataEvalResult:
             else:
                 result[f"{prefix}{f.name}"] = value
         return result
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            **asdict(self),
+            "classification": asdict(self.classification),
+        }
 
 
 @torch.no_grad()
@@ -438,6 +447,7 @@ def eval_sae_on_synthetic_data(
     # Initialize calculators
     true_l0_calc = L0Calculator()
     sae_l0_calc = L0Calculator()
+    true_l0_at_sae_width_calc = L0Calculator()
     dead_latents_calc = DeadLatentsCalculator(sae_decoder.shape[0])
     shrinkage_calc = ShrinkageCalculator()
     explained_variance_calc = ExplainedVarianceCalculator(
@@ -453,7 +463,7 @@ def eval_sae_on_synthetic_data(
         # Generate samples for this batch
         feature_acts = activations_generator.sample(current_batch_size)
         true_l0_calc.add_batch(feature_acts)
-
+        true_l0_at_sae_width_calc.add_batch(feature_acts[:, : sae.cfg.d_sae])
         hidden_acts = feature_dict(feature_acts)
 
         # Scale activations before encoding (if scaler is configured)
@@ -482,6 +492,7 @@ def eval_sae_on_synthetic_data(
     return SyntheticDataEvalResult(
         true_l0=true_l0_calc.compute(),
         sae_l0=sae_l0_calc.compute(),
+        true_l0_at_sae_width=true_l0_at_sae_width_calc.compute(),
         dead_latents=dead_latents_calc.compute(),
         shrinkage=shrinkage_calc.compute(),
         explained_variance=explained_variance_calc.compute(),
