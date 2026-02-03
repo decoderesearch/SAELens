@@ -22,7 +22,6 @@ class TestSyntheticDataEvalResultToLogDict:
         result = SyntheticDataEvalResult(
             true_l0=1.5,
             sae_l0=2.0,
-            true_l0_at_sae_width=1.2,
             dead_latents=5,
             shrinkage=0.95,
             explained_variance=0.9,
@@ -38,7 +37,6 @@ class TestSyntheticDataEvalResultToLogDict:
         assert log_dict == {
             "test/true_l0": 1.5,
             "test/sae_l0": 2.0,
-            "test/true_l0_at_sae_width": 1.2,
             "test/dead_latents": 5,
             "test/shrinkage": 0.95,
             "test/explained_variance": 0.9,
@@ -54,7 +52,6 @@ class TestSyntheticDataEvalResultToLogDict:
         result = SyntheticDataEvalResult(
             true_l0=1.0,
             sae_l0=2.0,
-            true_l0_at_sae_width=1.0,
             dead_latents=0,
             shrinkage=1.0,
             explained_variance=1.0,
@@ -73,41 +70,34 @@ class TestSyntheticDataEvalResultToLogDict:
 
 class TestMeanCorrelationCoefficient:
     def test_identical_features_returns_one(self) -> None:
-        """MCC of identical features should be 1.0."""
         features = torch.randn(10, 8)
         mcc = mean_correlation_coefficient(features, features)
-        assert abs(mcc - 1.0) < 1e-5
+        assert mcc == pytest.approx(1.0, abs=1e-5)
 
     def test_negated_features_returns_one(self) -> None:
-        """MCC uses absolute cosine similarity, so negated features also match."""
         features = torch.randn(10, 8)
         mcc = mean_correlation_coefficient(features, -features)
-        assert abs(mcc - 1.0) < 1e-5
+        assert mcc == pytest.approx(1.0, abs=1e-5)
 
     def test_permuted_features_returns_one(self) -> None:
-        """MCC with optimal matching should find the permutation."""
         features = torch.randn(10, 8)
         perm = torch.randperm(10)
         permuted = features[perm]
         mcc = mean_correlation_coefficient(features, permuted)
-        assert abs(mcc - 1.0) < 1e-5
+        assert mcc == pytest.approx(1.0, abs=1e-5)
 
     def test_random_features_low_correlation(self) -> None:
-        """MCC of random high-dimensional features should be low."""
-        # In high dimensions, random unit vectors are nearly orthogonal
         torch.manual_seed(42)
         features_a = torch.randn(10, 256)
         features_b = torch.randn(10, 256)
         mcc = mean_correlation_coefficient(features_a, features_b)
-        # Random vectors in high dimensions have low correlation
         assert mcc < 0.3
 
     def test_scaled_features_returns_one(self) -> None:
-        """MCC should be invariant to scaling since it uses cosine similarity."""
         features = torch.randn(10, 8)
         scaled = features * 5.0
         mcc = mean_correlation_coefficient(features, scaled)
-        assert abs(mcc - 1.0) < 1e-5
+        assert mcc == pytest.approx(1.0, abs=1e-5)
 
     def test_duplicate_values(self) -> None:
         features = torch.randn(10, 800)
@@ -129,8 +119,6 @@ class TestMeanCorrelationCoefficient:
         assert mcc1 == pytest.approx(mcc2)
 
     def test_partial_match_returns_intermediate_value(self) -> None:
-        """MCC with some matching and some orthogonal features."""
-        # First 5 features match, last 5 are random
         matched = torch.randn(5, 8)
         random_a = torch.randn(5, 8)
         random_b = torch.randn(5, 8)
@@ -139,37 +127,30 @@ class TestMeanCorrelationCoefficient:
         features_b = torch.cat([matched, random_b])
 
         mcc = mean_correlation_coefficient(features_a, features_b)
-        # Should be somewhere between 0 and 1
         assert 0.3 < mcc < 1.0
 
     def test_different_num_features_uses_min(self) -> None:
-        """MCC should handle different numbers of features."""
         features_a = torch.randn(10, 8)
-        features_b = torch.randn(15, 8)  # More features
+        features_b = torch.randn(15, 8)
 
         mcc = mean_correlation_coefficient(features_a, features_b)
-        # Should not raise and return a valid value
         assert 0.0 <= mcc <= 1.0
 
     def test_returns_float(self) -> None:
-        """MCC should return a Python float."""
         features = torch.randn(5, 4)
         mcc = mean_correlation_coefficient(features, features)
         assert isinstance(mcc, float)
 
     def test_single_feature_identical(self) -> None:
-        """MCC with single identical feature should be 1.0."""
         features = torch.randn(1, 8)
         mcc = mean_correlation_coefficient(features, features)
-        assert abs(mcc - 1.0) < 1e-5
+        assert mcc == pytest.approx(1.0, abs=1e-5)
 
     def test_handles_zero_norm_gracefully(self) -> None:
-        """MCC should handle near-zero vectors without crashing."""
         features_a = torch.randn(5, 4)
         features_b = torch.randn(5, 4)
-        features_b[0] = 1e-10  # Near-zero vector
+        features_b[0] = 1e-10
 
-        # Should not raise
         mcc = mean_correlation_coefficient(features_a, features_b)
         assert 0.0 <= mcc <= 1.0
 
@@ -201,7 +182,6 @@ def eval_setup() -> EvalSetup:
 
 class TestEvalSaeOnSyntheticData:
     def test_returns_correct_type(self, eval_setup: EvalSetup) -> None:
-        """eval_sae_on_synthetic_data should return SyntheticDataEvalResult."""
         sae, feature_dict, activations_gen = eval_setup
 
         result = eval_sae_on_synthetic_data(
@@ -214,7 +194,6 @@ class TestEvalSaeOnSyntheticData:
         assert isinstance(result, SyntheticDataEvalResult)
 
     def test_result_has_all_fields(self, eval_setup: EvalSetup) -> None:
-        """Result should have all expected fields."""
         sae, feature_dict, activations_gen = eval_setup
 
         result = eval_sae_on_synthetic_data(
@@ -234,10 +213,8 @@ class TestEvalSaeOnSyntheticData:
         assert hasattr(result, "classification")
 
     def test_true_l0_matches_firing_probability(self, eval_setup: EvalSetup) -> None:
-        """true_l0 should be close to num_features * firing_prob."""
         sae, feature_dict, _ = eval_setup
 
-        # Create generator with known firing probability
         activations_gen = ActivationGenerator(
             num_features=10,
             firing_probabilities=0.2,
@@ -247,14 +224,15 @@ class TestEvalSaeOnSyntheticData:
             sae=sae,
             feature_dict=feature_dict,
             activations_generator=activations_gen,
-            num_samples=10000,
+            num_samples=100000,
         )
 
-        # Expected L0 is num_features * prob = 10 * 0.2 = 2.0
-        assert abs(result.true_l0 - 2.0) < 0.2
+        # Expected L0 = 10 features * 0.2 probability = 2.0
+        # Std per sample = sqrt(10 * 0.2 * 0.8) ≈ 1.26
+        # Standard error of mean = 1.26 / sqrt(100000) ≈ 0.004
+        assert result.true_l0 == pytest.approx(2.0, abs=0.03)
 
     def test_dead_latents_is_non_negative(self, eval_setup: EvalSetup) -> None:
-        """dead_latents should be a non-negative integer."""
         sae, feature_dict, activations_gen = eval_setup
 
         result = eval_sae_on_synthetic_data(
@@ -268,7 +246,6 @@ class TestEvalSaeOnSyntheticData:
         assert result.dead_latents >= 0
 
     def test_shrinkage_is_positive(self, eval_setup: EvalSetup) -> None:
-        """shrinkage should be positive."""
         sae, feature_dict, activations_gen = eval_setup
 
         result = eval_sae_on_synthetic_data(
@@ -290,12 +267,9 @@ class TestEvalSaeOnSyntheticData:
             num_samples=1000,
         )
 
-        # Explained variance can theoretically be negative if reconstruction is very bad,
-        # but should typically be between 0 and 1
         assert result.explained_variance <= 1.0
 
     def test_mcc_in_valid_range(self, eval_setup: EvalSetup) -> None:
-        """MCC should be in [0, 1]."""
         sae, feature_dict, activations_gen = eval_setup
 
         result = eval_sae_on_synthetic_data(
@@ -308,9 +282,8 @@ class TestEvalSaeOnSyntheticData:
         assert 0.0 <= result.mcc <= 1.0
 
     def test_sae_initialized_to_ground_truth_has_high_mcc(self) -> None:
-        """SAE initialized to match ground truth should have high MCC."""
         hidden_dim = 8
-        num_features = 8  # Same as hidden_dim for perfect match
+        num_features = 8
 
         feature_dict = FeatureDictionary(
             num_features=num_features,
@@ -329,7 +302,6 @@ class TestEvalSaeOnSyntheticData:
         )
         sae = StandardTrainingSAE(cfg)
 
-        # Initialize SAE decoder to match ground truth features
         with torch.no_grad():
             sae.W_dec.data = feature_dict.feature_vectors.clone()
 
@@ -340,11 +312,9 @@ class TestEvalSaeOnSyntheticData:
             num_samples=1000,
         )
 
-        # MCC should be very high when decoder matches ground truth
         assert result.mcc > 0.99
 
     def test_num_samples_affects_precision(self) -> None:
-        """More samples should give more stable results."""
         hidden_dim = 8
         num_features = 10
 
@@ -360,7 +330,6 @@ class TestEvalSaeOnSyntheticData:
         cfg = StandardTrainingSAEConfig(d_in=hidden_dim, d_sae=num_features)
         sae = StandardTrainingSAE(cfg)
 
-        # Both should run without error
         result_small = eval_sae_on_synthetic_data(
             sae=sae,
             feature_dict=feature_dict,
@@ -375,7 +344,6 @@ class TestEvalSaeOnSyntheticData:
             num_samples=10000,
         )
 
-        # Both should return valid results
         assert isinstance(result_small, SyntheticDataEvalResult)
         assert isinstance(result_large, SyntheticDataEvalResult)
 
@@ -439,8 +407,7 @@ class TestEvalSaeOnSyntheticData:
         cfg = StandardTrainingSAEConfig(d_in=hidden_dim, d_sae=num_features)
         sae = StandardTrainingSAE(cfg)
 
-        # Run multiple times and check statistical consistency
-        num_samples = 10000
+        num_samples = 100000
         batch_sizes = [None, 100, 500, 1000]
         results = []
 
@@ -454,11 +421,10 @@ class TestEvalSaeOnSyntheticData:
             )
             results.append(result)
 
-        # All results should have similar true_l0 (expected: num_features * prob = 2.0)
+        # Expected L0 = 10 features * 0.2 probability = 2.0
         for result in results:
-            assert abs(result.true_l0 - 2.0) < 0.2
+            assert result.true_l0 == pytest.approx(2.0, abs=0.03)
 
-        # MCC and uniqueness should be identical (only depend on decoder weights)
         for result in results:
             assert result.mcc == results[0].mcc
             assert result.uniqueness == results[0].uniqueness
@@ -479,20 +445,16 @@ class TestEvalSaeOnSyntheticDataWithActivationScaling:
             firing_probabilities=0.2,
         )
 
-        # Create SAE with random weights
         cfg = StandardTrainingSAEConfig(d_in=hidden_dim, d_sae=num_features)
         sae = StandardTrainingSAE(cfg)
         random_params(sae)
 
-        # Create a copy for folding
         folded_cfg = StandardTrainingSAEConfig(d_in=hidden_dim, d_sae=num_features)
         folded_sae = StandardTrainingSAE(folded_cfg)
         folded_sae.load_state_dict(sae.state_dict())
 
-        # Fold the scaling factor into the SAE weights
         folded_sae.fold_activation_norm_scaling_factor(scaling_factor)
 
-        # Run eval with scaling on original SAE
         result_with_scaling = eval_sae_on_synthetic_data(
             sae=sae,
             feature_dict=feature_dict,
@@ -502,7 +464,6 @@ class TestEvalSaeOnSyntheticDataWithActivationScaling:
             activation_scaler=ActivationScaler(scaling_factor=scaling_factor),
         )
 
-        # Run eval without scaling on folded SAE
         result_folded = eval_sae_on_synthetic_data(
             sae=folded_sae,
             feature_dict=feature_dict,
@@ -512,7 +473,6 @@ class TestEvalSaeOnSyntheticDataWithActivationScaling:
             activation_scaler=None,
         )
 
-        # Results should be statistically identical with enough samples
         assert result_with_scaling.sae_l0 == pytest.approx(
             result_folded.sae_l0, rel=0.02
         )
@@ -534,15 +494,13 @@ class TestFeatureUniqueness:
     def test_identical_features_returns_one(self) -> None:
         features = torch.randn(10, 8)
         score = feature_uniqueness(features, features)
-        assert abs(score - 1.0) < 1e-5
+        assert score == pytest.approx(1.0, abs=1e-5)
 
     def test_all_same_feature_returns_one_over_n(self) -> None:
         gt_features = torch.randn(10, 8)
-        # All SAE features are the same (copies of first GT feature)
         sae_features = gt_features[0:1].expand(5, -1).clone()
         score = feature_uniqueness(sae_features, gt_features)
-        # All 5 SAE latents match the same GT feature, so uniqueness = 1/5
-        assert abs(score - 0.2) < 1e-5
+        assert score == pytest.approx(0.2, abs=1e-5)
 
     def test_empty_sae_features_returns_zero(self) -> None:
         gt_features = torch.randn(10, 8)
@@ -551,31 +509,29 @@ class TestFeatureUniqueness:
         assert score == 0.0
 
     def test_partial_uniqueness(self) -> None:
-        gt_features = torch.eye(8)  # 8 orthogonal features
-        # 4 SAE latents: 2 unique, 2 duplicates
+        gt_features = torch.eye(8)
         sae_features = torch.stack(
             [
-                gt_features[0],  # matches GT 0
-                gt_features[1],  # matches GT 1
-                gt_features[0],  # matches GT 0 (duplicate)
-                gt_features[2],  # matches GT 2
+                gt_features[0],
+                gt_features[1],
+                gt_features[0],
+                gt_features[2],
             ]
         )
         score = feature_uniqueness(sae_features, gt_features)
-        # 3 unique GT features matched / 4 SAE latents = 0.75
-        assert abs(score - 0.75) < 1e-5
+        assert score == pytest.approx(0.75, abs=1e-5)
 
     def test_negated_features_still_match(self) -> None:
         gt_features = torch.randn(10, 8)
-        sae_features = -gt_features  # Negated but should still match
+        sae_features = -gt_features
         score = feature_uniqueness(sae_features, gt_features)
-        assert abs(score - 1.0) < 1e-5
+        assert score == pytest.approx(1.0, abs=1e-5)
 
     def test_scaled_features_still_match(self) -> None:
         gt_features = torch.randn(10, 8)
-        sae_features = gt_features * 5.0  # Scaled but should still match
+        sae_features = gt_features * 5.0
         score = feature_uniqueness(sae_features, gt_features)
-        assert abs(score - 1.0) < 1e-5
+        assert score == pytest.approx(1.0, abs=1e-5)
 
     def test_returns_float(self) -> None:
         features = torch.randn(5, 4)
@@ -585,15 +541,13 @@ class TestFeatureUniqueness:
 
 class TestComputeClassificationMetrics:
     def test_perfect_classifier_has_perfect_metrics(self) -> None:
-        gt_features = torch.eye(4)  # 4 orthogonal features
-        sae_decoder = gt_features.clone()  # SAE decoder matches GT perfectly
+        gt_features = torch.eye(4)
+        sae_decoder = gt_features.clone()
         num_samples = 1000
 
-        # Generate samples where SAE latents perfectly predict GT features
         gt_feature_acts = torch.zeros(num_samples, 4)
         sae_latents = torch.zeros(num_samples, 4)
         for i in range(num_samples):
-            # Randomly activate one feature
             active_feature = i % 4
             gt_feature_acts[i, active_feature] = 1.0
             sae_latents[i, active_feature] = 1.0
@@ -605,17 +559,16 @@ class TestComputeClassificationMetrics:
             gt_features=gt_features,
         )
 
-        assert abs(metrics.precision - 1.0) < 1e-5
-        assert abs(metrics.recall - 1.0) < 1e-5
-        assert abs(metrics.f1_score - 1.0) < 1e-5
-        assert abs(metrics.accuracy - 1.0) < 1e-5
+        assert metrics.precision == pytest.approx(1.0, abs=1e-5)
+        assert metrics.recall == pytest.approx(1.0, abs=1e-5)
+        assert metrics.f1_score == pytest.approx(1.0, abs=1e-5)
+        assert metrics.accuracy == pytest.approx(1.0, abs=1e-5)
 
     def test_no_true_positives_has_zero_precision_recall_f1(self) -> None:
         gt_features = torch.eye(4)
         sae_decoder = gt_features.clone()
         num_samples = 100
 
-        # SAE fires but GT never does (all false positives)
         gt_feature_acts = torch.zeros(num_samples, 4)
         sae_latents = torch.ones(num_samples, 4)
 
@@ -672,15 +625,12 @@ class TestComputeClassificationMetrics:
         sae_decoder = gt_features.clone()
         num_samples = 100
 
-        # Half the samples: perfect match. Other half: SAE fires but GT doesn't
         gt_feature_acts = torch.zeros(num_samples, 2)
         sae_latents = torch.zeros(num_samples, 2)
 
-        # First half: both fire for feature 0
         gt_feature_acts[:50, 0] = 1.0
         sae_latents[:50, 0] = 1.0
 
-        # Second half: SAE fires but GT doesn't (false positive)
         sae_latents[50:, 0] = 1.0
 
         metrics = compute_classification_metrics(
@@ -690,13 +640,6 @@ class TestComputeClassificationMetrics:
             gt_features=gt_features,
         )
 
-        # For feature 0: TP=50, FP=50, FN=0, TN=0
-        # Precision = 50/100 = 0.5, Recall = 50/50 = 1.0
-        # F1 = 2 * 0.5 * 1.0 / (0.5 + 1.0) = 2/3
-        # For feature 1: TP=0, FP=0, FN=0, TN=100
-        # Precision = 0 (undefined, treated as 0), Recall = 0, F1 = 0, Accuracy = 1.0
-        # Mean precision = (0.5 + 0) / 2 = 0.25
-        # Mean recall = (1.0 + 0) / 2 = 0.5
         assert 0.2 < metrics.precision < 0.3
         assert 0.4 < metrics.recall < 0.6
 
@@ -706,59 +649,49 @@ class TestExplainedVarianceCalculator:
         hidden_dim = 8
         calc = ExplainedVarianceCalculator(hidden_dim)
 
-        # Perfect reconstruction: output = input
         input_data = torch.randn(1000, hidden_dim)
         output_data = input_data.clone()
 
         calc.add_batch(output_data, input_data)
         result = calc.compute()
 
-        assert abs(result - 1.0) < 1e-5
+        assert result == pytest.approx(1.0, abs=1e-5)
 
     def test_zero_reconstruction_returns_near_zero(self) -> None:
         hidden_dim = 8
         calc = ExplainedVarianceCalculator(hidden_dim)
 
-        # Zero reconstruction: output = 0, input has variance
         input_data = torch.randn(10000, hidden_dim)
         output_data = torch.zeros_like(input_data)
 
         calc.add_batch(output_data, input_data)
         result = calc.compute()
 
-        # If output is zeros, MSE equals sum of squared inputs
-        # For zero-mean input, explained variance should be near 0
-        # For non-zero-mean input, it could be slightly different
         assert result < 0.1
 
     def test_constant_input_with_perfect_reconstruction(self) -> None:
         hidden_dim = 4
         calc = ExplainedVarianceCalculator(hidden_dim)
 
-        # Constant input (zero variance) with perfect reconstruction
         input_data = torch.ones(100, hidden_dim)
         output_data = input_data.clone()
 
         calc.add_batch(output_data, input_data)
         result = calc.compute()
 
-        # Zero variance case should return 1.0 (perfect reconstruction)
-        assert abs(result - 1.0) < 1e-5
+        assert result == pytest.approx(1.0, abs=1e-5)
 
     def test_batched_computation_matches_single_batch(self) -> None:
         hidden_dim = 8
         num_samples = 1000
 
-        # Generate data
         input_data = torch.randn(num_samples, hidden_dim)
         output_data = input_data + 0.1 * torch.randn(num_samples, hidden_dim)
 
-        # Single batch
         calc_single = ExplainedVarianceCalculator(hidden_dim)
         calc_single.add_batch(output_data, input_data)
         result_single = calc_single.compute()
 
-        # Multiple batches
         calc_batched = ExplainedVarianceCalculator(hidden_dim)
         batch_size = 100
         for i in range(0, num_samples, batch_size):
@@ -767,7 +700,7 @@ class TestExplainedVarianceCalculator:
             )
         result_batched = calc_batched.compute()
 
-        assert abs(result_single - result_batched) < 1e-5
+        assert result_single == pytest.approx(result_batched, abs=1e-5)
 
     def test_returns_float(self) -> None:
         hidden_dim = 4
@@ -793,7 +726,6 @@ class TestExplainedVarianceCalculator:
         hidden_dim = 8
         calc = ExplainedVarianceCalculator(hidden_dim)
 
-        # Add noise that explains away some variance
         input_data = torch.randn(10000, hidden_dim)
         noise_level = 0.5
         output_data = input_data + noise_level * torch.randn(10000, hidden_dim)
@@ -801,25 +733,19 @@ class TestExplainedVarianceCalculator:
         calc.add_batch(output_data, input_data)
         result = calc.compute()
 
-        # Should be between 0 and 1, closer to 1 since noise is smaller than signal
         assert 0.3 < result < 1.0
 
     def test_known_explained_variance(self) -> None:
         hidden_dim = 1
         num_samples = 100000
 
-        # Create input with known variance
         input_data = torch.randn(num_samples, hidden_dim)
 
-        # Create reconstruction with known MSE
-        # MSE = 0.25 * Var(input), so explained variance = 1 - 0.25 = 0.75
-        noise_std = 0.5  # MSE = noise_std^2 = 0.25
+        noise_std = 0.5
         output_data = input_data + noise_std * torch.randn(num_samples, hidden_dim)
 
         calc = ExplainedVarianceCalculator(hidden_dim)
         calc.add_batch(output_data, input_data)
         result = calc.compute()
 
-        # The input has variance ~1 (standard normal), noise has variance 0.25
-        # So explained_variance = 1 - 0.25/1.0 = 0.75
-        assert abs(result - 0.75) < 0.02
+        assert result == pytest.approx(0.75, abs=0.02)

@@ -407,7 +407,6 @@ class TestValidateLowRankCorrelationMatrix:
 
 class TestActivationGeneratorLowRankCorrelationMatrix:
     def test_with_low_rank_correlation_tuple(self):
-        """Test that low-rank correlation as tuple works."""
         num_features = 5
         rank = 2
         factor = torch.randn(num_features, rank) * 0.1
@@ -425,7 +424,6 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
         assert torch.all(samples >= 0)
 
     def test_with_low_rank_correlation_named_tuple(self):
-        """Test that LowRankCorrelationMatrix NamedTuple works."""
         num_features = 5
         rank = 2
         factor = torch.randn(num_features, rank) * 0.1
@@ -443,7 +441,6 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
         assert torch.all(samples >= 0)
 
     def test_low_rank_preserves_marginal_probabilities(self):
-        """Test that low-rank correlation preserves marginal firing probabilities."""
         num_features = 5
         rank = 2
         factor = torch.randn(num_features, rank) * 0.3
@@ -464,13 +461,6 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
         torch.testing.assert_close(actual_probs, firing_probs, atol=0.02, rtol=0)
 
     def test_full_matrix_and_low_rank_equivalent_produce_same_statistics(self):
-        """Test that a full correlation matrix and its low-rank representation produce
-        statistically equivalent results.
-
-        This is a key test: if we construct a correlation matrix from low-rank factors
-        (C = F @ F.T + diag(D)), then using either the full matrix or the low-rank
-        representation should yield the same firing statistics.
-        """
         num_features = 5
         rank = 3
         batch_size = 50000
@@ -532,12 +522,6 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
         torch.testing.assert_close(corr_full, corr_low_rank, atol=0.02, rtol=0)
 
     def test_exact_low_rank_matches_full_matrix_statistics(self):
-        """Test that when we use the exact same covariance in both forms,
-        the statistics match closely.
-
-        We construct a low-rank covariance, compute the equivalent full matrix,
-        and verify both produce the same firing statistics.
-        """
         num_features = 4
         rank = 2
         batch_size = 20000

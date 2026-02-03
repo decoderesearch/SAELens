@@ -41,8 +41,8 @@ def test_linear_config_generates_correct_shape():
     cfg = LinearFiringProbabilityConfig(max_prob=0.3, min_prob=0.01)
     probs = cfg.generate(50)
     assert probs.shape == (50,)
-    assert abs(probs[0] - cfg.max_prob) < 1e-6
-    assert abs(probs[-1] - cfg.min_prob) < 1e-6
+    assert probs[0] == pytest.approx(cfg.max_prob, abs=1e-6)
+    assert probs[-1] == pytest.approx(cfg.min_prob, abs=1e-6)
 
 
 def test_random_config_generates_correct_range():

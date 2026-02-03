@@ -140,7 +140,7 @@ class TestRandomFiringProbabilities:
         # With enough samples, mean should be close to midpoint
         probs = random_firing_probabilities(10000, max_prob=0.8, min_prob=0.2, seed=42)
         expected_mean = (0.8 + 0.2) / 2
-        assert abs(probs.mean().item() - expected_mean) < 0.02
+        assert probs.mean().item() == pytest.approx(expected_mean, abs=0.02)
 
     def test_raises_on_invalid_num_features(self) -> None:
         with pytest.raises(ValueError, match="num_features must be at least 1"):

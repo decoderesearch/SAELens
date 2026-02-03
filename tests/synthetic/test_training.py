@@ -101,7 +101,6 @@ def synthetic_training_setup() -> SyntheticSetup:
 def test_train_toy_sae_runs(
     synthetic_training_setup: SyntheticSetup,
 ) -> None:
-    """Test that training runs without errors."""
     sae, feature_dict, activations_gen = synthetic_training_setup
 
     train_toy_sae(
@@ -116,7 +115,6 @@ def test_train_toy_sae_runs(
 def test_train_toy_sae_snapshot_fn_called_correct_times(
     synthetic_training_setup: SyntheticSetup,
 ) -> None:
-    """Test that snapshot_fn is called n_snapshots times."""
     sae, feature_dict, activations_gen = synthetic_training_setup
 
     snapshot_calls: list[int] = []
@@ -140,7 +138,6 @@ def test_train_toy_sae_snapshot_fn_called_correct_times(
 def test_train_toy_sae_snapshot_fn_receives_trainer(
     synthetic_training_setup: SyntheticSetup,
 ) -> None:
-    """Test that snapshot_fn receives the trainer with expected attributes."""
     sae, feature_dict, activations_gen = synthetic_training_setup
 
     received_trainers: list[SAETrainer[Any, Any]] = []
@@ -169,7 +166,6 @@ def test_train_toy_sae_snapshot_fn_receives_trainer(
 def test_train_toy_sae_snapshots_evenly_spaced(
     synthetic_training_setup: SyntheticSetup,
 ) -> None:
-    """Test that snapshots are taken at evenly spaced intervals."""
     sae, feature_dict, activations_gen = synthetic_training_setup
 
     snapshot_steps: list[int] = []
@@ -203,7 +199,6 @@ def test_train_toy_sae_snapshots_evenly_spaced(
 def test_train_toy_sae_no_snapshots_by_default(
     synthetic_training_setup: SyntheticSetup,
 ) -> None:
-    """Test that no snapshot_fn is needed when n_snapshots=0."""
     sae, feature_dict, activations_gen = synthetic_training_setup
 
     # Should not raise even without snapshot_fn
@@ -220,7 +215,6 @@ def test_train_toy_sae_no_snapshots_by_default(
 def test_train_toy_sae_snapshot_fn_required_when_n_snapshots_positive(
     synthetic_training_setup: SyntheticSetup,
 ) -> None:
-    """Test that snapshot_fn is required when n_snapshots > 0."""
     sae, feature_dict, activations_gen = synthetic_training_setup
 
     with pytest.raises(ValueError, match="snapshot_fn must be provided"):

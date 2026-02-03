@@ -32,10 +32,12 @@ def test_compute_superposition_stats_batch_size_independence():
         assert torch.allclose(
             stats.max_abs_cos_sims, stats_batch_1.max_abs_cos_sims, atol=1e-5
         )
-        assert (
-            abs(stats.mean_max_abs_cos_sim - stats_batch_1.mean_max_abs_cos_sim) < 1e-5
+        assert stats.mean_max_abs_cos_sim == pytest.approx(
+            stats_batch_1.mean_max_abs_cos_sim, abs=1e-5
         )
-        assert abs(stats.mean_abs_cos_sim - stats_batch_1.mean_abs_cos_sim) < 1e-5
+        assert stats.mean_abs_cos_sim == pytest.approx(
+            stats_batch_1.mean_abs_cos_sim, abs=1e-5
+        )
         for p in stats.percentile_abs_cos_sims:
             assert torch.allclose(
                 stats.percentile_abs_cos_sims[p],
@@ -55,8 +57,8 @@ def test_compute_superposition_stats_orthogonal_latents():
     assert stats.hidden_dim == hidden_dim
     # All pairwise cosine similarities should be 0
     assert torch.allclose(stats.max_abs_cos_sims, torch.zeros(4), atol=1e-6)
-    assert abs(stats.mean_max_abs_cos_sim) < 1e-6
-    assert abs(stats.mean_abs_cos_sim) < 1e-6
+    assert stats.mean_max_abs_cos_sim == pytest.approx(0, abs=1e-6)
+    assert stats.mean_abs_cos_sim == pytest.approx(0, abs=1e-6)
 
 
 def test_compute_superposition_stats_parallel_latents():
@@ -76,8 +78,8 @@ def test_compute_superposition_stats_parallel_latents():
     assert stats.num_features == 3
     # All pairs should have |cos_sim| = 1
     assert torch.allclose(stats.max_abs_cos_sims, torch.ones(3), atol=1e-5)
-    assert abs(stats.mean_max_abs_cos_sim - 1.0) < 1e-5
-    assert abs(stats.mean_abs_cos_sim - 1.0) < 1e-5
+    assert stats.mean_max_abs_cos_sim == pytest.approx(1.0, abs=1e-5)
+    assert stats.mean_abs_cos_sim == pytest.approx(1.0, abs=1e-5)
 
 
 def test_compute_superposition_stats_antiparallel_latents():
@@ -94,7 +96,7 @@ def test_compute_superposition_stats_antiparallel_latents():
 
     # |cos_sim| should be 1 for antiparallel vectors
     assert torch.allclose(stats.max_abs_cos_sims, torch.ones(2), atol=1e-5)
-    assert abs(stats.mean_abs_cos_sim - 1.0) < 1e-5
+    assert stats.mean_abs_cos_sim == pytest.approx(1.0, abs=1e-5)
 
 
 def test_compute_superposition_stats_known_case_3_latents():
@@ -128,11 +130,11 @@ def test_compute_superposition_stats_known_case_3_latents():
     assert torch.allclose(stats.max_abs_cos_sims, expected_max, atol=1e-5)
 
     # Mean of max |cos_sim| = 1/sqrt(2)
-    assert abs(stats.mean_max_abs_cos_sim - cos_01) < 1e-5
+    assert stats.mean_max_abs_cos_sim == pytest.approx(cos_01, abs=1e-5)
 
     # Mean |cos_sim| across all pairs = (1/sqrt(2) + 0 + 1/sqrt(2)) / 3
     expected_mean = (cos_01 + cos_02 + cos_12) / 3
-    assert abs(stats.mean_abs_cos_sim - expected_mean) < 1e-5
+    assert stats.mean_abs_cos_sim == pytest.approx(expected_mean, abs=1e-5)
 
     # 50th percentile for each latent (median of 2 values = mean of 2 values):
     # v0: median([0, 1/sqrt(2)]) = (0 + 1/sqrt(2))/2
@@ -190,8 +192,8 @@ def test_compute_superposition_stats_two_latents():
     assert torch.allclose(
         stats.max_abs_cos_sims, torch.tensor([expected_cos, expected_cos]), atol=1e-5
     )
-    assert abs(stats.mean_max_abs_cos_sim - expected_cos) < 1e-5
-    assert abs(stats.mean_abs_cos_sim - expected_cos) < 1e-5
+    assert stats.mean_max_abs_cos_sim == pytest.approx(expected_cos, abs=1e-5)
+    assert stats.mean_abs_cos_sim == pytest.approx(expected_cos, abs=1e-5)
 
 
 def test_compute_superposition_stats_handles_zero_norm_latents():
@@ -228,8 +230,8 @@ def test_compute_low_rank_correlation_matrix_stats_basic():
     # Off-diagonal values: 0.25, 0.0, 0.0, 0.25, 0.0, 0.0 (symmetric)
     # Mean (not abs) = (0.25 + 0 + 0 + 0.25 + 0 + 0) / 6 = 0.5 / 6 ≈ 0.0833
     # RMS = sqrt((0.25² * 2) / 6) = sqrt(0.125 / 6) ≈ 0.1443
-    assert abs(stats.mean_correlation - 0.5 / 6) < 1e-5
-    assert abs(stats.rms_correlation - (0.125 / 6) ** 0.5) < 1e-5
+    assert stats.mean_correlation == pytest.approx(0.5 / 6, abs=1e-5)
+    assert stats.rms_correlation == pytest.approx((0.125 / 6) ** 0.5, abs=1e-5)
 
 
 def test_compute_low_rank_correlation_matrix_stats_higher_rank():
@@ -256,8 +258,8 @@ def test_compute_low_rank_correlation_matrix_stats_higher_rank():
     expected_mean = off_diag_values.mean().item()
     expected_rms = (off_diag_values**2).mean().sqrt().item()
 
-    assert abs(stats.mean_correlation - expected_mean) < 1e-5
-    assert abs(stats.rms_correlation - expected_rms) < 1e-5
+    assert stats.mean_correlation == pytest.approx(expected_mean, abs=1e-5)
+    assert stats.rms_correlation == pytest.approx(expected_rms, abs=1e-5)
 
 
 def test_compute_low_rank_correlation_matrix_stats_no_correlation():
@@ -301,8 +303,8 @@ def test_compute_correlation_matrix_stats_basic():
     # Off-diagonal: 0.5, 0.0, 0.5, 0.0, 0.0, 0.0
     # Mean = (0.5 + 0 + 0.5 + 0 + 0 + 0) / 6 = 1/6
     # RMS = sqrt((0.25 + 0 + 0.25 + 0 + 0 + 0) / 6) = sqrt(0.5/6)
-    assert abs(stats.mean_correlation - 1 / 6) < 1e-5
-    assert abs(stats.rms_correlation - (0.5 / 6) ** 0.5) < 1e-5
+    assert stats.mean_correlation == pytest.approx(1 / 6, abs=1e-5)
+    assert stats.rms_correlation == pytest.approx((0.5 / 6) ** 0.5, abs=1e-5)
 
 
 def test_compute_correlation_matrix_stats_matches_low_rank():
@@ -325,5 +327,9 @@ def test_compute_correlation_matrix_stats_matches_low_rank():
         LowRankCorrelationMatrix(factor, diag)
     )
 
-    assert abs(dense_stats.rms_correlation - low_rank_stats.rms_correlation) < 1e-5
-    assert abs(dense_stats.mean_correlation - low_rank_stats.mean_correlation) < 1e-5
+    assert dense_stats.rms_correlation == pytest.approx(
+        low_rank_stats.rms_correlation, abs=1e-5
+    )
+    assert dense_stats.mean_correlation == pytest.approx(
+        low_rank_stats.mean_correlation, abs=1e-5
+    )

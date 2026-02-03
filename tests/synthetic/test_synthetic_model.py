@@ -640,7 +640,7 @@ def test_synthetic_model_hierarchy_compensation_integration():
     )
     model = SyntheticModel(cfg)
 
-    n_samples = 20000
+    n_samples = 100000
     _, features = model.sample_with_features(n_samples)
 
     assert model.hierarchy is not None
@@ -649,13 +649,14 @@ def test_synthetic_model_hierarchy_compensation_integration():
 
     observed_rates = (features > 0).float().mean(dim=0)
 
+    # Standard error for proportion with n=100k, p=0.3: sqrt(0.3*0.7/100000) ≈ 0.00145
     for idx in outside_indices:
-        assert observed_rates[idx].item() == pytest.approx(0.3, abs=0.05)
+        assert observed_rates[idx].item() == pytest.approx(0.3, abs=0.01)
 
     for root in model.hierarchy.roots:
         if root.feature_index is not None:
             assert observed_rates[root.feature_index].item() == pytest.approx(
-                0.3, abs=0.05
+                0.3, abs=0.01
             )
 
 

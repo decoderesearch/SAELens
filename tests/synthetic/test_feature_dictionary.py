@@ -70,7 +70,6 @@ def test_FeatureDictionary_forward_produces_linear_combination(
 
 @pytest.mark.parametrize("chunk_size", [1024, 3])
 def test_FeatureDictionary_overcomplete_minimizes_cosine_similarity(chunk_size: int):
-    """Test that overcomplete dictionaries minimize off-diagonal cosine similarities."""
     num_features = 16
     hidden_dim = 14
 
@@ -110,7 +109,6 @@ def test_FeatureDictionary_overcomplete_minimizes_cosine_similarity(chunk_size: 
 
 
 def test_orthogonalize_embeddings_identical_results_across_chunk_sizes():
-    """Test that different chunk sizes produce identical results."""
     embeddings = torch.randn(16, 8)
     embeddings = embeddings / embeddings.norm(dim=1, keepdim=True)
 

@@ -168,7 +168,6 @@ def test_hierarchy_modifier_mutually_exclusive_allows_single_child(
 
 
 def test_hierarchy_modifier_non_readout_node():
-    """Test organizational node with no feature_index."""
     child1 = HierarchyNode(feature_index=0)
     child2 = HierarchyNode(feature_index=1)
     root = HierarchyNode(
@@ -329,7 +328,6 @@ def test_HierarchyNode_requires_two_children_for_mutual_exclusion():
 
 
 def test_hierarchy_modifier_with_activation_generator():
-    """Integration test with ActivationGenerator."""
     from sae_lens.synthetic import ActivationGenerator
 
     child1 = HierarchyNode(feature_index=1)
@@ -360,7 +358,6 @@ def test_hierarchy_modifier_with_activation_generator():
 
 
 def test_HierarchyNode_validate_valid_hierarchy():
-    """Valid hierarchy should pass validation."""
     grandchild = HierarchyNode(feature_index=2)
     child1 = HierarchyNode(feature_index=1, children=[grandchild])
     child2 = HierarchyNode(feature_index=3)
@@ -371,7 +368,6 @@ def test_HierarchyNode_validate_valid_hierarchy():
 
 
 def test_HierarchyNode_validate_detects_loop():
-    """Should detect when a node is its own ancestor."""
     child = HierarchyNode(feature_index=1)
     root = HierarchyNode(feature_index=0, children=[child])
 
@@ -383,7 +379,6 @@ def test_HierarchyNode_validate_detects_loop():
 
 
 def test_HierarchyNode_validate_detects_self_loop():
-    """Should detect when a node is its own child."""
     root = HierarchyNode(feature_index=0)
     root.children = [root]
 
@@ -392,7 +387,6 @@ def test_HierarchyNode_validate_detects_self_loop():
 
 
 def test_HierarchyNode_validate_detects_multiple_parents():
-    """Should detect when a node has multiple parents."""
     shared_child = HierarchyNode(feature_index=2)
     child1 = HierarchyNode(feature_index=1, children=[shared_child])
     child2 = HierarchyNode(feature_index=3, children=[shared_child])  # Same child!
@@ -403,7 +397,6 @@ def test_HierarchyNode_validate_detects_multiple_parents():
 
 
 def test_HierarchyNode_validate_detects_node_as_sibling_of_itself():
-    """Should detect when a node appears multiple times in the same children list."""
     child = HierarchyNode(feature_index=1)
     root = HierarchyNode(feature_index=0, children=[child, child])
 
@@ -412,7 +405,6 @@ def test_HierarchyNode_validate_detects_node_as_sibling_of_itself():
 
 
 def test_HierarchyNode_validate_deep_loop():
-    """Should detect loops in deep hierarchies."""
     node3 = HierarchyNode(feature_index=3)
     node2 = HierarchyNode(feature_index=2, children=[node3])
     node1 = HierarchyNode(feature_index=1, children=[node2])
@@ -426,13 +418,11 @@ def test_HierarchyNode_validate_deep_loop():
 
 
 def test_HierarchyNode_validate_empty_hierarchy():
-    """Single node hierarchy should be valid."""
     root = HierarchyNode(feature_index=0)
     root.validate()  # Should not raise
 
 
 def test_HierarchyNode_validate_none_feature_index_nodes():
-    """Validation should work with None feature_index nodes."""
     child1 = HierarchyNode(feature_index=0)
     child2 = HierarchyNode(feature_index=1)
     organizational = HierarchyNode(feature_index=None, children=[child1, child2])
@@ -444,7 +434,6 @@ def test_HierarchyNode_validate_none_feature_index_nodes():
 
 
 def test_hierarchy_modifier_empty_list_returns_identity():
-    """Empty list should return identity function."""
     modifier = hierarchy_modifier([])
     activations = torch.randn(10, 5)
     result = modifier(activations)
@@ -452,7 +441,6 @@ def test_hierarchy_modifier_empty_list_returns_identity():
 
 
 def test_hierarchy_modifier_single_tree():
-    """Single tree should work correctly."""
     child = HierarchyNode(feature_index=1)
     root = HierarchyNode(feature_index=0, children=[child])
 
@@ -465,7 +453,6 @@ def test_hierarchy_modifier_single_tree():
 
 
 def test_hierarchy_modifier_multiple_trees():
-    """Multiple trees should all be applied."""
     # Tree 1: feature 0 -> feature 1
     tree1 = HierarchyNode(feature_index=0, children=[HierarchyNode(feature_index=1)])
     # Tree 2: feature 2 -> feature 3
@@ -483,7 +470,6 @@ def test_hierarchy_modifier_multiple_trees():
 
 
 def test_hierarchy_modifier_validates_by_default():
-    """Should validate hierarchies by default."""
     child = HierarchyNode(feature_index=1)
     root = HierarchyNode(feature_index=0, children=[child])
     # Create loop
@@ -494,7 +480,6 @@ def test_hierarchy_modifier_validates_by_default():
 
 
 def test_hierarchy_modifier_detects_overlapping_features():
-    """Should detect when same feature appears in multiple trees."""
     tree1 = HierarchyNode(feature_index=0, children=[HierarchyNode(feature_index=1)])
     tree2 = HierarchyNode(
         feature_index=2,
@@ -506,7 +491,6 @@ def test_hierarchy_modifier_detects_overlapping_features():
 
 
 def test_hierarchy_modifier_allows_disjoint_features():
-    """Should allow multiple trees with disjoint feature indices."""
     tree1 = HierarchyNode(feature_index=0, children=[HierarchyNode(feature_index=1)])
     tree2 = HierarchyNode(feature_index=2, children=[HierarchyNode(feature_index=3)])
 
@@ -516,7 +500,6 @@ def test_hierarchy_modifier_allows_disjoint_features():
 
 
 def test_hierarchy_modifier_works_with_activation_generator():
-    """Should integrate with ActivationGenerator."""
     from sae_lens.synthetic import ActivationGenerator
 
     tree = HierarchyNode(
@@ -542,7 +525,6 @@ def test_hierarchy_modifier_works_with_activation_generator():
 
 
 def test_mutual_exclusion_statistical_distribution():
-    """Verify mutual exclusion selects children with approximately uniform distribution."""
     child1 = HierarchyNode(feature_index=1)
     child2 = HierarchyNode(feature_index=2)
     root = HierarchyNode(
@@ -574,18 +556,17 @@ def test_mutual_exclusion_statistical_distribution():
     # This gives us a very low false positive rate while catching broken randomness
     expected = n_samples / 2
     margin = 120  # ~4 standard deviations, allows for statistical variation
-    assert abs(child1_kept - expected) < margin, (
+    assert child1_kept == pytest.approx(expected, abs=margin), (
         f"Child 1 selected {child1_kept} times, expected ~{expected} "
         f"(within {margin}). Distribution may not be uniform."
     )
-    assert abs(child2_kept - expected) < margin, (
+    assert child2_kept == pytest.approx(expected, abs=margin), (
         f"Child 2 selected {child2_kept} times, expected ~{expected} "
         f"(within {margin}). Distribution may not be uniform."
     )
 
 
 def test_mutual_exclusion_three_or_more_children():
-    """Verify mutual exclusion works with 3+ children."""
     children = [HierarchyNode(feature_index=i) for i in range(1, 5)]  # 4 children
     root = HierarchyNode(
         feature_index=0,
@@ -618,14 +599,13 @@ def test_mutual_exclusion_three_or_more_children():
     expected = n_samples / 4
     margin = 150  # Allow for statistical variation
     for i, count in enumerate(child_selections):
-        assert abs(count - expected) < margin, (
+        assert count == pytest.approx(expected, abs=margin), (
             f"Child {i+1} selected {count} times, expected ~{expected}. "
             f"Distribution may not be uniform."
         )
 
 
 def test_mutual_exclusion_randomness_varies():
-    """Verify that mutual exclusion produces different results on different calls."""
     child1 = HierarchyNode(feature_index=1)
     child2 = HierarchyNode(feature_index=2)
     root = HierarchyNode(
@@ -655,7 +635,6 @@ def test_mutual_exclusion_randomness_varies():
 
 
 def test_multi_level_hierarchy_with_mutual_exclusion():
-    """Verify hierarchy enforcement works correctly across multiple levels."""
     # Create a 3-level hierarchy:
     # Root (0) with mutual exclusion
     #   ├── Child A (1) with mutual exclusion
@@ -749,7 +728,6 @@ def test_multi_level_hierarchy_with_mutual_exclusion():
 
 
 def test_multi_level_hierarchy_parent_deactivation_propagates():
-    """Verify that parent deactivation propagates to all descendants."""
     # 4-level hierarchy without mutual exclusion
     # Root (0) -> Child (1) -> Grandchild (2) -> Great-grandchild (3)
 
@@ -791,14 +769,6 @@ def test_multi_level_hierarchy_parent_deactivation_propagates():
 
 
 def test_mutual_exclusion_root_level_groups_no_parent():
-    """Test ME groups at root level (parent=-1) work correctly.
-
-    This exercises the mixed-parent code path in _apply_me_for_groups where
-    some groups have parents and some don't. The implementation uses
-    `safe_parents = parents.clamp(min=0)` which reads activations[:, 0] for
-    root-level groups, but the result is masked out since these groups are
-    always considered "active" regardless of feature 0's value.
-    """
     # Create two independent root-level ME groups (no parent feature)
     # Tree 1: organizational root with ME children at features 0, 1
     # Tree 2: organizational root with ME children at features 2, 3
@@ -836,12 +806,6 @@ def test_mutual_exclusion_root_level_groups_no_parent():
 
 
 def test_mutual_exclusion_mixed_root_and_nested_groups():
-    """Test hierarchy with both root-level and nested ME groups.
-
-    This exercises the code path where some ME groups have parent=-1 (root level)
-    and others have valid parent indices, ensuring the safe_parents.clamp(min=0)
-    logic handles the mixed case correctly.
-    """
     # Tree 1: Root-level ME (parent=-1 for the ME group)
     root_me = HierarchyNode(
         feature_index=None,
@@ -881,11 +845,6 @@ def test_mutual_exclusion_mixed_root_and_nested_groups():
 
 
 def test_me_fallback_path_variable_sibling_counts_single_level():
-    """ME groups with different sizes at same level use fallback path.
-
-    When ME groups at the same level have different numbers of siblings,
-    the optimized reshape path cannot be used and _apply_me_for_groups is called.
-    """
     # Level 0: Two parents, each with ME children of different sizes
     # Parent A (feature 0): 2 ME children (features 1, 2)
     # Parent B (feature 3): 3 ME children (features 4, 5, 6)
@@ -942,10 +901,6 @@ def test_me_fallback_path_variable_sibling_counts_single_level():
 
 
 def test_me_fallback_path_variable_sibling_counts_multi_level():
-    """ME groups with different sizes across multiple levels use fallback path.
-
-    Tests a 3-level hierarchy where each level has ME groups of varying sizes.
-    """
     # Level 0: Root with 2 ME children
     # Level 1: Child A has 2 ME grandchildren, Child B has 4 ME grandchildren
     # Level 2: Mixed grandchildren counts
@@ -1021,11 +976,6 @@ def test_me_fallback_path_variable_sibling_counts_multi_level():
 
 
 def test_me_fallback_path_non_contiguous_siblings():
-    """ME with non-contiguous sibling indices uses fallback path.
-
-    When ME siblings don't have consecutive feature indices, the optimized
-    path cannot use reshape and must fall back to _apply_me_for_groups.
-    """
     # ME children at non-contiguous indices: 0, 5 (gap of 4)
     child1 = HierarchyNode(feature_index=0)
     child2 = HierarchyNode(feature_index=5)
@@ -1056,7 +1006,6 @@ def test_me_fallback_path_non_contiguous_siblings():
 
 
 def test_me_fallback_path_non_contiguous_multi_level():
-    """Non-contiguous ME siblings across multiple levels use fallback path."""
     # Level 1: Parent with ME children at indices 1, 10 (non-contiguous)
     # Level 2: Each child has ME grandchildren, also non-contiguous
 
@@ -1119,11 +1068,6 @@ def test_me_fallback_path_non_contiguous_multi_level():
 
 
 def test_me_mixed_optimized_and_fallback_paths():
-    """Hierarchy where some levels use optimized path and others use fallback.
-
-    Level 1: Uniform ME groups (2 children each) -> optimized path
-    Level 2: Variable ME groups (2 vs 3 children) -> fallback path
-    """
     # Level 2 grandchildren
     # Group under child_a: 2 grandchildren (contiguous)
     gc_a1 = HierarchyNode(feature_index=3)
@@ -1190,11 +1134,6 @@ def test_me_mixed_optimized_and_fallback_paths():
 
 
 def test_me_fallback_non_contiguous_groups():
-    """ME groups that are not laid out contiguously use fallback path.
-
-    Even if each group has the same size and contiguous siblings within,
-    if the groups themselves are not contiguous, fallback is used.
-    """
     # Two ME groups at same level, each with 2 contiguous siblings
     # But groups are not contiguous: group 1 at [1,2], group 2 at [5,6]
 
@@ -1250,13 +1189,6 @@ def test_me_fallback_non_contiguous_groups():
 
 
 def test_hierarchy_modifier_large_hierarchy_performance():
-    """Test hierarchy modifier performance with a large hierarchy (50k nodes).
-
-    Creates a hierarchy with:
-    - 2500 root trees, each with 20 nodes (depth 2)
-    - Mix of ME and non-ME nodes to exercise all code paths
-    - Verifies correctness and that it completes in reasonable time
-    """
     import time
 
     num_features = 50_000
@@ -1667,20 +1599,6 @@ class TestComputeProbabilityCorrectionFactors:
         assert correction.dtype == torch.float64
 
     def test_correction_recovers_original_rates_without_mutual_exclusion(self):
-        """Verify that corrected probabilities yield intended firing rates after hierarchy.
-
-        Without mutual exclusion:
-        1. Sample all features with corrected probabilities
-        2. Apply hierarchy constraints
-        3. The effective firing rates should match the original base probabilities
-
-        Uses deeper hierarchies (3 levels) with base probabilities chosen such that
-        corrected probabilities don't exceed 1.0.
-
-        The correction factor for each feature is 1/base[parent], which compensates
-        for the probability that the parent fires after hierarchy (which equals
-        base[parent] when parents also use corrected probabilities).
-        """
         from sae_lens.synthetic import Hierarchy
 
         # Create deeper hierarchies without mutual exclusion:
@@ -1747,9 +1665,9 @@ class TestComputeProbabilityCorrectionFactors:
         for i in range(len(base_probs)):
             expected = base_probs[i].item()
             actual = effective_rates[i].item()
-            assert abs(actual - expected) < tolerance, (
+            assert actual == pytest.approx(expected, abs=tolerance), (
                 f"Feature {i}: expected rate {expected:.4f}, got {actual:.4f}, "
-                f"diff={abs(actual - expected):.4f} (tolerance={tolerance})"
+                f"(tolerance={tolerance})"
             )
 
     def test_simple_mutual_exclusion_correction(self):
@@ -1899,12 +1817,6 @@ class TestComputeProbabilityCorrectionFactors:
         assert correction[2] == pytest.approx(1.0 / 0.5)
 
     def test_me_correction_improves_effective_rates(self):
-        """Verify that ME correction improves effective firing rates.
-
-        With ME, when multiple siblings fire, only one survives. The ME correction
-        compensates for this by boosting sampling probabilities. This test verifies
-        that with correction, effective rates are closer to target than without.
-        """
         from sae_lens.synthetic import Hierarchy
 
         # Create hierarchy with ME children
