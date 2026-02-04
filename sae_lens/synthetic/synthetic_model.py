@@ -637,7 +637,8 @@ class SyntheticModel(nn.Module):
                     hierarchy_path, tmp_path / SYNTHETIC_MODEL_HIERARCHY_FILENAME
                 )
             except EntryNotFoundError:
-                pass  # No hierarchy file
+                # Hierarchy is optional - models can be saved without one
+                pass
 
             return cls.load_from_disk(tmp_path, device=device)
 

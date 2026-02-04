@@ -1,9 +1,10 @@
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError
 
+import sae_lens.synthetic.upload_synthetic_model as upload_module
 from sae_lens.synthetic import (
     HierarchyConfig,
     LowRankCorrelationConfig,
@@ -12,8 +13,11 @@ from sae_lens.synthetic import (
     upload_synthetic_model_to_huggingface,
 )
 from sae_lens.synthetic.upload_synthetic_model import (
+    SYNTHETIC_MODEL_CONFIG_FILENAME,
     _create_default_readme,
     _get_hierarchy_max_depth,
+    _repo_file_exists,
+    _validate_model_path,
 )
 
 
@@ -132,10 +136,6 @@ def test_get_hierarchy_max_depth() -> None:
 
 
 def test_upload_synthetic_model_calls_api(monkeypatch: pytest.MonkeyPatch) -> None:
-    from huggingface_hub.utils import RepositoryNotFoundError
-
-    import sae_lens.synthetic.upload_synthetic_model as upload_module
-
     cfg = SyntheticModelConfig(
         num_features=32,
         hidden_dim=16,
@@ -177,9 +177,9 @@ def test_upload_synthetic_model_calls_api(monkeypatch: pytest.MonkeyPatch) -> No
     assert readme_call_kwargs["path_in_repo"] == "README.md"
 
 
-def test_upload_synthetic_model_with_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    import sae_lens.synthetic.upload_synthetic_model as upload_module
-
+def test_upload_synthetic_model_with_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     cfg = SyntheticModelConfig(
         num_features=32,
         hidden_dim=16,
@@ -187,37 +187,34 @@ def test_upload_synthetic_model_with_path(monkeypatch: pytest.MonkeyPatch) -> No
     )
     model = SyntheticModel(cfg)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        save_path = Path(tmpdir) / "test_model"
-        model.save(save_path)
+    save_path = tmp_path / "test_model"
+    model.save(save_path)
 
-        # Mock HfApi
-        mock_api = MagicMock()
-        mock_api.repo_info.return_value = True  # Repo exists
-        monkeypatch.setattr(upload_module, "HfApi", lambda: mock_api)
+    # Mock HfApi
+    mock_api = MagicMock()
+    mock_api.repo_info.return_value = True  # Repo exists
+    monkeypatch.setattr(upload_module, "HfApi", lambda: mock_api)
 
-        # Mock _repo_file_exists to return True (README exists)
-        monkeypatch.setattr(upload_module, "_repo_file_exists", lambda *_args: True)
+    # Mock _repo_file_exists to return True (README exists)
+    monkeypatch.setattr(upload_module, "_repo_file_exists", lambda *_args: True)
 
-        upload_synthetic_model_to_huggingface(
-            model=save_path,
-            hf_repo_id="test/repo",
-            hf_path="subfolder",
-            add_default_readme=True,
-        )
+    upload_synthetic_model_to_huggingface(
+        model=save_path,
+        hf_repo_id="test/repo",
+        hf_path="subfolder",
+        add_default_readme=True,
+    )
 
-        # Verify upload_folder was called with correct path
-        mock_api.upload_folder.assert_called_once()
-        call_kwargs = mock_api.upload_folder.call_args.kwargs
-        assert call_kwargs["path_in_repo"] == "subfolder"
+    # Verify upload_folder was called with correct path
+    mock_api.upload_folder.assert_called_once()
+    call_kwargs = mock_api.upload_folder.call_args.kwargs
+    assert call_kwargs["path_in_repo"] == "subfolder"
 
-        # README should not be uploaded since it already exists
-        mock_api.upload_file.assert_not_called()
+    # README should not be uploaded since it already exists
+    mock_api.upload_file.assert_not_called()
 
 
 def test_upload_synthetic_model_skip_readme(monkeypatch: pytest.MonkeyPatch) -> None:
-    import sae_lens.synthetic.upload_synthetic_model as upload_module
-
     cfg = SyntheticModelConfig(
         num_features=32,
         hidden_dim=16,
@@ -241,3 +238,91 @@ def test_upload_synthetic_model_skip_readme(monkeypatch: pytest.MonkeyPatch) -> 
 
     # README should not be uploaded
     mock_api.upload_file.assert_not_called()
+
+
+def test_repo_file_exists_returns_true_when_file_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Mock hf_hub_url and get_hf_file_metadata to succeed
+    def mock_hf_hub_url(
+        *,
+        repo_id: str,  # noqa: ARG001
+        filename: str,  # noqa: ARG001
+        revision: str,  # noqa: ARG001
+    ) -> str:
+        return "http://url"
+
+    def mock_get_metadata(url: str) -> dict[str, int]:  # noqa: ARG001
+        return {"size": 100}
+
+    monkeypatch.setattr(upload_module, "hf_hub_url", mock_hf_hub_url)
+    monkeypatch.setattr(upload_module, "get_hf_file_metadata", mock_get_metadata)
+
+    result = _repo_file_exists("test/repo", "README.md", "main")
+    assert result is True
+
+
+def test_repo_file_exists_returns_false_when_file_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def mock_hf_hub_url(
+        *,
+        repo_id: str,  # noqa: ARG001
+        filename: str,  # noqa: ARG001
+        revision: str,  # noqa: ARG001
+    ) -> str:
+        return "http://url"
+
+    def raise_not_found(url: str) -> None:
+        raise EntryNotFoundError(f"File not found: {url}")
+
+    monkeypatch.setattr(upload_module, "hf_hub_url", mock_hf_hub_url)
+    monkeypatch.setattr(upload_module, "get_hf_file_metadata", raise_not_found)
+
+    result = _repo_file_exists("test/repo", "nonexistent.txt", "main")
+    assert result is False
+
+
+def test_upload_with_string_path_to_saved_model(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg = SyntheticModelConfig(
+        num_features=32,
+        hidden_dim=16,
+        orthogonalization=None,
+    )
+    model = SyntheticModel(cfg)
+
+    save_path = tmp_path / "test_model"
+    model.save(save_path)
+
+    # Mock HfApi
+    mock_api = MagicMock()
+    mock_api.repo_info.return_value = True  # Repo exists
+    monkeypatch.setattr(upload_module, "HfApi", lambda: mock_api)
+    monkeypatch.setattr(upload_module, "_repo_file_exists", lambda *_args: True)
+
+    # Upload using string path
+    upload_synthetic_model_to_huggingface(
+        model=str(save_path),  # String path instead of SyntheticModel
+        hf_repo_id="test/repo",
+        add_default_readme=False,
+    )
+
+    # Verify upload_folder was called
+    mock_api.upload_folder.assert_called_once()
+    call_kwargs = mock_api.upload_folder.call_args.kwargs
+    assert Path(call_kwargs["folder_path"]) == save_path
+
+
+def test_validate_model_path_raises_for_missing_config(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="config file not found"):
+        _validate_model_path(tmp_path)
+
+
+def test_validate_model_path_raises_for_missing_weights(tmp_path: Path) -> None:
+    # Create config file but not weights
+    (tmp_path / SYNTHETIC_MODEL_CONFIG_FILENAME).write_text("{}")
+
+    with pytest.raises(FileNotFoundError, match="weights file not found"):
+        _validate_model_path(tmp_path)

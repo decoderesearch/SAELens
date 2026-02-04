@@ -109,7 +109,7 @@ def generate_magnitudes(
         Tensor of shape (num_features,) with magnitude values
     """
     if isinstance(config, (int, float)):
-        return torch.full((num_features,), float(config), dtype=torch.float32)
+        return torch.full((num_features,), config, dtype=torch.float32)
 
     return config.generate(num_features, seed=seed)
 

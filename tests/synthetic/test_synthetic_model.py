@@ -69,6 +69,120 @@ def test_synthetic_model_config_to_dict_from_dict_roundtrip():
     assert restored.seed == original.seed
 
 
+def test_synthetic_model_config_from_dict_with_all_none_optional_fields():
+    d = {
+        "num_features": 64,
+        "hidden_dim": 32,
+        "firing_probability": {
+            "generator_name": "zipfian",
+            "exponent": 1.5,
+            "max_prob": 0.5,
+        },
+        "hierarchy": None,
+        "orthogonalization": None,
+        "correlation": None,
+        "std_firing_magnitudes": 0.0,
+        "mean_firing_magnitudes": 1.0,
+        "bias": True,
+        "dtype": "float32",
+        "seed": None,
+    }
+    cfg = SyntheticModelConfig.from_dict(d)
+
+    assert cfg.num_features == 64
+    assert cfg.hidden_dim == 32
+    assert cfg.hierarchy is None
+    assert cfg.orthogonalization is None
+    assert cfg.correlation is None
+    assert cfg.seed is None
+
+
+def test_synthetic_model_config_from_dict_missing_optional_fields():
+    d = {
+        "num_features": 64,
+        "hidden_dim": 32,
+        "firing_probability": {"generator_name": "constant", "probability": 0.5},
+    }
+    cfg = SyntheticModelConfig.from_dict(d)
+
+    assert cfg.num_features == 64
+    assert cfg.hierarchy is None
+    assert cfg.orthogonalization is None
+    assert cfg.correlation is None
+    # Default values for magnitudes
+    assert cfg.std_firing_magnitudes == 0.0
+    assert cfg.mean_firing_magnitudes == 1.0
+
+
+def test_synthetic_model_config_from_dict_with_different_firing_probability_types():
+    # Test with ConstantFiringProbabilityConfig
+    d_constant = {
+        "num_features": 32,
+        "hidden_dim": 16,
+        "firing_probability": {"generator_name": "constant", "probability": 0.3},
+    }
+    cfg_constant = SyntheticModelConfig.from_dict(d_constant)
+    assert isinstance(cfg_constant.firing_probability, ConstantFiringProbabilityConfig)
+    assert cfg_constant.firing_probability.probability == 0.3
+
+    # Test with RandomFiringProbabilityConfig
+    d_random = {
+        "num_features": 32,
+        "hidden_dim": 16,
+        "firing_probability": {
+            "generator_name": "random",
+            "min_prob": 0.1,
+            "max_prob": 0.5,
+        },
+    }
+    cfg_random = SyntheticModelConfig.from_dict(d_random)
+    assert isinstance(cfg_random.firing_probability, RandomFiringProbabilityConfig)
+    assert cfg_random.firing_probability.min_prob == 0.1
+    assert cfg_random.firing_probability.max_prob == 0.5
+
+    # Test with ZipfianFiringProbabilityConfig
+    d_zipfian = {
+        "num_features": 32,
+        "hidden_dim": 16,
+        "firing_probability": {
+            "generator_name": "zipfian",
+            "exponent": 2.0,
+            "max_prob": 0.8,
+        },
+    }
+    cfg_zipfian = SyntheticModelConfig.from_dict(d_zipfian)
+    assert isinstance(cfg_zipfian.firing_probability, ZipfianFiringProbabilityConfig)
+    assert cfg_zipfian.firing_probability.exponent == 2.0
+    assert cfg_zipfian.firing_probability.max_prob == 0.8
+
+
+def test_synthetic_model_config_from_dict_with_magnitude_configs():
+    d = {
+        "num_features": 32,
+        "hidden_dim": 16,
+        "firing_probability": {"generator_name": "constant", "probability": 0.5},
+        "std_firing_magnitudes": {
+            "generator_name": "linear",
+            "start": 0.5,
+            "end": 0.1,
+        },
+        "mean_firing_magnitudes": {
+            "generator_name": "exponential",
+            "start": 2.0,
+            "end": 0.5,
+        },
+    }
+    cfg = SyntheticModelConfig.from_dict(d)
+
+    assert isinstance(cfg.std_firing_magnitudes, LinearMagnitudeConfig)
+    assert cfg.std_firing_magnitudes.start == 0.5
+    assert cfg.std_firing_magnitudes.end == 0.1
+
+    assert isinstance(cfg.mean_firing_magnitudes, ExponentialMagnitudeConfig)
+    assert cfg.mean_firing_magnitudes.start == 2.0
+    assert cfg.mean_firing_magnitudes.end == 0.5
+
+
 def test_synthetic_model_from_config_creates_model():
     cfg = SyntheticModelConfig(
         num_features=32,

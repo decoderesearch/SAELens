@@ -168,3 +168,122 @@ def test_HierarchyNode_validate_none_feature_index_nodes():
     organizational = HierarchyNode(feature_index=None, children=[child1, child2])
 
     organizational.validate()  # Should not raise
+
+
+class TestHierarchyNodeEquality:
+    def test_equal_nodes_simple(self):
+        node1 = HierarchyNode(feature_index=0)
+        node2 = HierarchyNode(feature_index=0)
+        assert node1 == node2
+
+    def test_equal_nodes_with_children(self):
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        node1 = HierarchyNode(feature_index=0, children=[child1, child2])
+
+        child1_copy = HierarchyNode(feature_index=1)
+        child2_copy = HierarchyNode(feature_index=2)
+        node2 = HierarchyNode(feature_index=0, children=[child1_copy, child2_copy])
+
+        assert node1 == node2
+
+    def test_not_equal_different_type(self):
+        node = HierarchyNode(feature_index=0)
+        # Should return NotImplemented for non-HierarchyNode types
+        result = node.__eq__("not a node")
+        assert result is NotImplemented
+
+        result = node.__eq__(42)
+        assert result is NotImplemented
+
+        result = node.__eq__(None)
+        assert result is NotImplemented
+
+    def test_not_equal_different_feature_index(self):
+        node1 = HierarchyNode(feature_index=0)
+        node2 = HierarchyNode(feature_index=1)
+        assert node1 != node2
+
+    def test_not_equal_different_mutually_exclusive(self):
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        node1 = HierarchyNode(
+            feature_index=0, children=[child1, child2], mutually_exclusive_children=True
+        )
+
+        child1_copy = HierarchyNode(feature_index=1)
+        child2_copy = HierarchyNode(feature_index=2)
+        node2 = HierarchyNode(
+            feature_index=0,
+            children=[child1_copy, child2_copy],
+            mutually_exclusive_children=False,
+        )
+
+        assert node1 != node2
+
+    def test_not_equal_different_feature_id(self):
+        node1 = HierarchyNode(feature_index=0, feature_id="first")
+        node2 = HierarchyNode(feature_index=0, feature_id="second")
+        assert node1 != node2
+
+    def test_not_equal_different_feature_id_vs_none(self):
+        node1 = HierarchyNode(feature_index=0, feature_id="named")
+        node2 = HierarchyNode(feature_index=0, feature_id=None)
+        assert node1 != node2
+
+    def test_not_equal_different_children_count(self):
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        node1 = HierarchyNode(feature_index=0, children=[child1, child2])
+        node2 = HierarchyNode(feature_index=0, children=[child1])
+        assert node1 != node2
+
+    def test_not_equal_children_differ(self):
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        node1 = HierarchyNode(feature_index=0, children=[child1])
+        node2 = HierarchyNode(feature_index=0, children=[child2])
+        assert node1 != node2
+
+    def test_equal_with_none_feature_index(self):
+        child1 = HierarchyNode(feature_index=0)
+        child2 = HierarchyNode(feature_index=1)
+        org1 = HierarchyNode(feature_index=None, children=[child1, child2])
+
+        child1_copy = HierarchyNode(feature_index=0)
+        child2_copy = HierarchyNode(feature_index=1)
+        org2 = HierarchyNode(feature_index=None, children=[child1_copy, child2_copy])
+
+        assert org1 == org2
+
+    def test_deep_equality(self):
+        # Create identical deep trees
+        gc1_a = HierarchyNode(feature_index=3)
+        gc1_b = HierarchyNode(feature_index=4)
+        c1_a = HierarchyNode(feature_index=1, children=[gc1_a, gc1_b])
+        c2_a = HierarchyNode(feature_index=2)
+        root_a = HierarchyNode(feature_index=0, children=[c1_a, c2_a])
+
+        gc2_a = HierarchyNode(feature_index=3)
+        gc2_b = HierarchyNode(feature_index=4)
+        c1_b = HierarchyNode(feature_index=1, children=[gc2_a, gc2_b])
+        c2_b = HierarchyNode(feature_index=2)
+        root_b = HierarchyNode(feature_index=0, children=[c1_b, c2_b])
+
+        assert root_a == root_b
+
+    def test_deep_inequality_at_leaf(self):
+        # Identical except for one leaf's feature_index
+        gc1_a = HierarchyNode(feature_index=3)
+        gc1_b = HierarchyNode(feature_index=4)
+        c1_a = HierarchyNode(feature_index=1, children=[gc1_a, gc1_b])
+        c2_a = HierarchyNode(feature_index=2)
+        root_a = HierarchyNode(feature_index=0, children=[c1_a, c2_a])
+
+        gc2_a = HierarchyNode(feature_index=3)
+        gc2_b = HierarchyNode(feature_index=99)  # Different!
+        c1_b = HierarchyNode(feature_index=1, children=[gc2_a, gc2_b])
+        c2_b = HierarchyNode(feature_index=2)
+        root_b = HierarchyNode(feature_index=0, children=[c1_b, c2_b])
+
+        assert root_a != root_b

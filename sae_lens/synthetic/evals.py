@@ -149,7 +149,14 @@ class DeadLatentsCalculator:
 class ShrinkageCalculator:
     """Calculator for shrinkage (output/input norm ratio) over batches.
 
-    Samples with near-zero input norm are skipped since shrinkage is undefined.
+    Samples with near-zero input norm are skipped since shrinkage is undefined
+    (dividing by near-zero norm would produce arbitrarily large or unstable values).
+
+    Args:
+        min_input_norm: Minimum input norm threshold. Samples with input norm below
+            this value are excluded from the calculation. Default 1e-6 is chosen to
+            be well above floating-point precision limits while catching effectively
+            zero-norm inputs.
     """
 
     def __init__(self, min_input_norm: float = 1e-6) -> None:
@@ -293,29 +300,28 @@ class ClassificationMetricsCalculator:
 
         tp, fp, fn, tn = self.tp, self.fp, self.fn, self.tn
 
-        # Precision: TP / (TP + FP), handle division by zero
-        precision_per_latent = tp / (tp + fp).clamp(min=1e-8)
+        # Precision: TP / (TP + FP), 0 when undefined
+        precision_denom = tp + fp
         precision_per_latent = torch.where(
-            tp + fp > 0, precision_per_latent, torch.zeros_like(precision_per_latent)
+            precision_denom > 0,
+            tp / precision_denom,
+            torch.zeros_like(tp),
         )
 
-        # Recall: TP / (TP + FN), handle division by zero
-        recall_per_latent = tp / (tp + fn).clamp(min=1e-8)
+        # Recall: TP / (TP + FN), 0 when undefined
+        recall_denom = tp + fn
         recall_per_latent = torch.where(
-            tp + fn > 0, recall_per_latent, torch.zeros_like(recall_per_latent)
+            recall_denom > 0,
+            tp / recall_denom,
+            torch.zeros_like(tp),
         )
 
-        # F1: 2 * precision * recall / (precision + recall), handle division by zero
-        f1_per_latent = (
-            2
-            * precision_per_latent
-            * recall_per_latent
-            / (precision_per_latent + recall_per_latent).clamp(min=1e-8)
-        )
+        # F1: 2 * precision * recall / (precision + recall), 0 when undefined
+        f1_denom = precision_per_latent + recall_per_latent
         f1_per_latent = torch.where(
-            precision_per_latent + recall_per_latent > 0,
-            f1_per_latent,
-            torch.zeros_like(f1_per_latent),
+            f1_denom > 0,
+            2 * precision_per_latent * recall_per_latent / f1_denom,
+            torch.zeros_like(precision_per_latent),
         )
 
         # Accuracy: (TP + TN) / total

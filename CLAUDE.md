@@ -31,6 +31,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Keep code simple and readable. Avoid over-engineered or complex code.
 - ALWAYS add tests for new features.
 - In tests, DO NOT use `TrainingSAE.from_dict` to create a SAE. Directly create the SAE class you want using the config for the SAE. There are helpers for creating configs in `tests.helpers`.
+- never create a tmpfile / tmpdir in tests, use the built-in `tmp_path` fixture.
 - If you want an SAE with arbitrary parameters, you must call `random_params(sae)` on the SAE to properly initialize the SAE.
 - It it more important that tests verify the correct behavior than that tests pass. Stop and say you need help or are confused rather than writing a trivial test that will pass even if behavior is incorrect.
 - Never disable type checking for an entire file, even in tests.

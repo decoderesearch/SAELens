@@ -147,7 +147,8 @@ class Hierarchy:
                     # ME correction = 1 + expected_other_active
                     total_prob = sum(p for _, p in child_probs)
                     for feat_idx, p in child_probs:
-                        other_probs_sum = total_prob - p
+                        # Use max(0, ...) to handle floating-point errors when total_prob ≈ p
+                        other_probs_sum = max(0.0, total_prob - p)
                         me_correction = 1.0 + other_probs_sum / node_prob
                         correction_factors[feat_idx] *= me_correction
 

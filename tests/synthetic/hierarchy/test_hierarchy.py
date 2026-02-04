@@ -171,6 +171,67 @@ def test_generate_hierarchy_me_depth_filtering_middle_range():
     assert depth_2_me_count == 0
 
 
+def test_generate_hierarchy_runs_out_of_features_mid_construction():
+    cfg = HierarchyConfig(
+        total_root_nodes=5,
+        branching_factor=3,
+        max_depth=2,
+    )
+    # With 5 roots, branching=3, depth=2: we need 5 + 5*3 + 5*3*3 = 5+15+45 = 65 features
+    # Provide only 30 features - should stop mid-construction
+    result = generate_hierarchy(30, cfg, seed=42)
+
+    # Should have used exactly the available features
+    assert len(result.feature_indices_used) <= 30
+
+    # Structure should still be valid - modifier should work
+    assert result.modifier is not None
+    activations = torch.rand(10, 30)
+    output = result.modifier(activations)
+    assert output.shape == (10, 30)
+
+
+def test_generate_hierarchy_runs_out_of_features_before_all_roots():
+    cfg = HierarchyConfig(
+        total_root_nodes=10,
+        branching_factor=2,
+        max_depth=1,
+    )
+    # Provide only 5 features - can't create all 10 roots
+    result = generate_hierarchy(5, cfg, seed=42)
+
+    # Should have created as many roots as possible
+    assert len(result.roots) == 5
+    assert len(result.feature_indices_used) == 5
+
+    # No children because all features used for roots
+    for root in result.roots:
+        assert len(root.children) == 0
+
+
+def test_generate_hierarchy_determinism_across_runs():
+    cfg = HierarchyConfig(
+        total_root_nodes=10,
+        branching_factor=(2, 4),  # Variable branching
+        max_depth=3,
+        mutually_exclusive_portion=0.5,
+    )
+
+    # Run generation twice with same seed
+    result1 = generate_hierarchy(500, cfg, seed=12345)
+    result2 = generate_hierarchy(500, cfg, seed=12345)
+
+    # Should produce identical results
+    assert result1 == result2
+
+    # Also verify the serialization matches
+    assert result1.to_dict() == result2.to_dict()
+
+    # Run with different seed - should be different
+    result3 = generate_hierarchy(500, cfg, seed=54321)
+    assert result1 != result3
+
+
 def test_generate_hierarchy_assigns_indices_by_depth():
     cfg = HierarchyConfig(
         total_root_nodes=10,
@@ -292,6 +353,80 @@ class TestComputeProbabilityCorrectionFactors:
 
         assert correction[0] == 1.0
         assert correction[1] == 1.0
+
+    def test_very_small_parent_probability(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(feature_index=0, children=[child])
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        # Very small but nonzero parent probability
+        base_probs = torch.tensor([1e-8, 0.3])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        assert correction[0] == 1.0
+        # Correction factor should be large but finite
+        assert correction[1] == pytest.approx(1.0 / 1e-8, rel=1e-6)
+        assert torch.isfinite(correction[1])
+
+    def test_me_correction_with_zero_sibling_probability(self):
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        root = HierarchyNode(
+            feature_index=0, children=[child1, child2], mutually_exclusive_children=True
+        )
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        # One sibling has zero probability
+        base_probs = torch.tensor([0.5, 0.3, 0.0])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        # Child with zero prob sibling: ME correction = 1 + 0/0.5 = 1
+        # Child with nonzero sibling: ME correction = 1 + 0.3/0.5 = 1.6
+        hierarchy_corr = 1.0 / 0.5
+        assert correction[1] == pytest.approx(hierarchy_corr * 1.0)  # no ME boost
+        assert correction[2] == pytest.approx(hierarchy_corr * (1 + 0.3 / 0.5))
+
+    def test_me_correction_with_very_high_probabilities(self):
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        child3 = HierarchyNode(feature_index=3)
+        root = HierarchyNode(
+            feature_index=0,
+            children=[child1, child2, child3],
+            mutually_exclusive_children=True,
+        )
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        # Very high base probabilities close to parent
+        base_probs = torch.tensor([0.9, 0.8, 0.7, 0.6])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        hierarchy_corr = 1.0 / 0.9
+        # ME correction = 1 + sum(other_probs) / parent_prob
+        # For child1: 1 + (0.7 + 0.6) / 0.9 = 1 + 1.44... ≈ 2.44
+        # For child2: 1 + (0.8 + 0.6) / 0.9 = 1 + 1.55... ≈ 2.55
+        # For child3: 1 + (0.8 + 0.7) / 0.9 = 1 + 1.67... ≈ 2.67
+        assert correction[1] == pytest.approx(hierarchy_corr * (1 + (0.7 + 0.6) / 0.9))
+        assert correction[2] == pytest.approx(hierarchy_corr * (1 + (0.8 + 0.6) / 0.9))
+        assert correction[3] == pytest.approx(hierarchy_corr * (1 + (0.8 + 0.7) / 0.9))
+
+    def test_me_correction_numerical_stability_equal_probs(self):
+        children = [HierarchyNode(feature_index=i) for i in range(1, 5)]
+        root = HierarchyNode(
+            feature_index=0, children=children, mutually_exclusive_children=True
+        )
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        # All children have same probability
+        base_probs = torch.tensor([0.5, 0.2, 0.2, 0.2, 0.2])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+
+        # All children should have same correction factor
+        hierarchy_corr = 1.0 / 0.5
+        # ME correction = 1 + (3 * 0.2) / 0.5 = 1 + 1.2 = 2.2
+        expected = hierarchy_corr * (1 + 0.6 / 0.5)
+        for i in range(1, 5):
+            assert correction[i] == pytest.approx(expected)
 
     def test_preserves_dtype(self):
         child = HierarchyNode(feature_index=1)

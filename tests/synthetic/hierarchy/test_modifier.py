@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from sae_lens.synthetic import HierarchyNode, hierarchy_modifier
+from sae_lens.synthetic import Hierarchy, HierarchyNode, hierarchy_modifier
 from tests.helpers import to_dense, to_sparse
 
 
@@ -1123,6 +1123,145 @@ def test_hierarchy_modifier_large_hierarchy_performance():
     assert (
         apply_time < 2.0
     ), f"Modifier application took {apply_time:.2f}s, expected < 2s"
+
+
+class TestHierarchyModifierStatistical:
+    def test_hierarchy_constraint_children_never_fire_without_parent(self):
+        grandchild = HierarchyNode(feature_index=2)
+        child = HierarchyNode(feature_index=1, children=[grandchild])
+        root = HierarchyNode(feature_index=0, children=[child])
+        modifier = hierarchy_modifier([root])
+
+        # Generate random activations with varying probabilities
+        n_samples = 50_000
+        # Make parent less likely than children to test constraint enforcement
+        activations = torch.zeros(n_samples, 4)
+        activations[:, 0] = (torch.rand(n_samples) < 0.3).float()  # root: 30%
+        activations[:, 1] = (torch.rand(n_samples) < 0.8).float()  # child: 80%
+        activations[:, 2] = (torch.rand(n_samples) < 0.7).float()  # grandchild: 70%
+        activations[:, 3] = (torch.rand(n_samples) < 0.5).float()  # unrelated: 50%
+
+        result = modifier(activations)
+
+        # Strict hierarchy check: child NEVER fires when parent is inactive
+        parent_inactive = result[:, 0] == 0
+        child_when_parent_inactive = result[parent_inactive, 1]
+        assert (child_when_parent_inactive == 0).all(), (
+            f"Found {(child_when_parent_inactive > 0).sum()} cases where child fired "
+            "without parent - hierarchy constraint violated"
+        )
+
+        grandchild_when_parent_inactive = result[parent_inactive, 2]
+        assert (grandchild_when_parent_inactive == 0).all(), (
+            f"Found {(grandchild_when_parent_inactive > 0).sum()} cases where grandchild "
+            "fired without root - hierarchy constraint violated"
+        )
+
+        # Grandchild should also never fire when immediate parent (child) is inactive
+        child_inactive = result[:, 1] == 0
+        grandchild_when_child_inactive = result[child_inactive, 2]
+        assert (grandchild_when_child_inactive == 0).all(), (
+            f"Found {(grandchild_when_child_inactive > 0).sum()} cases where grandchild "
+            "fired without child - hierarchy constraint violated"
+        )
+
+        # Unrelated feature should be unchanged
+        torch.testing.assert_close(result[:, 3], activations[:, 3])
+
+    def test_mutual_exclusion_statistical_one_child_always_kept(self):
+        children = [HierarchyNode(feature_index=i) for i in range(1, 6)]  # 5 children
+        root = HierarchyNode(
+            feature_index=0, children=children, mutually_exclusive_children=True
+        )
+        modifier = hierarchy_modifier([root])
+
+        n_samples = 20_000
+        # All active initially
+        activations = torch.ones(n_samples, 6)
+        result = modifier(activations)
+
+        # Count active children per sample
+        children_active = result[:, 1:6] > 0
+        active_count = children_active.sum(dim=1)
+
+        # Exactly one child should be active in every sample
+        assert (active_count == 1).all(), (
+            f"Expected exactly 1 child active per sample. "
+            f"Got min={active_count.min()}, max={active_count.max()}, "
+            f"violations: {(active_count != 1).sum()}"
+        )
+
+        # Each child should be selected roughly equally (20% each)
+        for i in range(5):
+            count = (result[:, i + 1] > 0).sum().item()
+            expected = n_samples / 5
+            # 4 standard deviations for 99.99% confidence
+            margin = 4 * (n_samples * 0.2 * 0.8) ** 0.5
+            assert (
+                count == pytest.approx(expected, abs=margin)
+            ), f"Child {i+1} selected {count} times, expected ~{expected} (margin={margin:.0f})"
+
+    def test_hierarchy_effective_firing_rates_match_base_probs(self):
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        grandchild = HierarchyNode(feature_index=3)
+        child1 = HierarchyNode(feature_index=1, children=[grandchild])
+        root = HierarchyNode(feature_index=0, children=[child1, child2])
+
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        # Base probabilities chosen so corrected probs stay <= 1.0
+        base_probs = torch.tensor([0.8, 0.6, 0.5, 0.4])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+        corrected_probs = base_probs * correction
+
+        # Verify no clamping needed
+        assert (corrected_probs <= 1.0).all()
+
+        # Sample with corrected probabilities
+        n_samples = 200_000
+        activations = (torch.rand(n_samples, 4) < corrected_probs).float()
+
+        # Apply hierarchy
+        assert hierarchy.modifier is not None
+        result = hierarchy.modifier(activations)
+
+        # Effective firing rates should match base probabilities
+        effective_rates = result.mean(dim=0)
+
+        # With 200k samples, std ≈ sqrt(p*(1-p)/n) ≈ 0.001
+        # Use 5 sigma for tight tolerance
+        for i in range(4):
+            expected = base_probs[i].item()
+            actual = effective_rates[i].item()
+            std = (expected * (1 - expected) / n_samples) ** 0.5
+            tolerance = 5 * std + 0.002  # Add small buffer
+            assert actual == pytest.approx(expected, abs=tolerance), (
+                f"Feature {i}: expected rate {expected:.4f}, got {actual:.4f}, "
+                f"tolerance={tolerance:.4f}"
+            )
+
+    def test_mutual_exclusion_never_allows_multiple_active(self):
+        children = [HierarchyNode(feature_index=i) for i in range(1, 4)]
+        root = HierarchyNode(
+            feature_index=0, children=children, mutually_exclusive_children=True
+        )
+        modifier = hierarchy_modifier([root])
+
+        # Test across many batches to catch any probabilistic bugs
+        for _ in range(100):
+            n_samples = 1000
+            activations = torch.ones(n_samples, 4)
+            result = modifier(activations)
+
+            # Check mutual exclusion is ALWAYS enforced
+            children_active = result[:, 1:4] > 0
+            active_count = children_active.sum(dim=1)
+
+            assert (active_count <= 1).all(), (
+                f"Found samples with {active_count.max().item()} children active - "
+                "mutual exclusion violated!"
+            )
 
 
 class TestHierarchyModifierSparseCOO:
