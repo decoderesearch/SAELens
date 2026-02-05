@@ -19,8 +19,8 @@ classifiers = ["Topic :: Scientific/Engineering :: Artificial Intelligence"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-# transformer-lens = ">=2.16.1"  # Temporarily using git fork in dev deps for v5 support
-# transformers = "^4.38.1"  # Temporarily testing v5 support
+transformer-lens = ">=2.16.1"
+transformers = "^4.38.1"
 plotly = ">=5.19.0"
 plotly-express = ">=0.4.1"
 datasets = ">=3.1.0"
@@ -60,11 +60,7 @@ trio = "^0.30.0"
 dictionary-learning = "^0.1.0"
 kaleido = "^1.2.0"
 ipykernel = "^7.1.0"
-# Temporarily use git fork until transformers v5 support is merged and released
-# Once merged, uncomment: transformer-lens = ">=3.0.0b2"
-transformer-lens = { git = "https://github.com/speediedan/TransformerLens.git", rev = "5e6ee61d1676a4d2eee4f083b422b80c87510618" }
-# Override main dependency to allow transformers v5 for testing
-transformers = ">=5.0.0,<6.0.0"
+transformer-lens = { version = "3.0.0b1", allow-prereleases = true }
 
 [tool.poetry.extras]
 mamba = ["mamba-lens"]
