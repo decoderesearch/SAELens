@@ -3,7 +3,7 @@ import tempfile
 from contextlib import contextmanager
 from dataclasses import asdict, fields, is_dataclass
 from pathlib import Path
-from typing import Sequence, TypeVar
+from typing import Any, Sequence, TypeVar
 
 import torch
 from transformers import PreTrainedTokenizerBase
@@ -83,7 +83,7 @@ def get_special_token_ids(tokenizer: PreTrainedTokenizerBase) -> list[int]:
 
     # Get any additional special tokens from the tokenizer's special tokens map
     if hasattr(tokenizer, "special_tokens_map"):
-        token_map_values: any = tokenizer.special_tokens_map.values()  # type: ignore
+        token_map_values: Any = tokenizer.special_tokens_map.values()  # type: ignore
         for token in token_map_values:
             if isinstance(token, str):
                 token_id = tokenizer.convert_tokens_to_ids(token)  # type: ignore

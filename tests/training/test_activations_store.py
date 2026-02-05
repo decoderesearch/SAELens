@@ -837,21 +837,9 @@ def test_activations_store_get_batch_tokens_disable_concat_sequences_no_bos(
     assert tokenizer is not None
 
     # With prepend_bos=False, should NOT have BOS token
-    tok1 = (
-        ts_model.to_tokens(
-            "hello world this is long enough", prepend_bos=False, move_to_device=False
-        )
-        .squeeze(0)
-        .tolist()
-    )
-    tok2 = (
-        ts_model.to_tokens(
-            "another longer sequence for testing",
-            prepend_bos=False,
-            move_to_device=False,
-        )
-        .squeeze(0)
-        .tolist()
+    tok1 = hf_to_tokens(ts_model, "hello world this is long enough", prepend_bos=False)
+    tok2 = hf_to_tokens(
+        ts_model, "another longer sequence for testing", prepend_bos=False
     )
     expected_tokens_1 = tok1[: cfg.context_size]
     expected_tokens_2 = tok2[: cfg.context_size]

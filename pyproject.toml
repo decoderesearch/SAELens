@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sae-lens"
-version = "6.34.2"
+version = "6.35.0"
 description = "Training and Analyzing Sparse Autoencoders (SAEs)"
 authors = ["Joseph Bloom"]
 readme = "README.md"
@@ -19,8 +19,8 @@ classifiers = ["Topic :: Scientific/Engineering :: Artificial Intelligence"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-# transformer-lens = ">=2.16.1"  # Temporarily using git fork in dev deps for v5 support
-# transformers = "^4.38.1"  # Temporarily testing v5 support
+transformer-lens = ">=2.16.1,<4.0.0"  # Allow both current and upcoming versions  
+transformers = ">=4.38.1,<6.0.0"  # Allow both v4 and v5  
 plotly = ">=5.19.0"
 plotly-express = ">=0.4.1"
 datasets = ">=3.1.0"
