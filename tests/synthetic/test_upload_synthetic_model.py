@@ -145,7 +145,11 @@ def test_upload_synthetic_model_calls_api(monkeypatch: pytest.MonkeyPatch) -> No
 
     # Mock HfApi
     mock_api = MagicMock()
-    mock_api.repo_info.side_effect = RepositoryNotFoundError("Not found")
+    mock_response = MagicMock()
+    mock_response.status_code = 404
+    mock_api.repo_info.side_effect = RepositoryNotFoundError(
+        "Not found", response=mock_response
+    )
     monkeypatch.setattr(upload_module, "HfApi", lambda: mock_api)
 
     # Mock create_repo
