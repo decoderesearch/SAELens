@@ -41,15 +41,13 @@ class Hierarchy:
         """Serialize hierarchy to dict for persistence."""
 
         def node_to_dict(node: HierarchyNode) -> dict[str, Any]:
-            d: dict[str, Any] = {
+            return {
                 "feature_index": node.feature_index,
                 "mutually_exclusive_children": node.mutually_exclusive_children,
+                "scale_children_by_parent": node.scale_children_by_parent,
                 "feature_id": node.feature_id,
                 "children": [node_to_dict(c) for c in node.children],
             }
-            if node.scale_children_by_parent:
-                d["scale_children_by_parent"] = True
-            return d
 
         return {
             "roots": [node_to_dict(r) for r in self.roots],

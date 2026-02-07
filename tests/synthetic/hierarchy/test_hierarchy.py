@@ -275,6 +275,39 @@ def test_generate_hierarchy_assigns_indices_by_depth():
         )
 
 
+def test_generate_hierarchy_sets_scale_children_by_parent_on_all_parents():
+    cfg = HierarchyConfig(
+        total_root_nodes=3,
+        branching_factor=2,
+        max_depth=2,
+        scale_children_by_parent=True,
+    )
+    result = generate_hierarchy(100, cfg, seed=42)
+
+    for root in result.roots:
+        assert root.scale_children_by_parent is True
+        for child in root.children:
+            # depth-1 nodes are parents (max_depth=2), so they should also be set
+            assert child.scale_children_by_parent is True
+            # depth-2 nodes are leaves and not in all_parents_with_depth
+            for grandchild in child.children:
+                assert grandchild.scale_children_by_parent is False
+
+
+def test_generate_hierarchy_does_not_set_scale_children_by_parent_by_default():
+    cfg = HierarchyConfig(
+        total_root_nodes=3,
+        branching_factor=2,
+        max_depth=2,
+    )
+    result = generate_hierarchy(100, cfg, seed=42)
+
+    for root in result.roots:
+        assert root.scale_children_by_parent is False
+        for child in root.children:
+            assert child.scale_children_by_parent is False
+
+
 class TestComputeProbabilityCorrectionFactors:
     def test_simple_parent_child(self):
         child = HierarchyNode(feature_index=1)

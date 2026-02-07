@@ -256,6 +256,19 @@ class TestHierarchyNodeEquality:
 
         assert org1 == org2
 
+    def test_not_equal_different_scale_children_by_parent(self):
+        node1 = HierarchyNode(
+            feature_index=0,
+            children=[HierarchyNode(feature_index=1)],
+            scale_children_by_parent=True,
+        )
+        node2 = HierarchyNode(
+            feature_index=0,
+            children=[HierarchyNode(feature_index=1)],
+            scale_children_by_parent=False,
+        )
+        assert node1 != node2
+
     def test_deep_equality(self):
         # Create identical deep trees
         gc1_a = HierarchyNode(feature_index=3)

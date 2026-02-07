@@ -272,10 +272,15 @@ def _apply_hierarchy_sparse(
             if level_data.rescale_mask is not None and level_data.rescale_mask.any():
                 assert mean_firing_magnitudes is not None
                 parent_means = mean_firing_magnitudes[level_data.parents]
+                # Guard against zero means (shouldn't happen in practice,
+                # but avoids NaN/Inf if a parent has mean_firing_magnitude=0)
+                safe_means = torch.where(
+                    parent_means > 0, parent_means, torch.ones_like(parent_means)
+                )
                 # P/μ_P where parent active, 0 where inactive
                 scale = torch.where(
                     parent_vals > 0,
-                    parent_vals / parent_means,
+                    parent_vals / safe_means,
                     torch.zeros_like(parent_vals),
                 )
                 binary_gate = (parent_vals > 0).to(child_vals.dtype)
@@ -561,7 +566,10 @@ def _apply_parent_deactivation_coo(
             parent_vals = new_values[parent_original_indices]
             parent_feat_ids = child_parents[rescale_and_active]
             parent_means = mean_firing_magnitudes[parent_feat_ids]
-            scale = parent_vals / parent_means
+            safe_means = torch.where(
+                parent_means > 0, parent_means, torch.ones_like(parent_means)
+            )
+            scale = parent_vals / safe_means
             new_values[rescale_entries] *= scale
 
         # For children with inactive parents (both rescale and binary), zero them out
