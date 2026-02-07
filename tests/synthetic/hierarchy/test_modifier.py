@@ -1760,3 +1760,21 @@ class TestScaleChildrenByParent:
         torch.testing.assert_close(result[:, 1], torch.full((50,), 3.0))
         torch.testing.assert_close(result[:, 2], torch.full((50,), 2.0))
         torch.testing.assert_close(result[:, 3], torch.full((50,), 3.0))
+
+    def test_zero_parent_mean_raises_value_error(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+        modifier = hierarchy_modifier([root])
+
+        gen = ActivationGenerator(
+            num_features=2,
+            firing_probabilities=1.0,
+            mean_firing_magnitudes=torch.tensor([0.0, 1.0]),
+            std_firing_magnitudes=0.0,
+            modify_activations=modifier,
+        )
+
+        with pytest.raises(ValueError, match="mean_firing_magnitudes must be > 0"):
+            gen.sample(1)

@@ -866,10 +866,11 @@ def hierarchy_modifier(
             if device not in mean_mags_cache:
                 mean_mags = generator.mean_firing_magnitudes.to(device)
                 assert cached.rescale_parent_indices is not None
-                assert (mean_mags[cached.rescale_parent_indices] > 0).all(), (
-                    "mean_firing_magnitudes must be > 0 for parents with"
-                    " scale_children_by_parent=True"
-                )
+                if not (mean_mags[cached.rescale_parent_indices] > 0).all():
+                    raise ValueError(
+                        "mean_firing_magnitudes must be > 0 for parents with"
+                        " scale_children_by_parent=True"
+                    )
                 mean_mags_cache[device] = mean_mags
             mean_mags = mean_mags_cache[device]
             if activations.is_sparse:
