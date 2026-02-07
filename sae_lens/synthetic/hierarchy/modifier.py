@@ -70,6 +70,9 @@ class _SparseHierarchyData:
     # Per-feature bool: True if parent has scale_children_by_parent
     feat_rescale: torch.Tensor | None = None  # [num_features]
 
+    # Unique parent feature indices that have rescaling children
+    rescale_parent_indices: torch.Tensor | None = None  # [num_rescale_parents]
+
     # Whether any node uses rescale (for fast-path optimization)
     has_rescale: bool = False
 
@@ -218,10 +221,15 @@ def _build_sparse_hierarchy(
 
     # Build per-feature rescale mask for COO path
     feat_rescale: torch.Tensor | None = None
+    rescale_parent_indices: torch.Tensor | None = None
     if any_rescale:
         feat_rescale = torch.zeros(num_features, dtype=torch.bool)
-        for feat, _, _, rescale in feature_info:
+        rescale_parents: set[int] = set()
+        for feat, parent, _, rescale in feature_info:
             feat_rescale[feat] = rescale
+            if rescale and parent >= 0:
+                rescale_parents.add(parent)
+        rescale_parent_indices = torch.tensor(sorted(rescale_parents), dtype=torch.long)
 
     return _SparseHierarchyData(
         level_data=level_data,
@@ -232,6 +240,7 @@ def _build_sparse_hierarchy(
         feat_to_parent=feat_to_parent,
         feat_to_me_group=feat_to_me_group,
         feat_rescale=feat_rescale,
+        rescale_parent_indices=rescale_parent_indices,
         has_rescale=any_rescale,
     )
 
@@ -272,19 +281,13 @@ def _apply_hierarchy_sparse(
             if level_data.rescale_mask is not None and level_data.rescale_mask.any():
                 assert mean_firing_magnitudes is not None
                 parent_means = mean_firing_magnitudes[level_data.parents]
-                # Guard against zero means (shouldn't happen in practice,
-                # but avoids NaN/Inf if a parent has mean_firing_magnitude=0)
-                safe_means = torch.where(
-                    parent_means > 0, parent_means, torch.ones_like(parent_means)
-                )
-                # P/μ_P where parent active, 0 where inactive
+                parent_active = parent_vals > 0
                 scale = torch.where(
-                    parent_vals > 0,
-                    parent_vals / safe_means,
+                    parent_active,
+                    parent_vals / parent_means,
                     torch.zeros_like(parent_vals),
                 )
-                binary_gate = (parent_vals > 0).to(child_vals.dtype)
-                # Mix rescale and binary gating per feature
+                binary_gate = parent_active.to(child_vals.dtype)
                 factor = torch.where(level_data.rescale_mask, scale, binary_gate)
                 result[:, level_data.features] = child_vals * factor
             else:
@@ -566,10 +569,7 @@ def _apply_parent_deactivation_coo(
             parent_vals = new_values[parent_original_indices]
             parent_feat_ids = child_parents[rescale_and_active]
             parent_means = mean_firing_magnitudes[parent_feat_ids]
-            safe_means = torch.where(
-                parent_means > 0, parent_means, torch.ones_like(parent_means)
-            )
-            scale = parent_vals / safe_means
+            scale = parent_vals / parent_means
             new_values[rescale_entries] *= scale
 
         # For children with inactive parents (both rescale and binary), zero them out
@@ -809,6 +809,7 @@ def hierarchy_modifier(
 
     # Cache for device-specific tensors
     device_cache: dict[torch.device, _SparseHierarchyData] = {}
+    mean_mags_cache: dict[torch.device, torch.Tensor] = {}
 
     def _get_sparse_for_device(device: torch.device) -> _SparseHierarchyData:
         """Get or create device-specific sparse hierarchy data."""
@@ -846,6 +847,11 @@ def hierarchy_modifier(
                     if sparse_data.feat_rescale is not None
                     else None
                 ),
+                rescale_parent_indices=(
+                    sparse_data.rescale_parent_indices.to(device)
+                    if sparse_data.rescale_parent_indices is not None
+                    else None
+                ),
                 has_rescale=sparse_data.has_rescale,
             )
         return device_cache[device]
@@ -857,7 +863,15 @@ def hierarchy_modifier(
         ) -> torch.Tensor:
             device = activations.device
             cached = _get_sparse_for_device(device)
-            mean_mags = generator.mean_firing_magnitudes.to(device)
+            if device not in mean_mags_cache:
+                mean_mags = generator.mean_firing_magnitudes.to(device)
+                assert cached.rescale_parent_indices is not None
+                assert (mean_mags[cached.rescale_parent_indices] > 0).all(), (
+                    "mean_firing_magnitudes must be > 0 for parents with"
+                    " scale_children_by_parent=True"
+                )
+                mean_mags_cache[device] = mean_mags
+            mean_mags = mean_mags_cache[device]
             if activations.is_sparse:
                 return _apply_hierarchy_sparse_coo(activations, cached, mean_mags)
             return _apply_hierarchy_sparse(activations, cached, mean_mags)
