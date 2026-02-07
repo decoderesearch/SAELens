@@ -31,6 +31,9 @@ class HierarchyConfig:
             for the probability reduction caused by hierarchy constraints. When children
             can only fire when parents fire, effective probability becomes the product
             of all ancestor probabilities. This option corrects for that. Default False.
+        scale_children_by_parent: If True, set scale_children_by_parent on all
+            parent nodes. Children are scaled by parent_activation / parent_mean instead
+            of binary gating. Default False.
     """
 
     total_root_nodes: int = 100
@@ -40,6 +43,7 @@ class HierarchyConfig:
     mutually_exclusive_min_depth: int = 0
     mutually_exclusive_max_depth: int | None = None
     compensate_probabilities: bool = False
+    scale_children_by_parent: bool = False
 
     def __post_init__(self) -> None:
         if self.total_root_nodes <= 0:

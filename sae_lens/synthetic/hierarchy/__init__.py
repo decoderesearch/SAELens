@@ -9,10 +9,10 @@ Based on Noa Nabeshima's Matryoshka SAEs:
 https://github.com/noanabeshima/matryoshka-saes/blob/main/toy_model.py
 """
 
+from sae_lens.synthetic.activation_generator import ActivationsModifier
 from sae_lens.synthetic.hierarchy.config import HierarchyConfig
 from sae_lens.synthetic.hierarchy.hierarchy import Hierarchy, generate_hierarchy
 from sae_lens.synthetic.hierarchy.modifier import (
-    ActivationsModifier,
     hierarchy_modifier,
 )
 from sae_lens.synthetic.hierarchy.node import HierarchyNode

@@ -1,7 +1,17 @@
 import pytest
 import torch
 
-from sae_lens.synthetic import Hierarchy, HierarchyNode, hierarchy_modifier
+from sae_lens.synthetic import (
+    ActivationGenerator,
+    Hierarchy,
+    HierarchyNode,
+    hierarchy_modifier,
+)
+from sae_lens.synthetic.hierarchy.modifier import (
+    _apply_hierarchy_sparse,
+    _apply_hierarchy_sparse_coo,
+    _build_sparse_hierarchy,
+)
 from tests.helpers import to_dense, to_sparse
 
 
@@ -234,8 +244,6 @@ def test_hierarchy_modifier_does_not_modify_input():
 
 
 def test_hierarchy_modifier_with_activation_generator():
-    from sae_lens.synthetic import ActivationGenerator
-
     child1 = HierarchyNode(feature_index=1)
     child2 = HierarchyNode(feature_index=2)
     root = HierarchyNode(
@@ -330,8 +338,6 @@ def test_hierarchy_modifier_allows_disjoint_features():
 
 
 def test_hierarchy_modifier_works_with_activation_generator():
-    from sae_lens.synthetic import ActivationGenerator
-
     tree = HierarchyNode(
         feature_index=0,
         children=[HierarchyNode(feature_index=1), HierarchyNode(feature_index=2)],
@@ -1462,3 +1468,295 @@ class TestHierarchyModifierSparseCOO:
         assert result.is_sparse
         # Both should be deactivated due to inactive parents
         assert result._nnz() == 0
+
+
+class TestScaleChildrenByParent:
+    def test_parent_at_2x_mean_doubles_child(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([1.0, 1.0, 1.0])
+
+        # Parent fires at 2x its mean, child at its mean
+        activations = torch.tensor([[2.0, 1.0, 0.5]])
+        sparse_data = _build_sparse_hierarchy([root])
+        result = _apply_hierarchy_sparse(activations, sparse_data, mean_mags)
+
+        # Child should be scaled by parent_val/parent_mean = 2.0/1.0 = 2.0
+        assert result[0, 0] == pytest.approx(2.0)
+        assert result[0, 1] == pytest.approx(2.0)  # 1.0 * 2.0
+        assert result[0, 2] == pytest.approx(0.5)  # unrelated, unchanged
+
+    def test_parent_at_half_mean_halves_child(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([2.0, 1.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        # Parent fires at 0.5x its mean
+        activations = torch.tensor([[1.0, 1.0, 0.5]])
+        result = _apply_hierarchy_sparse(activations, sparse_data, mean_mags)
+
+        # Child should be scaled by parent_val/parent_mean = 1.0/2.0 = 0.5
+        assert result[0, 0] == pytest.approx(1.0)
+        assert result[0, 1] == pytest.approx(0.5)  # 1.0 * 0.5
+        assert result[0, 2] == pytest.approx(0.5)  # unrelated, unchanged
+
+    def test_parent_inactive_zeros_child(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([1.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        activations = torch.tensor([[0.0, 1.0]])
+        result = _apply_hierarchy_sparse(activations, sparse_data, mean_mags)
+
+        assert result[0, 0] == pytest.approx(0.0)
+        assert result[0, 1] == pytest.approx(0.0)
+
+    def test_multi_level_cascading_rescale(self):
+        grandchild = HierarchyNode(feature_index=2)
+        child = HierarchyNode(
+            feature_index=1, children=[grandchild], scale_children_by_parent=True
+        )
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([1.0, 2.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        # root fires at 3x mean, child fires at 4.0 (2x mean)
+        activations = torch.tensor([[3.0, 4.0, 1.0]])
+        result = _apply_hierarchy_sparse(activations, sparse_data, mean_mags)
+
+        # Level 1: child scaled by root_val/root_mean = 3.0/1.0 = 3.0
+        # child becomes 4.0 * 3.0 = 12.0
+        assert result[0, 1] == pytest.approx(12.0)
+
+        # Level 2: grandchild scaled by (rescaled child_val) / child_mean
+        # = 12.0 / 2.0 = 6.0
+        # grandchild becomes 1.0 * 6.0 = 6.0
+        assert result[0, 2] == pytest.approx(6.0)
+
+    def test_ratio_P_over_C_prime_is_constant(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        parent_mean = 2.0
+        child_value = 1.5
+        mean_mags = torch.tensor([parent_mean, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        # Test with varying parent values — ratio P/C' should always be parent_mean / child_value
+        parent_values = [1.0, 2.0, 3.0, 4.0, 0.5]
+        expected_ratio = parent_mean / child_value
+
+        for pv in parent_values:
+            activations = torch.tensor([[pv, child_value]])
+            result = _apply_hierarchy_sparse(activations, sparse_data, mean_mags)
+            actual_ratio = result[0, 0].item() / result[0, 1].item()
+            assert actual_ratio == pytest.approx(expected_ratio)
+
+    def test_rescale_via_activation_generator(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+        modifier = hierarchy_modifier([root])
+
+        mean_mags = torch.tensor([2.0, 1.0, 1.0])
+        gen = ActivationGenerator(
+            num_features=3,
+            firing_probabilities=1.0,
+            mean_firing_magnitudes=mean_mags,
+            std_firing_magnitudes=0.0,
+            modify_activations=modifier,
+        )
+
+        # With std=0, all activations equal their means
+        # Parent fires at mean=2.0, child fires at mean=1.0
+        # scale = parent_val/parent_mean = 2.0/2.0 = 1.0
+        # So child stays at 1.0
+        result = gen.sample(100)
+        assert torch.all(result[:, 0] == 2.0)
+        assert torch.all(result[:, 1] == 1.0)
+
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_rescale_with_activation_generator_sparse_and_dense(
+        self, use_sparse_tensors: bool
+    ):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+        modifier = hierarchy_modifier([root])
+
+        mean_mags = torch.tensor([2.0, 3.0, 1.0])
+        gen = ActivationGenerator(
+            num_features=3,
+            firing_probabilities=1.0,
+            mean_firing_magnitudes=mean_mags,
+            std_firing_magnitudes=0.0,
+            modify_activations=modifier,
+            use_sparse_tensors=use_sparse_tensors,
+        )
+
+        result = to_dense(gen.sample(50))
+        # Parent at mean=2.0, child at mean=3.0, scale = 2.0/2.0 = 1.0
+        torch.testing.assert_close(result[:, 0], torch.full((50,), 2.0))
+        torch.testing.assert_close(result[:, 1], torch.full((50,), 3.0))
+
+    def test_sparse_coo_rescale_parent_doubles_child(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([1.0, 1.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        # Parent fires at 2.0 (2x mean), child fires at 1.0
+        indices = torch.tensor([[0, 0, 0], [0, 1, 2]])
+        values = torch.tensor([2.0, 1.0, 0.5])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(1, 3))
+
+        result = _apply_hierarchy_sparse_coo(sparse_input, sparse_data, mean_mags)
+        dense_result = result.to_dense()
+
+        assert dense_result[0, 0] == pytest.approx(2.0)
+        assert dense_result[0, 1] == pytest.approx(2.0)  # 1.0 * 2.0/1.0
+        assert dense_result[0, 2] == pytest.approx(0.5)  # unrelated
+
+    def test_sparse_coo_rescale_parent_inactive_zeros_child(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([1.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        # Only child active, parent inactive
+        indices = torch.tensor([[0], [1]])
+        values = torch.tensor([1.0])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(1, 2))
+
+        result = _apply_hierarchy_sparse_coo(sparse_input, sparse_data, mean_mags)
+        dense_result = result.to_dense()
+
+        assert dense_result[0, 0] == pytest.approx(0.0)
+        assert dense_result[0, 1] == pytest.approx(0.0)
+
+    def test_sparse_coo_multi_level_cascading(self):
+        grandchild = HierarchyNode(feature_index=2)
+        child = HierarchyNode(
+            feature_index=1, children=[grandchild], scale_children_by_parent=True
+        )
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([1.0, 2.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        # root=3.0, child=4.0, grandchild=1.0
+        indices = torch.tensor([[0, 0, 0], [0, 1, 2]])
+        values = torch.tensor([3.0, 4.0, 1.0])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(1, 3))
+
+        result = _apply_hierarchy_sparse_coo(sparse_input, sparse_data, mean_mags)
+        dense_result = result.to_dense()
+
+        # child scaled by 3.0/1.0 = 3.0 -> 4.0 * 3.0 = 12.0
+        assert dense_result[0, 1] == pytest.approx(12.0)
+        # grandchild scaled by 12.0/2.0 = 6.0 -> 1.0 * 6.0 = 6.0
+        assert dense_result[0, 2] == pytest.approx(6.0)
+
+    def test_mixed_rescale_and_binary_gating(self):
+        # Parent A has rescale, Parent B does not
+        child_a = HierarchyNode(feature_index=1)
+        parent_a = HierarchyNode(
+            feature_index=0, children=[child_a], scale_children_by_parent=True
+        )
+        child_b = HierarchyNode(feature_index=3)
+        parent_b = HierarchyNode(feature_index=2, children=[child_b])
+
+        mean_mags = torch.tensor([1.0, 1.0, 1.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([parent_a, parent_b])
+
+        # Both parents fire at 2x their mean, both children fire at 1.0
+        activations = torch.tensor([[2.0, 1.0, 2.0, 1.0]])
+        result = _apply_hierarchy_sparse(activations, sparse_data, mean_mags)
+
+        # Child A should be rescaled: 1.0 * (2.0/1.0) = 2.0
+        assert result[0, 1] == pytest.approx(2.0)
+        # Child B should be binary-gated: 1.0 * 1 = 1.0
+        assert result[0, 3] == pytest.approx(1.0)
+
+    def test_mixed_rescale_and_binary_gating_coo(self):
+        child_a = HierarchyNode(feature_index=1)
+        parent_a = HierarchyNode(
+            feature_index=0, children=[child_a], scale_children_by_parent=True
+        )
+        child_b = HierarchyNode(feature_index=3)
+        parent_b = HierarchyNode(feature_index=2, children=[child_b])
+
+        mean_mags = torch.tensor([1.0, 1.0, 1.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([parent_a, parent_b])
+
+        # Both parents fire at 2x their mean, both children fire at 1.0
+        indices = torch.tensor([[0, 0, 0, 0], [0, 1, 2, 3]])
+        values = torch.tensor([2.0, 1.0, 2.0, 1.0])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(1, 4))
+
+        result = _apply_hierarchy_sparse_coo(sparse_input, sparse_data, mean_mags)
+        dense_result = result.to_dense()
+
+        # Child A should be rescaled: 1.0 * (2.0/1.0) = 2.0
+        assert dense_result[0, 1] == pytest.approx(2.0)
+        # Child B should be binary-gated: 1.0 * 1 = 1.0
+        assert dense_result[0, 3] == pytest.approx(1.0)
+
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_mixed_rescale_via_activation_generator(self, use_sparse_tensors: bool):
+        child_a = HierarchyNode(feature_index=1)
+        parent_a = HierarchyNode(
+            feature_index=0, children=[child_a], scale_children_by_parent=True
+        )
+        child_b = HierarchyNode(feature_index=3)
+        parent_b = HierarchyNode(feature_index=2, children=[child_b])
+
+        modifier = hierarchy_modifier([parent_a, parent_b])
+
+        # Parent means differ from child means. With std=0, all features fire
+        # at exactly their mean. For parent A (mean=2.0): scale = 2.0/2.0 = 1.0.
+        # That's trivial, but this test confirms the ActivationGenerator integration
+        # correctly wires up mean_firing_magnitudes to the modifier. Non-trivial
+        # rescale values are tested via _apply_hierarchy_sparse directly.
+        mean_mags = torch.tensor([2.0, 3.0, 2.0, 3.0])
+        gen = ActivationGenerator(
+            num_features=4,
+            firing_probabilities=1.0,
+            mean_firing_magnitudes=mean_mags,
+            std_firing_magnitudes=0.0,
+            modify_activations=modifier,
+            use_sparse_tensors=use_sparse_tensors,
+        )
+
+        result = to_dense(gen.sample(50))
+        # Both parents and children fire at their means
+        torch.testing.assert_close(result[:, 0], torch.full((50,), 2.0))
+        torch.testing.assert_close(result[:, 1], torch.full((50,), 3.0))
+        torch.testing.assert_close(result[:, 2], torch.full((50,), 2.0))
+        torch.testing.assert_close(result[:, 3], torch.full((50,), 3.0))

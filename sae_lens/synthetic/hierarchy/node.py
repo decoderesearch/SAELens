@@ -24,11 +24,14 @@ class HierarchyNode:
         feature_index: Index of this feature in the activation tensor
         children: Child HierarchyNode nodes
         mutually_exclusive_children: If True, at most one child is active per sample
+        scale_children_by_parent: If True, rescale child activations by
+            parent_activation / parent_mean instead of binary gating
         feature_id: Optional identifier for debugging
     """
 
     children: Sequence[HierarchyNode]
     feature_index: int | None
+    scale_children_by_parent: bool
 
     @classmethod
     def from_dict(cls, tree_dict: dict[str, Any]) -> HierarchyNode:
@@ -41,6 +44,7 @@ class HierarchyNode:
                 - feature_index (optional): Index in the activation tensor
                 - children (optional): List of child tree dictionaries
                 - mutually_exclusive_children (optional): Whether children are exclusive
+                - scale_children_by_parent (optional): Whether to rescale children
                 - id (optional): Identifier for this node
 
         Returns:
@@ -56,6 +60,7 @@ class HierarchyNode:
             mutually_exclusive_children=tree_dict.get(
                 "mutually_exclusive_children", False
             ),
+            scale_children_by_parent=tree_dict.get("scale_children_by_parent", False),
             feature_id=tree_dict.get("id"),
         )
 
@@ -64,6 +69,7 @@ class HierarchyNode:
         feature_index: int | None = None,
         children: Sequence[HierarchyNode] | None = None,
         mutually_exclusive_children: bool = False,
+        scale_children_by_parent: bool = False,
         feature_id: str | None = None,
     ):
         """
@@ -74,11 +80,14 @@ class HierarchyNode:
                 Use None for organizational nodes that don't correspond to a feature.
             children: Child nodes that depend on this feature
             mutually_exclusive_children: If True, only one child can be active per sample
+            scale_children_by_parent: If True, rescale child activations by
+                parent_activation / parent_mean instead of binary gating
             feature_id: Optional identifier for debugging
         """
         self.feature_index = feature_index
         self.children = children or []
         self.mutually_exclusive_children = mutually_exclusive_children
+        self.scale_children_by_parent = scale_children_by_parent
         self.feature_id = feature_id
 
         if self.mutually_exclusive_children and len(self.children) < 2:
@@ -110,6 +119,7 @@ class HierarchyNode:
         s = " " * (indent * 2)
         s += str(self.feature_index) if self.feature_index is not None else "-"
         s += "x" if self.mutually_exclusive_children else " "
+        s += "R" if self.scale_children_by_parent else " "
         if self.feature_id:
             s += f" ({self.feature_id})"
 
@@ -123,6 +133,8 @@ class HierarchyNode:
         if self.feature_index != other.feature_index:
             return False
         if self.mutually_exclusive_children != other.mutually_exclusive_children:
+            return False
+        if self.scale_children_by_parent != other.scale_children_by_parent:
             return False
         if self.feature_id != other.feature_id:
             return False

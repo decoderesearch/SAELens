@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,7 +11,6 @@ import torch
 
 from sae_lens.synthetic.hierarchy.config import HierarchyConfig
 from sae_lens.synthetic.hierarchy.modifier import (
-    ActivationsModifier,
     hierarchy_modifier,
 )
 from sae_lens.synthetic.hierarchy.node import HierarchyNode
@@ -21,7 +21,7 @@ class Hierarchy:
     """Result of hierarchy generation."""
 
     roots: list[HierarchyNode]
-    modifier: ActivationsModifier | None
+    modifier: Callable[..., torch.Tensor] | None
 
     @property
     def feature_indices_used(self) -> set[int]:
@@ -41,12 +41,15 @@ class Hierarchy:
         """Serialize hierarchy to dict for persistence."""
 
         def node_to_dict(node: HierarchyNode) -> dict[str, Any]:
-            return {
+            d: dict[str, Any] = {
                 "feature_index": node.feature_index,
                 "mutually_exclusive_children": node.mutually_exclusive_children,
                 "feature_id": node.feature_id,
                 "children": [node_to_dict(c) for c in node.children],
             }
+            if node.scale_children_by_parent:
+                d["scale_children_by_parent"] = True
+            return d
 
         return {
             "roots": [node_to_dict(r) for r in self.roots],
@@ -63,6 +66,9 @@ class Hierarchy:
                 children=children,
                 mutually_exclusive_children=node_dict.get(
                     "mutually_exclusive_children", False
+                ),
+                scale_children_by_parent=node_dict.get(
+                    "scale_children_by_parent", False
                 ),
                 feature_id=node_dict.get("feature_id"),
             )
@@ -275,6 +281,11 @@ def generate_hierarchy(
         for i in me_indices:
             parent, _ = eligible_parents[i]
             parent.mutually_exclusive_children = True
+
+    # Set scale_children_by_parent on all parent nodes if configured
+    if config.scale_children_by_parent:
+        for parent, _ in all_parents_with_depth:
+            parent.scale_children_by_parent = True
 
     modifier = hierarchy_modifier(roots) if roots else None
 
