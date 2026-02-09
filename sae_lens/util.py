@@ -56,6 +56,22 @@ def extract_layer_from_tlens_hook_name(hook_name: str) -> int | None:
 
 
 @contextmanager
+def temporary_seed(seed: int | None):
+    """Context manager that temporarily sets the global torch random seed.
+
+    If seed is None, this is a no-op. Otherwise the RNG state for CPU and all
+    CUDA devices is saved before and restored after the block, so only code
+    inside the ``with`` statement is affected by the seed.
+    """
+    if seed is None:
+        yield
+        return
+    with torch.random.fork_rng():
+        torch.manual_seed(seed)
+        yield
+
+
+@contextmanager
 def path_or_tmp_dir(path: str | Path | None):
     """Context manager that yields a concrete Path for path.
 

@@ -13,6 +13,7 @@ from sae_lens.util import (
     get_special_token_ids,
     path_or_tmp_dir,
     str_to_dtype,
+    temporary_seed,
 )
 
 
@@ -310,3 +311,32 @@ def test_filter_valid_dataclass_fields_raises_on_non_dataclass_destination():
 def test_filter_valid_dataclass_fields_raises_on_invalid_source():
     with pytest.raises(ValueError, match="is not a dict or dataclass"):
         filter_valid_dataclass_fields("invalid source", _DestDataclass)
+
+
+def test_temporary_seed_produces_deterministic_results():
+    with temporary_seed(42):
+        a = torch.randn(100)
+    with temporary_seed(42):
+        b = torch.randn(100)
+    assert torch.equal(a, b)
+
+
+def test_temporary_seed_restores_rng_state():
+    torch.randn(1)  # advance RNG to an arbitrary state
+    expected = torch.random.get_rng_state()
+    with temporary_seed(99):
+        torch.randn(1000)  # heavily advance RNG inside the block
+    restored = torch.random.get_rng_state()
+    assert torch.equal(expected, restored)
+
+
+def test_temporary_seed_none_is_noop():
+    torch.randn(1)  # advance RNG
+    before = torch.random.get_rng_state()
+    with temporary_seed(None):
+        sample = torch.randn(1)
+    after = torch.random.get_rng_state()
+    # RNG should have advanced (not been restored), since seed=None is a no-op
+    assert not torch.equal(before, after)
+    # And we should still get a valid tensor
+    assert sample.shape == (1,)

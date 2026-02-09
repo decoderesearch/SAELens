@@ -41,7 +41,7 @@ from sae_lens.synthetic.hierarchy import (
     HierarchyConfig,
     generate_hierarchy,
 )
-from sae_lens.util import str_to_dtype
+from sae_lens.util import str_to_dtype, temporary_seed
 
 logger = logging.getLogger(__name__)
 
@@ -275,18 +275,17 @@ class SyntheticModel(nn.Module):
         self.cfg = cfg
         self.device = device
 
-        # Set random seed if specified (for any operations that don't handle seeding internally)
-        if cfg.seed is not None:
-            torch.manual_seed(cfg.seed)
-
-        self.hierarchy = hierarchy or self._create_hierarchy()
-        self.correlation_matrix = (
-            correlation_matrix or self._create_correlation_matrix()
-        )
-        self.feature_dict = feature_dict or self._create_feature_dict()
-        self.activation_generator = (
-            activation_generator or self._create_activation_generator()
-        )
+        # Temporarily set the global random seed so it only affects model
+        # construction, not subsequent sampling.
+        with temporary_seed(cfg.seed):
+            self.hierarchy = hierarchy or self._create_hierarchy()
+            self.correlation_matrix = (
+                correlation_matrix or self._create_correlation_matrix()
+            )
+            self.feature_dict = feature_dict or self._create_feature_dict()
+            self.activation_generator = (
+                activation_generator or self._create_activation_generator()
+            )
 
     @property
     def use_sparse_tensors(self) -> bool:

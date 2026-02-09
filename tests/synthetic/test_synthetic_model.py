@@ -738,6 +738,23 @@ def test_synthetic_model_different_seeds_produce_different_models():
     )
 
 
+def test_synthetic_model_seed_does_not_make_sampling_deterministic():
+    cfg = SyntheticModelConfig(
+        num_features=32,
+        hidden_dim=16,
+        orthogonalization=None,
+        seed=42,
+    )
+
+    model1 = SyntheticModel(cfg)
+    samples1 = model1.sample(100)
+
+    model2 = SyntheticModel(cfg)
+    samples2 = model2.sample(100)
+
+    assert not torch.equal(samples1, samples2)
+
+
 def test_synthetic_model_hierarchy_compensation_integration():
     cfg = SyntheticModelConfig(
         num_features=10,
