@@ -211,6 +211,23 @@ def _sparse_matmul_nd(
     return result_2d.view(result_shape)
 
 
+def _act_times_W_dec(
+    feature_acts: torch.Tensor,
+    W_dec: torch.Tensor,
+    rescale_acts_by_decoder_norm: bool,
+) -> torch.Tensor:
+    """
+    Multiply feature activations by decoder weights, with optional decoder norm rescaling.
+
+    Handles both dense and sparse tensors. Does NOT add b_dec — callers add it if needed.
+    """
+    if rescale_acts_by_decoder_norm:
+        feature_acts = feature_acts * (1 / W_dec.norm(dim=-1))
+    if feature_acts.is_sparse:
+        return _sparse_matmul_nd(feature_acts, W_dec)
+    return feature_acts @ W_dec
+
+
 class TopKSAE(SAE[TopKSAEConfig]):
     """
     An inference-only sparse autoencoder using a "topk" activation function.
@@ -255,13 +272,12 @@ class TopKSAE(SAE[TopKSAEConfig]):
         Applies optional finetuning scaling, hooking to recons, out normalization,
         and optional head reshaping.
         """
-        # Handle sparse tensors using efficient sparse matrix multiplication
-        if self.cfg.rescale_acts_by_decoder_norm:
-            feature_acts = feature_acts / self.W_dec.norm(dim=-1)
-        if feature_acts.is_sparse:
-            sae_out_pre = _sparse_matmul_nd(feature_acts, self.W_dec) + self.b_dec
-        else:
-            sae_out_pre = feature_acts @ self.W_dec + self.b_dec
+        sae_out_pre = (
+            _act_times_W_dec(
+                feature_acts, self.W_dec, self.cfg.rescale_acts_by_decoder_norm
+            )
+            + self.b_dec
+        )
         sae_out_pre = self.hook_sae_recons(sae_out_pre)
         sae_out_pre = self.run_time_activation_norm_fn_out(sae_out_pre)
         return self.reshape_fn_out(sae_out_pre, self.d_head)
@@ -375,14 +391,12 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
         Decodes feature activations back into input space,
         applying optional finetuning scale, hooking, out normalization, etc.
         """
-        # Handle sparse tensors using efficient sparse matrix multiplication
-        if self.cfg.rescale_acts_by_decoder_norm:
-            # need to multiply by the inverse of the norm because division is illegal with sparse tensors
-            feature_acts = feature_acts * (1 / self.W_dec.norm(dim=-1))
-        if feature_acts.is_sparse:
-            sae_out_pre = _sparse_matmul_nd(feature_acts, self.W_dec) + self.b_dec
-        else:
-            sae_out_pre = feature_acts @ self.W_dec + self.b_dec
+        sae_out_pre = (
+            _act_times_W_dec(
+                feature_acts, self.W_dec, self.cfg.rescale_acts_by_decoder_norm
+            )
+            + self.b_dec
+        )
         sae_out_pre = self.hook_sae_recons(sae_out_pre)
         sae_out_pre = self.run_time_activation_norm_fn_out(sae_out_pre)
         return self.reshape_fn_out(sae_out_pre, self.d_head)
@@ -472,8 +486,11 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
         )
 
         # Encourage the top ~50% of dead latents to predict the residual of the
-        # top k living latents
-        recons = self.decode(auxk_acts)
+        # top k living latents. Per the paper (Appendix A.2), the reconstruction
+        # is ê = W_dec @ z (no bias), since b_dec is already in the residual.
+        recons = _act_times_W_dec(
+            auxk_acts, self.W_dec, self.cfg.rescale_acts_by_decoder_norm
+        )
         auxk_loss = (recons - residual).pow(2).sum(dim=-1).mean()
         return self.cfg.aux_loss_coefficient * scale * auxk_loss
 
