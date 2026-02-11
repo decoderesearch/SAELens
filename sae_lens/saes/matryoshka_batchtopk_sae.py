@@ -143,26 +143,46 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
         return self.reshape_fn_out(sae_out_pre, self.d_head)
 
     @override
-    def calculate_topk_aux_loss(
+    def calculate_aux_loss(
+        self,
+        step_input: TrainStepInput,
+        feature_acts: torch.Tensor,
+        hidden_pre: torch.Tensor,
+        sae_out: torch.Tensor,
+    ) -> dict[str, torch.Tensor]:
+        # Calculate the auxiliary loss for dead neurons
+        if self.cfg.use_matryoshka_aux_loss:
+            aux_loss = self.calculate_matryoshka_aux_loss(
+                sae_in=step_input.sae_in,
+                sae_out=sae_out,
+                feature_acts=feature_acts,
+                hidden_pre=hidden_pre,
+                dead_neuron_mask=step_input.dead_neuron_mask,
+            )
+        else:
+            aux_loss = self.calculate_topk_aux_loss(
+                sae_in=step_input.sae_in,
+                sae_out=sae_out,
+                hidden_pre=hidden_pre,
+                dead_neuron_mask=step_input.dead_neuron_mask,
+            )
+        return {"auxiliary_reconstruction_loss": aux_loss}
+
+    def calculate_matryoshka_aux_loss(
         self,
         sae_in: torch.Tensor,
         sae_out: torch.Tensor,
+        feature_acts: torch.Tensor,
         hidden_pre: torch.Tensor,
         dead_neuron_mask: torch.Tensor | None,
     ) -> torch.Tensor:
-        if not self.cfg.use_matryoshka_aux_loss:
-            return super().calculate_topk_aux_loss(
-                sae_in, sae_out, hidden_pre, dead_neuron_mask
-            )
-
         # calculate a separate aux loss for each new matryoshka portion of the SAE
         if dead_neuron_mask is not None and int(dead_neuron_mask.sum()) > 0:
             k_aux = sae_in.shape[-1] // 2
-            acts = self.activation_fn(hidden_pre)
             prev_width = 0
             aux_losses = []
             for width, partial_sae_out in self._iterable_decode(
-                acts, include_outer_loss=True
+                feature_acts, include_outer_loss=True
             ):
                 partial_dead_neuron_mask = dead_neuron_mask[prev_width:width]
                 partial_num_dead = int(partial_dead_neuron_mask.sum())

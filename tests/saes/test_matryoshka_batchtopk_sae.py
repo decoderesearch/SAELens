@@ -487,8 +487,8 @@ def test_matryoshka_aux_loss_manual_computation():
 
     expected_loss = cfg.aux_loss_coefficient * (scale_1 * loss_1 + scale_2 * loss_2)
 
-    actual_loss = sae.calculate_topk_aux_loss(
-        sae_in, sae_out, hidden_pre, dead_neuron_mask
+    actual_loss = sae.calculate_matryoshka_aux_loss(
+        sae_in, sae_out, acts, hidden_pre, dead_neuron_mask
     )
 
     assert actual_loss.item() == pytest.approx(expected_loss.item())
@@ -543,8 +543,8 @@ def test_matryoshka_aux_loss_uses_level_residual_not_full_residual():
     # Make all features dead so both paths compute aux loss over all features
     dead_neuron_mask = torch.ones(d_sae, dtype=torch.bool)
 
-    matryoshka_loss = sae_matryoshka.calculate_topk_aux_loss(
-        sae_in, sae_out, hidden_pre, dead_neuron_mask
+    matryoshka_loss = sae_matryoshka.calculate_matryoshka_aux_loss(
+        sae_in, sae_out, acts, hidden_pre, dead_neuron_mask
     )
     base_loss = sae_base.calculate_topk_aux_loss(
         sae_in, sae_out, hidden_pre, dead_neuron_mask
@@ -587,7 +587,9 @@ def test_matryoshka_aux_loss_gradients_flow_through_own_level_weights():
     dead_neuron_mask[3:6] = True
 
     sae.zero_grad()
-    loss = sae.calculate_topk_aux_loss(sae_in, sae_out, hidden_pre, dead_neuron_mask)
+    loss = sae.calculate_matryoshka_aux_loss(
+        sae_in, sae_out, acts, hidden_pre, dead_neuron_mask
+    )
     loss.backward()
 
     # Level 2 dead features should produce gradients on W_dec[3:6] only
@@ -683,16 +685,16 @@ def test_matryoshka_aux_loss_only_levels_with_dead_features_contribute():
     dead_mask_level1_only = torch.zeros(d_sae, dtype=torch.bool)
     dead_mask_level1_only[0:3] = True
 
-    loss_level1_only = sae.calculate_topk_aux_loss(
-        sae_in, sae_out, hidden_pre, dead_mask_level1_only
+    loss_level1_only = sae.calculate_matryoshka_aux_loss(
+        sae_in, sae_out, acts, hidden_pre, dead_mask_level1_only
     )
 
     # Only level 3 (features 6:9) has dead features
     dead_mask_level3_only = torch.zeros(d_sae, dtype=torch.bool)
     dead_mask_level3_only[6:9] = True
 
-    loss_level3_only = sae.calculate_topk_aux_loss(
-        sae_in, sae_out, hidden_pre, dead_mask_level3_only
+    loss_level3_only = sae.calculate_matryoshka_aux_loss(
+        sae_in, sae_out, acts, hidden_pre, dead_mask_level3_only
     )
 
     assert loss_level1_only.item() > 0
@@ -700,7 +702,9 @@ def test_matryoshka_aux_loss_only_levels_with_dead_features_contribute():
 
     # When no features are dead, loss should be zero
     dead_mask_none = torch.zeros(d_sae, dtype=torch.bool)
-    loss_none = sae.calculate_topk_aux_loss(sae_in, sae_out, hidden_pre, dead_mask_none)
+    loss_none = sae.calculate_matryoshka_aux_loss(
+        sae_in, sae_out, acts, hidden_pre, dead_mask_none
+    )
     assert loss_none.item() == pytest.approx(0.0)
 
     # Levels 1 and 3 have dead features, but level 2 (the middle) does not.
@@ -709,8 +713,8 @@ def test_matryoshka_aux_loss_only_levels_with_dead_features_contribute():
     dead_mask_skip_middle[0:3] = True
     dead_mask_skip_middle[6:9] = True
 
-    loss_skip_middle = sae.calculate_topk_aux_loss(
-        sae_in, sae_out, hidden_pre, dead_mask_skip_middle
+    loss_skip_middle = sae.calculate_matryoshka_aux_loss(
+        sae_in, sae_out, acts, hidden_pre, dead_mask_skip_middle
     )
 
     assert_close(loss_skip_middle, loss_level1_only + loss_level3_only)
