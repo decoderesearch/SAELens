@@ -470,6 +470,15 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
         # NOTE: checking the number of dead neurons will force a GPU sync, so performance can likely be improved here
         if dead_neuron_mask is None or (num_dead := int(dead_neuron_mask.sum())) == 0:
             return sae_out.new_tensor(0.0)
+
+        if self.cfg.normalize_activations in ("constant_norm_rescale", "layer_norm"):
+            raise ValueError(
+                "TopK auxiliary loss does not support activation normalization "
+                f"(normalize_activations={self.cfg.normalize_activations!r}). "
+                "The aux loss reconstruction would be in normalized space while the "
+                "residual is in the original space, producing incorrect gradients."
+            )
+
         residual = (sae_in - sae_out).detach()
 
         # Heuristic from Appendix B.1 in the paper
@@ -491,6 +500,8 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
         recons = _act_times_W_dec(
             auxk_acts, self.W_dec, self.cfg.rescale_acts_by_decoder_norm
         )
+        # Apply the same reshaping as decode() so recons matches the residual's shape
+        recons = self.reshape_fn_out(recons, self.d_head)
         auxk_loss = (recons - residual).pow(2).sum(dim=-1).mean()
         return self.cfg.aux_loss_coefficient * scale * auxk_loss
 

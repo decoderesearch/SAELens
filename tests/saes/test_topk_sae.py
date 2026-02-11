@@ -113,6 +113,31 @@ def test_topk_aux_loss_does_not_use_b_dec_in_reconstruction(
     )
 
 
+@pytest.mark.parametrize(
+    "normalize_activations", ["constant_norm_rescale", "layer_norm"]
+)
+def test_topk_aux_loss_raises_with_activation_normalization(
+    normalize_activations: str,
+):
+    cfg = build_topk_sae_training_cfg(
+        d_in=8,
+        d_sae=12,
+        k=4,
+        normalize_activations=normalize_activations,
+        device="cpu",
+    )
+    sae = TopKTrainingSAE(cfg)
+    random_params(sae)
+
+    sae_in = torch.randn(10, 8)
+    feature_acts, hidden_pre = sae.encode_with_hidden_pre(sae_in)
+    sae_out = sae.decode(feature_acts)
+    dead_neuron_mask = torch.ones(12, dtype=torch.bool)
+
+    with pytest.raises(ValueError, match="does not support activation normalization"):
+        sae.calculate_topk_aux_loss(sae_in, sae_out, hidden_pre, dead_neuron_mask)
+
+
 def test_TopKSAE_save_and_load_from_pretrained(tmp_path: Path) -> None:
     cfg = build_topk_sae_cfg(k=30)
     model_path = str(tmp_path)
