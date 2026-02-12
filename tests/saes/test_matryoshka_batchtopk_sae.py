@@ -463,7 +463,7 @@ def test_matryoshka_aux_loss_manual_computation():
     auxk_acts_1 = calculate_topk_aux_acts(
         partial_k_aux_1, partial_hidden_pre_1, partial_dead_mask_1
     )
-    recons_1 = auxk_acts_1 @ sae.W_dec.data[0:3] + sae.b_dec.data
+    recons_1 = auxk_acts_1 @ sae.W_dec.data[0:3]
     loss_1 = (recons_1 - residual_1).pow(2).sum(dim=-1).mean()
 
     # Level 2: features 3:6, 3 dead features
@@ -482,7 +482,7 @@ def test_matryoshka_aux_loss_manual_computation():
     auxk_acts_2 = calculate_topk_aux_acts(
         partial_k_aux_2, partial_hidden_pre_2, partial_dead_mask_2
     )
-    recons_2 = auxk_acts_2 @ sae.W_dec.data[3:6] + sae.b_dec.data
+    recons_2 = auxk_acts_2 @ sae.W_dec.data[3:6]
     loss_2 = (recons_2 - residual_2).pow(2).sum(dim=-1).mean()
 
     expected_loss = cfg.aux_loss_coefficient * (scale_1 * loss_1 + scale_2 * loss_2)

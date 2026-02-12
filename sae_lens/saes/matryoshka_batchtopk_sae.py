@@ -181,6 +181,8 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
             k_aux = sae_in.shape[-1] // 2
             prev_width = 0
             aux_losses = []
+            # TODO: find a way to implement this without needing to recalculate the SAE output for each level
+            # may need to wait for a refactor in the next release of sae_lens for a clean way to do this
             for width, partial_sae_out in self._iterable_decode(
                 feature_acts, include_outer_loss=True
             ):
@@ -204,7 +206,7 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
 
                 # Encourage the top ~50% of dead latents to predict the residual of the
                 # top k living latents
-                recons = auxk_acts @ self.W_dec[prev_width:width] + self.b_dec
+                recons = auxk_acts @ self.W_dec[prev_width:width]
                 auxk_loss = (recons - residual).pow(2).sum(dim=-1).mean()
                 aux_losses.append(scale * auxk_loss)
                 prev_width = width
