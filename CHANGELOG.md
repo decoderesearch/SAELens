@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v6.36.2 (2026-02-11)
+
+### Fix
+
+* fix: do not add b_dec into topk aux loss (#644)
+
+* fix: do not add b_dec into aux loss
+
+* changes from CR ([`6ec9736`](https://github.com/decoderesearch/SAELens/commit/6ec9736c0e360db7f420a67d77cbf76cb3470f36))
+
 ## v6.36.1 (2026-02-09)
 
 ### Fix

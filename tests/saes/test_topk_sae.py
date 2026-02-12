@@ -26,9 +26,14 @@ def test_TopKTrainingSAE_topk_aux_loss_matches_unnormalized_sparsify_implementat
         d_in=d_in,
         d_sae=d_sae,
         k=k,
+        apply_b_dec_to_input=True,
     )
 
     sae = TopKTrainingSAE(cfg)
+    # Note: sparsify adds b_dec to the aux loss reconstruction (deviating from the
+    # paper's formula ê = W_dec z), while sae_lens does not. Both implementations
+    # agree when b_dec = 0, so we leave b_dec at its default zero initialization.
+    # raised in https://github.com/EleutherAI/sparsify/issues/132
     sparse_coder_sae = SparseCoder(
         d_in=d_in, cfg=SparseCoderConfig(num_latents=d_sae, k=26)
     )
@@ -65,6 +70,72 @@ def test_TopKTrainingSAE_topk_aux_loss_matches_unnormalized_sparsify_implementat
     raw_aux_loss = sae_out.losses["auxiliary_reconstruction_loss"].item()  # type: ignore
     norm_aux_loss = raw_aux_loss / normalization
     assert norm_aux_loss == pytest.approx(comparison_aux_loss, abs=3e-2)
+
+
+@pytest.mark.parametrize("rescale_acts_by_decoder_norm", [True, False])
+def test_topk_aux_loss_does_not_use_b_dec_in_reconstruction(
+    rescale_acts_by_decoder_norm: bool,
+):
+    d_in = 8
+    d_sae = 12
+    k = 4
+    batch_size = 10
+
+    cfg = build_topk_sae_training_cfg(
+        d_in=d_in,
+        d_sae=d_sae,
+        k=k,
+        rescale_acts_by_decoder_norm=rescale_acts_by_decoder_norm,
+        device="cpu",
+    )
+    sae = TopKTrainingSAE(cfg)
+    random_params(sae)
+    # Set a large non-zero b_dec to make any b_dec leakage obvious
+    sae.b_dec.data = torch.randn(d_in) * 10.0
+
+    sae_in = torch.randn(batch_size, d_in)
+    hidden_pre = sae_in @ sae.W_enc + sae.b_enc
+    if rescale_acts_by_decoder_norm:
+        hidden_pre = hidden_pre * sae.W_dec.norm(dim=-1)
+    acts = sae.activation_fn(hidden_pre)
+    sae_out = sae.decode(acts)
+
+    dead_neuron_mask = torch.ones(d_sae, dtype=torch.bool)
+
+    sae.zero_grad()
+    loss = sae.calculate_topk_aux_loss(sae_in, sae_out, hidden_pre, dead_neuron_mask)
+    loss.backward()
+
+    # b_dec is detached in the residual and not used in recons, so it should get
+    # no gradient from the aux loss. This would fail if b_dec were added to recons.
+    assert sae.b_dec.grad is None or sae.b_dec.grad.abs().sum() == pytest.approx(
+        0.0, abs=1e-7
+    )
+
+
+@pytest.mark.parametrize(
+    "normalize_activations", ["constant_norm_rescale", "layer_norm"]
+)
+def test_topk_aux_loss_raises_with_activation_normalization(
+    normalize_activations: str,
+):
+    cfg = build_topk_sae_training_cfg(
+        d_in=8,
+        d_sae=12,
+        k=4,
+        normalize_activations=normalize_activations,
+        device="cpu",
+    )
+    sae = TopKTrainingSAE(cfg)
+    random_params(sae)
+
+    sae_in = torch.randn(10, 8)
+    feature_acts, hidden_pre = sae.encode_with_hidden_pre(sae_in)
+    sae_out = sae.decode(feature_acts)
+    dead_neuron_mask = torch.ones(12, dtype=torch.bool)
+
+    with pytest.raises(ValueError, match="does not support activation normalization"):
+        sae.calculate_topk_aux_loss(sae_in, sae_out, hidden_pre, dead_neuron_mask)
 
 
 def test_TopKSAE_save_and_load_from_pretrained(tmp_path: Path) -> None:
