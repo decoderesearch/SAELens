@@ -203,6 +203,8 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
                     prev_width = width
                     continue
 
+                # Reduce the scale of the loss if there are a small number of dead latents
+                scale = min(partial_num_dead / k_aux, 1.0)
                 partial_k_aux = min(k_aux, partial_num_dead)
                 partial_hidden_pre = hidden_pre[:, prev_width:width]
                 residual = (sae_in - partial_sae_out).detach()
@@ -211,9 +213,6 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
                     hidden_pre=partial_hidden_pre,
                     dead_neuron_mask=partial_dead_neuron_mask,
                 )
-
-                # Reduce the scale of the loss if there are a small number of dead latents
-                scale = min(partial_num_dead / partial_k_aux, 1.0)
 
                 # Encourage the top ~50% of dead latents to predict the residual of the
                 # top k living latents

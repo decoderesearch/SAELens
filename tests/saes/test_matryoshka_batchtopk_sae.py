@@ -459,8 +459,8 @@ def test_matryoshka_aux_loss_manual_computation():
     partial_hidden_pre_1 = hidden_pre[:, 0:3]
     partial_dead_mask_1 = dead_neuron_mask[0:3]
     num_dead_1 = int(partial_dead_mask_1.sum())  # = 1
+    scale_1 = min(num_dead_1 / k_aux, 1.0)  # = 0.5
     partial_k_aux_1 = min(k_aux, num_dead_1)  # = 1
-    scale_1 = min(num_dead_1 / partial_k_aux_1, 1.0)  # = 1.0
     auxk_acts_1 = calculate_topk_aux_acts(
         partial_k_aux_1, partial_hidden_pre_1, partial_dead_mask_1
     )
@@ -478,8 +478,8 @@ def test_matryoshka_aux_loss_manual_computation():
     partial_hidden_pre_2 = hidden_pre[:, 3:6]
     partial_dead_mask_2 = dead_neuron_mask[3:6]
     num_dead_2 = int(partial_dead_mask_2.sum())  # = 3
+    scale_2 = min(num_dead_2 / k_aux, 1.0)  # = 1.0
     partial_k_aux_2 = min(k_aux, num_dead_2)  # = 2
-    scale_2 = min(num_dead_2 / partial_k_aux_2, 1.0)  # = 1.0
     auxk_acts_2 = calculate_topk_aux_acts(
         partial_k_aux_2, partial_hidden_pre_2, partial_dead_mask_2
     )
@@ -551,12 +551,11 @@ def test_matryoshka_aux_loss_uses_level_residual_not_full_residual():
         sae_in, sae_out, hidden_pre, dead_neuron_mask
     )
 
-    # The matryoshka loss should be significantly larger because level 1's residual
+    # The matryoshka loss should be larger because level 1's residual
     # is large (W_dec[0:3]=0 means level 1 reconstruction is just b_dec=0, so
     # residual_1 = sae_in). The base loss targets the full SAE residual which is smaller.
-    # They must not be approximately equal -- the difference should be substantial.
     assert matryoshka_loss.item() > base_loss.item()
-    assert matryoshka_loss.item() != pytest.approx(base_loss.item(), rel=0.1)
+    assert_not_close(matryoshka_loss, base_loss)
 
 
 def test_matryoshka_aux_loss_gradients_flow_through_own_level_weights():
