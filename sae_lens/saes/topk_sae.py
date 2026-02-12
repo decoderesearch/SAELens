@@ -211,7 +211,7 @@ def _sparse_matmul_nd(
     return result_2d.view(result_shape)
 
 
-def _act_times_W_dec(
+def act_times_W_dec(
     feature_acts: torch.Tensor,
     W_dec: torch.Tensor,
     rescale_acts_by_decoder_norm: bool,
@@ -273,7 +273,7 @@ class TopKSAE(SAE[TopKSAEConfig]):
         and optional head reshaping.
         """
         sae_out_pre = (
-            _act_times_W_dec(
+            act_times_W_dec(
                 feature_acts, self.W_dec, self.cfg.rescale_acts_by_decoder_norm
             )
             + self.b_dec
@@ -392,7 +392,7 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
         applying optional finetuning scale, hooking, out normalization, etc.
         """
         sae_out_pre = (
-            _act_times_W_dec(
+            act_times_W_dec(
                 feature_acts, self.W_dec, self.cfg.rescale_acts_by_decoder_norm
             )
             + self.b_dec
@@ -497,7 +497,7 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
         # Encourage the top ~50% of dead latents to predict the residual of the
         # top k living latents. Per the paper (Appendix A.2), the reconstruction
         # is ê = W_dec @ z (no bias), since b_dec is already in the residual.
-        recons = _act_times_W_dec(
+        recons = act_times_W_dec(
             auxk_acts, self.W_dec, self.cfg.rescale_acts_by_decoder_norm
         )
         # Apply the same reshaping as decode() so recons matches the residual's shape

@@ -1,3 +1,4 @@
+import copy
 import os
 from pathlib import Path
 
@@ -718,3 +719,50 @@ def test_matryoshka_aux_loss_only_levels_with_dead_features_contribute():
     )
 
     assert_close(loss_skip_middle, loss_level1_only + loss_level3_only)
+
+
+@pytest.mark.parametrize("use_matryoshka_aux_loss", [True, False])
+def test_aux_loss_rescale_acts_matches_fold_W_dec_norm(use_matryoshka_aux_loss: bool):
+    d_in = 8
+    d_sae = 16
+
+    cfg = build_matryoshka_batchtopk_sae_training_cfg(
+        d_in=d_in,
+        d_sae=d_sae,
+        k=4,
+        matryoshka_widths=[4, 8, 16],
+        use_matryoshka_aux_loss=use_matryoshka_aux_loss,
+        rescale_acts_by_decoder_norm=True,
+        device="cpu",
+    )
+    sae_rescale = MatryoshkaBatchTopKTrainingSAE(cfg)
+    random_params(sae_rescale)
+
+    sae_folded = copy.deepcopy(sae_rescale)
+    sae_folded.fold_W_dec_norm()
+    sae_folded.cfg.rescale_acts_by_decoder_norm = False
+
+    # Dead features in every level so all levels contribute to the aux loss
+    dead_neuron_mask = torch.zeros(d_sae, dtype=torch.bool)
+    dead_neuron_mask[1] = True  # 1 dead in level 1 (0:4)
+    dead_neuron_mask[5:7] = True  # 2 dead in level 2 (4:8)
+    dead_neuron_mask[12:16] = True  # 4 dead in level 3 (8:16)
+
+    sae_in = torch.randn(10, d_in)
+    train_step_input = TrainStepInput(
+        sae_in=sae_in,
+        coefficients={},
+        dead_neuron_mask=dead_neuron_mask,
+        n_training_steps=0,
+    )
+
+    with torch.no_grad():
+        output_rescale = sae_rescale.training_forward_pass(train_step_input)
+        output_folded = sae_folded.training_forward_pass(train_step_input)
+
+    assert output_rescale.losses["auxiliary_reconstruction_loss"].item() > 0
+    assert_close(output_rescale.sae_out, output_folded.sae_out)
+    assert_close(output_rescale.feature_acts, output_folded.feature_acts)
+    assert_close(output_rescale.loss, output_folded.loss)
+    for key in output_rescale.losses:
+        assert_close(output_rescale.losses[key], output_folded.losses[key])

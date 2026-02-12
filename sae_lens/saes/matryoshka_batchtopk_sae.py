@@ -10,7 +10,11 @@ from sae_lens.saes.batchtopk_sae import (
     BatchTopKTrainingSAEConfig,
 )
 from sae_lens.saes.sae import TrainStepInput, TrainStepOutput
-from sae_lens.saes.topk_sae import _sparse_matmul_nd, calculate_topk_aux_acts
+from sae_lens.saes.topk_sae import (
+    _sparse_matmul_nd,
+    act_times_W_dec,
+    calculate_topk_aux_acts,
+)
 
 
 @dataclass
@@ -82,9 +86,9 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
     def _iterable_decode(
         self, feature_acts: torch.Tensor, include_outer_loss: bool = False
     ) -> Generator[tuple[int, torch.Tensor], None, None]:
-        inv_W_dec_norm = 1 / self.W_dec.norm(dim=-1)
         if self.cfg.rescale_acts_by_decoder_norm:
             # need to multiply by the inverse of the norm because division is illegal with sparse tensors
+            inv_W_dec_norm = 1 / self.W_dec.norm(dim=-1)
             feature_acts = feature_acts * inv_W_dec_norm
         widths = self.cfg.matryoshka_widths
         prev_width = 0
@@ -181,6 +185,13 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
             k_aux = sae_in.shape[-1] // 2
             prev_width = 0
             aux_losses = []
+
+            # just rescale the decoder weights once to avoid needing to do this on each level
+            scaled_W_dec = (
+                self.W_dec / self.W_dec.norm(dim=-1, keepdim=True)
+                if self.cfg.rescale_acts_by_decoder_norm
+                else self.W_dec
+            )
             # TODO: find a way to implement this without needing to recalculate the SAE output for each level
             # may need to wait for a refactor in the next release of sae_lens for a clean way to do this
             for width, partial_sae_out in self._iterable_decode(
@@ -206,7 +217,11 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
 
                 # Encourage the top ~50% of dead latents to predict the residual of the
                 # top k living latents
-                recons = auxk_acts @ self.W_dec[prev_width:width]
+                recons = act_times_W_dec(
+                    auxk_acts,
+                    scaled_W_dec[prev_width:width],
+                    rescale_acts_by_decoder_norm=False,
+                )
                 auxk_loss = (recons - residual).pow(2).sum(dim=-1).mean()
                 aux_losses.append(scale * auxk_loss)
                 prev_width = width
