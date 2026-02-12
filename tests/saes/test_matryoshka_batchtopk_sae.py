@@ -222,8 +222,7 @@ def test_MatryoshkaBatchTopKTrainingSAE_decode_matryoshka_level_matches_standard
     random_params(sae)
 
     feature_acts = torch.randn(10, 16)
-    inv_W_dec_norm = 1 / sae.W_dec.norm(dim=-1)
-    output_mat = sae._decode_matryoshka_level(feature_acts, 16, inv_W_dec_norm)
+    output_mat = list(sae._iterable_decode(feature_acts, True))[-1][1]
     output_base = sae.decode(feature_acts)
     assert_close(output_mat, output_base)
     assert output_mat.shape == (10, 8)

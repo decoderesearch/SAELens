@@ -123,29 +123,6 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
             base_output.loss = base_output.loss + inner_mse_loss
         return base_output
 
-    def _decode_matryoshka_level(
-        self,
-        feature_acts: torch.Tensor,
-        width: int,
-        inv_W_dec_norm: torch.Tensor,
-    ) -> torch.Tensor:
-        """
-        Decodes feature activations back into input space for a matryoshka level
-        """
-        inner_feature_acts = feature_acts[:, :width]
-        # Handle sparse tensors using efficient sparse matrix multiplication
-        if self.cfg.rescale_acts_by_decoder_norm:
-            # need to multiply by the inverse of the norm because division is illegal with sparse tensors
-            inner_feature_acts = inner_feature_acts * inv_W_dec_norm[:width]
-        if inner_feature_acts.is_sparse:
-            sae_out_pre = (
-                _sparse_matmul_nd(inner_feature_acts, self.W_dec[:width]) + self.b_dec
-            )
-        else:
-            sae_out_pre = inner_feature_acts @ self.W_dec[:width] + self.b_dec
-        sae_out_pre = self.run_time_activation_norm_fn_out(sae_out_pre)
-        return self.reshape_fn_out(sae_out_pre, self.d_head)
-
     @override
     def calculate_aux_loss(
         self,
@@ -186,7 +163,7 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
             prev_width = 0
             aux_losses = []
 
-            # just rescale the decoder weights once to avoid needing to do this on each level
+            # Normalize decoder weights once to avoid repeated computation across levels
             scaled_W_dec = (
                 self.W_dec / self.W_dec.norm(dim=-1, keepdim=True)
                 if self.cfg.rescale_acts_by_decoder_norm
