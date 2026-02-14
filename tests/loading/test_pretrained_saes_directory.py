@@ -4,6 +4,7 @@ import pytest
 from sae_lens.loading.pretrained_saes_directory import (
     PretrainedSAELookup,
     get_config_overrides,
+    get_norm_scaling_factor,
     get_pretrained_saes_directory,
     get_releases_for_repo_id,
     get_repo_id_and_folder_name,
@@ -68,6 +69,7 @@ def test_get_pretrained_saes_directory():
                 "center_writing_weights": True,
             }
         },
+        norm_scaling_factor={},
         neuronpedia_id={
             "blocks.0.hook_resid_pre": "gpt2-small/0-res-jb",
             "blocks.1.hook_resid_pre": "gpt2-small/1-res-jb",
@@ -164,3 +166,22 @@ def test_get_config_overrides_with_known_release():
 def test_get_config_overrides_with_unknown_release():
     config_overrides = get_config_overrides("nonexistent-release", sae_id="sae1")
     assert config_overrides == {}
+
+
+def test_get_norm_scaling_factor_llama_scope():
+    factor = get_norm_scaling_factor("llama_scope_lxa_32x", "l0a_32x")
+    assert factor == pytest.approx(112.21917808219177)
+
+
+def test_get_norm_scaling_factor_missing_release():
+    assert get_norm_scaling_factor("nonexistent-release", "sae1") is None
+
+
+def test_get_norm_scaling_factor_missing_sae_id():
+    assert get_norm_scaling_factor("gpt2-small-res-jb", "nonexistent-sae") is None
+
+
+def test_get_norm_scaling_factor_release_without_scaling_factors():
+    assert (
+        get_norm_scaling_factor("gpt2-small-res-jb", "blocks.0.hook_resid_pre") is None
+    )
