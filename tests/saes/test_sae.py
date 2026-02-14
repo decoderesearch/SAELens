@@ -9,6 +9,7 @@ import pytest
 import torch
 
 from sae_lens import __version__
+from sae_lens.loading.pretrained_sae_loaders import sae_lens_disk_loader
 from sae_lens.registry import get_sae_class, get_sae_training_class
 from sae_lens.saes.sae import (
     SAE,
@@ -364,9 +365,6 @@ def test_SAE_from_pretrained_uses_meta_device_optimization(tmp_path: Path):
     random_params(sae)
     sae.save_model(tmp_path)
 
-    # Create a mock loader that returns our saved SAE's config and state dict
-    from sae_lens.loading.pretrained_sae_loaders import sae_lens_disk_loader
-
     cfg_dict, state_dict = sae_lens_disk_loader(tmp_path, device="cpu")
 
     def mock_loader(
@@ -441,8 +439,6 @@ def test_from_pretrained_folds_norm_scaling_factor(tmp_path: Path):
     sae = TrainingSAE.from_dict(cfg.to_dict())
     random_params(sae)
     sae.save_model(tmp_path)
-
-    from sae_lens.loading.pretrained_sae_loaders import sae_lens_disk_loader
 
     cfg_dict, state_dict = sae_lens_disk_loader(tmp_path, device="cpu")
     cfg_dict["normalize_activations"] = "expected_average_only_in"
