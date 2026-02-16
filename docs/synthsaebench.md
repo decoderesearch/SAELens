@@ -41,7 +41,7 @@ We recommend training SAEs with **width 4096** on SynthSAEBench-16k, as in reali
 
 ```python
 from sae_lens.synthetic import SyntheticSAERunner, SyntheticSAERunnerConfig
-from sae_lens import BatchTopKTrainingSAEConfig
+from sae_lens import BatchTopKTrainingSAEConfig, LoggingConfig
 
 runner_cfg = SyntheticSAERunnerConfig(
     # Load the pretrained benchmark model
