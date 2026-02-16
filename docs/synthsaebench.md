@@ -137,6 +137,8 @@ You can create custom synthetic models for ablation studies or your own speciali
 from sae_lens.synthetic import (
     SyntheticModel,
     SyntheticModelConfig,
+    SyntheticSAERunner,
+    SyntheticSAERunnerConfig,
     ZipfianFiringProbabilityConfig,
     HierarchyConfig,
     OrthogonalizationConfig,
@@ -144,6 +146,7 @@ from sae_lens.synthetic import (
     LinearMagnitudeConfig,
     FoldedNormalMagnitudeConfig,
 )
+from sae_lens import BatchTopKTrainingSAEConfig
 
 # Example: vary the level of superposition
 for hidden_dim in [256, 512, 768, 1024, 1536]:
@@ -181,8 +184,9 @@ for hidden_dim in [256, 512, 768, 1024, 1536]:
         batch_size=1024,
         lr=3e-4,
         device="cuda",
-        logger=LoggingConfig(...), # Optional
+        # ... other parameters ...
     )
+    results = SyntheticSAERunner(runner_cfg).run()
 ```
 
 For the full API reference on all configuration options, see [Synthetic Data](synthetic_data.md).

@@ -291,8 +291,8 @@ cfg = SyntheticModelConfig(
         branching_factor=4,
         max_depth=3,
         mutually_exclusive_portion=1.0,  # All children are mutually exclusive
-        compensate_probabilities=True, # Try to compensate firing probabilities for hierarchy effects
-        scale_children_by_parent=True, # Scale child activations by parent activation / parent mean
+        compensate_probabilities=True,  # Try to compensate firing probabilities for hierarchy effects
+        scale_children_by_parent=True,  # Scale child activations by parent activation / parent mean
     ),
 
     # Orthogonalize feature vectors to reduce overlap
