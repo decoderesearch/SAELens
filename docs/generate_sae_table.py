@@ -86,6 +86,15 @@ def model_to_display_name(model: str) -> str:
 
 
 def on_pre_build(config):  # noqa: ARG001
+    yaml_path = Path("sae_lens/pretrained_saes.yaml")
+    index_path = OUTPUT_DIR / "index.md"
+    if (
+        not os.environ.get("CI")
+        and index_path.exists()
+        and index_path.stat().st_mtime >= yaml_path.stat().st_mtime
+    ):
+        print("SAE table is up to date, skipping generation.")
+        return
     print("Generating SAE table...")
     generate_sae_table()
     print("SAE table generation complete.")

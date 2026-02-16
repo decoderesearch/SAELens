@@ -20,6 +20,7 @@ For a hands-on walkthrough, see the [tutorial notebook](https://github.com/decod
 
 A [FeatureDictionary][sae_lens.synthetic.FeatureDictionary] maps sparse feature activations to dense hidden activations. It stores a matrix of feature vectors and computes `hidden = features @ feature_vectors + bias`.
 
+
 ```python
 from sae_lens.synthetic import FeatureDictionary, orthogonal_initializer
 
@@ -93,14 +94,22 @@ from sae_lens.synthetic import eval_sae_on_synthetic_data
 
 result = eval_sae_on_synthetic_data(sae, feature_dict, activation_gen)
 print(f"MCC: {result.mcc:.3f}")  # Mean Correlation Coefficient
+print(f"Explained variance: {result.explained_variance:.3f}")  # R²
+print(f"Uniqueness: {result.uniqueness:.3f}")  # Fraction of unique latents
 print(f"L0: {result.sae_l0:.1f}")  # Average active latents
 print(f"Dead latents: {result.dead_latents}")
 print(f"Shrinkage: {result.shrinkage:.3f}")
+print(f"Precision: {result.classification.precision:.3f}")
+print(f"Recall: {result.classification.recall:.3f}")
+print(f"F1: {result.classification.f1_score:.3f}")
 ```
 
 ### Metrics
 
-- **MCC (Mean Correlation Coefficient)**: Measures alignment between SAE decoder weights and true feature vectors. Uses the Hungarian algorithm to find the optimal one-to-one matching, then computes mean absolute cosine similarity. Range [0, 1] where 1 = perfect recovery.
+- **MCC (Mean Correlation Coefficient)**: Measures alignment between SAE decoder weights and true feature vectors. Uses the Hungarian algorithm to find the optimal one-to-one matching, then computes mean absolute cosine similarity. Range [0, 1] where 1 = perfect recovery. See the paper [Compute Optimal Inference and Provable Amortisation Gap in Sparse Autoencoders](https://arxiv.org/abs/2411.13117) for more details.
+- **Explained Variance (R²)**: Fraction of input variance explained by the SAE reconstruction. 1.0 = perfect reconstruction.
+- **Uniqueness**: Fraction of SAE latents that track unique ground-truth features (i.e., no two latents map to the same ground-truth feature). 1.0 = all unique.
+- **Classification (Precision/Recall/F1)**: Treats each SAE latent as a binary classifier for its best-matching ground-truth feature. Precision = TP/(TP+FP), Recall = TP/(TP+FN), F1 = harmonic mean.
 - **L0**: Average number of active SAE latents per sample. Compare to `true_l0` to check if sparsity matches.
 - **Dead latents**: Number of SAE latents that never activate. High values indicate capacity issues.
 - **Shrinkage**: Ratio of SAE output norm to input norm. Values below 1.0 indicate the SAE is shrinking reconstructions.
@@ -262,49 +271,53 @@ from sae_lens.synthetic import (
     OrthogonalizationConfig,
     LowRankCorrelationConfig,
     LinearMagnitudeConfig,
+    FoldedNormalMagnitudeConfig,
 )
 
 cfg = SyntheticModelConfig(
-    num_features=10_000,
-    hidden_dim=512,
+    num_features=16_384,
+    hidden_dim=768,
 
-    # Firing probability distribution
+    # Zipfian firing probabilities: few features fire often, most are rare
     firing_probability=ZipfianFiringProbabilityConfig(
-        exponent=1.0,
-        max_prob=0.3,
-        min_prob=0.01,
+        exponent=0.5,
+        max_prob=0.4,
+        min_prob=5e-4,
     ),
 
-    # Hierarchical feature structure
+    # Hierarchical features with mutual exclusion
     hierarchy=HierarchyConfig(
-        total_root_nodes=100,
-        branching_factor=10,
-        max_depth=2,
-        mutually_exclusive_portion=0.3,
+        total_root_nodes=128,
+        branching_factor=4,
+        max_depth=3,
+        mutually_exclusive_portion=1.0,  # All children are mutually exclusive
+        compensate_probabilities=True, # Try to compensate firing probabilities for hierarchy effects
+        scale_children_by_parent=True, # Scale child activations by parent activation / parent mean
     ),
 
-    # Feature orthogonalization
+    # Orthogonalize feature vectors to reduce overlap
     orthogonalization=OrthogonalizationConfig(
-        num_steps=200,
-        lr=0.01,
+        num_steps=100,
+        lr=3e-4,
     ),
 
-    # Feature correlations
+    # Low-rank feature correlations
     correlation=LowRankCorrelationConfig(
-        rank=32,
+        rank=25,
         correlation_scale=0.1,
     ),
 
     # Per-feature magnitude variation
-    mean_firing_magnitudes=LinearMagnitudeConfig(start=0.5, end=2.0),
-    std_firing_magnitudes=0.1,
+    mean_firing_magnitudes=LinearMagnitudeConfig(start=5.0, end=4.0),
+    std_firing_magnitudes=FoldedNormalMagnitudeConfig(mean=0.5, std=0.5),
 
-    # Reproducibility
     seed=42,
 )
 
 model = SyntheticModel(cfg, device="cuda")
 ```
+
+This configuration is similar to [SynthSAEBench-16k](synthsaebench.md), which provides a standardized benchmark model for SAE evaluation.
 
 ### Automatic Hierarchy Generation
 
@@ -319,11 +332,15 @@ hierarchy_cfg = HierarchyConfig(
     max_depth=2,                    # Maximum tree depth
     mutually_exclusive_portion=0.3, # Fraction of parents with ME children
     mutually_exclusive_min_depth=0, # Minimum depth for ME
+    mutually_exclusive_max_depth=None, # Maximum depth for ME
     compensate_probabilities=False,  # Adjust probs for hierarchy effects
+    scale_children_by_parent=False, # Scale child activations by parent activation / parent mean
 )
 ```
 
-With `compensate_probabilities=True`, firing probabilities are scaled up to compensate for the reduction caused by hierarchy constraints (children only fire when parents fire). This setting likely only makes sense when using a Zipfian firing probability distribution.
+With `compensate_probabilities=True`, firing probabilities are scaled up to compensate for the reduction caused by hierarchy constraints (children only fire when parents fire). This setting likely only makes sense when using a Zipfian firing probability distribution, and it may be impossible to properly compensate probabilties, especially with mutually exclusive children.
+
+With `scale_children_by_parent=True`, child activations are scaled by parent activation / parent mean. The intuition is that if a parent feature like "dog" is active must more strongly (or weakly) than usual, then a child feature like "Golden Retriever" should also have its activation scaled up (or down) proportionally. Setting this to True effectively makes the firing magnitudes of the parent/child features more correlated.
 
 ### Per-Feature Magnitude Distributions
 
@@ -356,39 +373,87 @@ random = FoldedNormalMagnitudeConfig(mean=1.0, std=0.3)
 
 ```python
 from sae_lens.synthetic import SyntheticSAERunner, SyntheticSAERunnerConfig
-from sae_lens import StandardTrainingSAEConfig
+from sae_lens import BatchTopKTrainingSAEConfig, LoggingConfig
 
 runner_cfg = SyntheticSAERunnerConfig(
-    synthetic_model=SyntheticModelConfig(
-        num_features=10_000,
-        hidden_dim=512,
-    ),
+    # Load a pretrained synthetic model from HuggingFace
+    synthetic_model="decoderesearch/synth-sae-bench-16k-v1",
 
-    sae=StandardTrainingSAEConfig(
-        d_in=512,  # Must match hidden_dim
-        d_sae=16_000,
-        l1_coefficient=5e-3,
+    sae=BatchTopKTrainingSAEConfig(
+        d_in=768,   # Must match hidden_dim of the synthetic model
+        d_sae=4096,
+        k=25,
     ),
 
     # Training parameters
-    training_samples=100_000_000,
-    batch_size=4096,
+    training_samples=200_000_000,
+    batch_size=1024,
     lr=3e-4,
 
-    # Checkpointing
-    n_checkpoints=5,
-    checkpoint_path="checkpoints",
+    # Output
     output_path="output",
 
     # Evaluation
-    eval_frequency=1000,  # Evaluate MCC every N steps
-    eval_samples=100_000,
+    eval_frequency=1000,  # Evaluate metrics every N steps
+    eval_samples=500_000,
+
+    # Performance (recommended for modern GPUs)
+    autocast_sae=True,
+    autocast_data=True,
+
+    # Logging
+    logger=LoggingConfig(
+        log_to_wandb=True,
+        wandb_project="my_project",
+        wandb_entity="my_team",  # Optional
+        run_name="my-run",       # Auto-generated if not set
+        wandb_log_frequency=10,  # Log metrics every N training steps
+    ),
+
+    device="cuda",
 )
 
 runner = SyntheticSAERunner(runner_cfg)
 result = runner.run()
 
 print(f"Final MCC: {result.final_eval.mcc:.3f}")
+print(f"Final explained variance: {result.final_eval.explained_variance:.3f}")
+```
+
+The `logger` parameter accepts a [LoggingConfig][sae_lens.config.LoggingConfig] that controls Weights & Biases integration, same as for the [LanguageModelSAERunnerConfig][sae_lens.LanguageModelSAERunnerConfig].
+
+See [SynthSAEBench](synthsaebench.md) for a standardized benchmark workflow and examples with other SAE architectures.
+
+#### Training on a temporary model
+
+You can also pass in a SyntheticModelConfig directly to the runner, which will create a temporary model just for the training run.
+
+```python
+from sae_lens.synthetic import SyntheticSAERunner, SyntheticSAERunnerConfig
+from sae_lens import BatchTopKTrainingSAEConfig, LoggingConfig
+
+runner_cfg = SyntheticSAERunnerConfig(
+    # Create a temporary synthetic model from config
+    synthetic_model=SyntheticModelConfig(
+        num_features=16_384,
+        hidden_dim=768,
+        # ... other config fields ...
+    ),
+
+    sae=BatchTopKTrainingSAEConfig(
+        d_in=768,
+        d_sae=4096,
+        k=25,
+    ),
+
+    # Training parameters
+    training_samples=200_000_000,
+    batch_size=1024,
+    lr=3e-4,
+)
+
+runner = SyntheticSAERunner(runner_cfg)
+result = runner.run()
 ```
 
 ### Saving and Loading Models
@@ -434,11 +499,21 @@ model = SyntheticModel.from_pretrained(
 )
 ```
 
+An example of this is the [SynthSAEBench-16k](synthsaebench.md) model, which is uploaded to HuggingFace Hub.
+
+```python
+from sae_lens.synthetic import SyntheticModel
+
+model = SyntheticModel.from_pretrained("decoderesearch/synth-sae-bench-16k-v1")
+```
+
 ### Using Pretrained Synthetic Models with Runner
 
 Load a pretrained synthetic model for training:
 
 ```python
+from sae_lens import BatchTopKTrainingSAEConfig
+
 runner_cfg = SyntheticSAERunnerConfig(
     # Load from HuggingFace
     synthetic_model="username/my-synthetic-model",
@@ -446,11 +521,15 @@ runner_cfg = SyntheticSAERunnerConfig(
     # Or from disk
     # synthetic_model="./path/to/model",
 
-    sae=StandardTrainingSAEConfig(
-        d_in=512,
-        d_sae=16_000,
-        l1_coefficient=5e-3,
+    sae=BatchTopKTrainingSAEConfig(
+        d_in=768,
+        d_sae=4096,
+        k=34,
     ),
-    training_samples=100_000_000,
+    training_samples=200_000_000,
 )
 ```
+
+## Next Steps
+
+For a standardized benchmark workflow using pretrained synthetic models, see the [SynthSAEBench](synthsaebench.md) page. SynthSAEBench provides a reproducible evaluation framework for comparing SAE architectures at scale.
