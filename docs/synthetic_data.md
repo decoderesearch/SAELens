@@ -317,7 +317,7 @@ cfg = SyntheticModelConfig(
 model = SyntheticModel(cfg, device="cuda")
 ```
 
-This configuration is similar to [SynthSAEBench-16k](synthsaebench.md), which provides a standardized benchmark model for SAE evaluation.
+This configuration is similar to [SynthSAEBench-16k](synth_sae_bench.md), which provides a standardized benchmark model for SAE evaluation.
 
 ### Automatic Hierarchy Generation
 
@@ -422,7 +422,7 @@ print(f"Final explained variance: {result.final_eval.explained_variance:.3f}")
 
 The `logger` parameter accepts a [LoggingConfig][sae_lens.config.LoggingConfig] that controls Weights & Biases integration, same as for the [LanguageModelSAERunnerConfig][sae_lens.LanguageModelSAERunnerConfig].
 
-See [SynthSAEBench](synthsaebench.md) for a standardized benchmark workflow and examples with other SAE architectures.
+See [SynthSAEBench](synth_sae_bench.md) for a standardized benchmark workflow and examples with other SAE architectures.
 
 #### Training on a temporary model
 
@@ -499,7 +499,7 @@ model = SyntheticModel.from_pretrained(
 )
 ```
 
-An example of this is the [SynthSAEBench-16k](synthsaebench.md) model, which is uploaded to HuggingFace Hub.
+An example of this is the [SynthSAEBench-16k](synth_sae_bench.md) model, which is uploaded to HuggingFace Hub.
 
 ```python
 from sae_lens.synthetic import SyntheticModel
@@ -532,4 +532,4 @@ runner_cfg = SyntheticSAERunnerConfig(
 
 ## Next Steps
 
-For a standardized benchmark workflow using pretrained synthetic models, see the [SynthSAEBench](synthsaebench.md) page. SynthSAEBench provides a reproducible evaluation framework for comparing SAE architectures at scale.
+For a standardized benchmark workflow using pretrained synthetic models, see the [SynthSAEBench](synth_sae_bench.md) page. SynthSAEBench provides a reproducible evaluation framework for comparing SAE architectures at scale.

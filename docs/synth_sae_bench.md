@@ -4,6 +4,9 @@ Evaluating SAE architectures is difficult. When we train an SAE on an LLM, we do
 
 We use the name "SynthSAEBench" to refer to the synthetic data generation and evaluation tools, and "SynthSAEBench-16k" to refer to our default standardized benchmark model. You can create your own synthetic data models as well with our tools to test out how your SAE architectures perform with different levels of superposition, hierarchy, correlations, and more.
 
+For a hands-on walkthrough, see the [tutorial notebook](https://github.com/decoderesearch/SAELens/blob/main/tutorials/synth_sae_bench.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/synth_sae_bench.ipynb).
+
 For the full synthetic data API reference, see [Synthetic Data](synthetic_data.md).
 
 ## SynthSAEBench-16k Model
