@@ -1,6 +1,6 @@
 # SynthSAEBench
 
-Evaluating SAE architectures is difficult. When we train an SAE on an LLM, we don't know the ground-truth features of the LLM, so it's difficult to tell if the SAE is finding the correct features, and if not, debugging why things are not working. SynthSAEBench provides tools for large-scale synthetic model with realistic properties, enabling precise evaluation of SAE quality. SynthSAEBench is not a replacement for LLM SAE benchmarks like the excellent [SAEBench](https://github.com/adamkarvonen/SAEBench), but is instead a tool for developing, evaluating, and debugging SAE architectures in ways that LLM SAE benchmarks cannot replicate.
+Evaluating SAE architectures is difficult. When we train an SAE on an LLM, we don't know the ground-truth features of the LLM, so it's difficult to tell if the SAE is finding the correct features, and if not, debugging why things are not working. SynthSAEBench provides tools for large-scale synthetic models with realistic properties, enabling precise evaluation of SAE quality. SynthSAEBench is not a replacement for LLM SAE benchmarks like the excellent [SAEBench](https://github.com/adamkarvonen/SAEBench), but is instead a tool for developing, evaluating, and debugging SAE architectures in ways that LLM SAE benchmarks cannot replicate.
 
 We use the name "SynthSAEBench" to refer to the synthetic data generation and evaluation tools, and "SynthSAEBench-16k" to refer to our default standardized benchmark model. You can create your own synthetic data models as well with our tools to test out how your SAE architectures perform with different levels of superposition, hierarchy, correlations, and more.
 
@@ -124,7 +124,7 @@ Each SAE latent is treated as a binary classifier for its best-matching ground-t
 
 ### L0 and Dead Latents
 
-- **L0**: Average number of active SAE latents per sample. Compare to the model's true L0 (~34 for SynthSAEBench-16k, or ~25 for just the first 4096 features).
+- **L0**: Average number of active SAE latents per sample. Compare to the model's true L0 (~34 for SynthSAEBench-16k, or ~25 if we just consider the top 4096 highest-frequency features matching recommended SAE width).
 - **Dead latents**: Number of SAE latents that never activate. High values indicate wasted capacity.
 
 ### Shrinkage

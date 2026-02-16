@@ -249,7 +249,6 @@ cfg = SyntheticModelConfig(
     num_features=10_000,
     hidden_dim=512,
 )
-
 model = SyntheticModel(cfg)
 
 # Generate training data
@@ -338,7 +337,9 @@ hierarchy_cfg = HierarchyConfig(
 )
 ```
 
-With `compensate_probabilities=True`, firing probabilities are scaled up to compensate for the reduction caused by hierarchy constraints (children only fire when parents fire). This setting likely only makes sense when using a Zipfian firing probability distribution, and it may be impossible to properly compensate probabilities, especially with mutually exclusive children.
+With `compensate_probabilities=True`, firing probabilities are scaled up to compensate for the reduction to base firing probabilities caused by hierarchy constraints (children only fire when parents fire). Hierarchy works by disabling child features when their parent features are not active, which reduces the effective firing probability of the child features.
+
+This setting likely only makes sense when using a Zipfian firing probability distribution, and it may be impossible to fully compensate probabilities, especially with mutually exclusive children. If you don't care about each feature's individual firing probability roughly matching the value you set for `firing_probability`, you can just set this to False.
 
 With `scale_children_by_parent=True`, child activations are scaled by parent activation / parent mean. The intuition is that if a parent feature like "dog" is active much more strongly (or weakly) than usual, then a child feature like "Golden Retriever" should also have its activation scaled up (or down) proportionally. Setting this to True effectively makes the firing magnitudes of the parent/child features more correlated.
 
