@@ -338,7 +338,7 @@ hierarchy_cfg = HierarchyConfig(
 )
 ```
 
-With `compensate_probabilities=True`, firing probabilities are scaled up to compensate for the reduction caused by hierarchy constraints (children only fire when parents fire). This setting likely only makes sense when using a Zipfian firing probability distribution, and it may be impossible to properly compensate probabilties, especially with mutually exclusive children.
+With `compensate_probabilities=True`, firing probabilities are scaled up to compensate for the reduction caused by hierarchy constraints (children only fire when parents fire). This setting likely only makes sense when using a Zipfian firing probability distribution, and it may be impossible to properly compensate probabilities, especially with mutually exclusive children.
 
 With `scale_children_by_parent=True`, child activations are scaled by parent activation / parent mean. The intuition is that if a parent feature like "dog" is active much more strongly (or weakly) than usual, then a child feature like "Golden Retriever" should also have its activation scaled up (or down) proportionally. Setting this to True effectively makes the firing magnitudes of the parent/child features more correlated.
 
