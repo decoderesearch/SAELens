@@ -1,17 +1,17 @@
 # SynthSAEBench
 
-Evaluating SAE architectures is difficult. When we train an SAE on an LLM, we don't know the ground-truth features of the LLM, so it's difficult to tell if the SAE is finding the correct features, and if not, debugging why things are not working. SynthSAEBench provides tools for large-scale synthetic models with realistic properties, enabling precise evaluation of SAE quality. SynthSAEBench is not a replacement for LLM SAE benchmarks like the excellent [SAEBench](https://github.com/adamkarvonen/SAEBench), but is instead a tool for developing, evaluating, and debugging SAE architectures in ways that LLM SAE benchmarks cannot replicate.
+Evaluating SAE architectures is difficult. When we train an SAE on an LLM, we don't know the ground-truth features of the LLM, so it's difficult to tell if the SAE is finding the correct features, and we cannot easily debug why things are not working. SynthSAEBench provides tools for large-scale synthetic models with realistic properties with ground-truth features, enabling precise evaluation of SAE quality. SynthSAEBench is not a replacement for LLM SAE benchmarks like [SAEBench](https://github.com/adamkarvonen/SAEBench), but is instead a tool for developing, evaluating, and debugging SAE architectures in ways that LLM SAE benchmarks cannot replicate.
 
 We use the name "SynthSAEBench" to refer to the synthetic data generation and evaluation tools, and "SynthSAEBench-16k" to refer to our default standardized benchmark model. You can create your own synthetic data models as well with our tools to test out how your SAE architectures perform with different levels of superposition, hierarchy, correlations, and more.
 
 For a hands-on walkthrough, see the [tutorial notebook](https://github.com/decoderesearch/SAELens/blob/main/tutorials/synth_sae_bench.ipynb)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/synth_sae_bench.ipynb).
 
-For the full synthetic data API reference, see [Synthetic Data](synthetic_data.md).
+For the full synthetic data API reference, see [Synthetic Data](synthetic_data.md). Also see the [SynthSAEBench paper](https://arxiv.org/abs/2602.14687) for more details on the synthetic data primitives and the benchmark results.
 
 ## SynthSAEBench-16k Model
 
-The SynthSAEBench-16k model is the primary benchmark, designed to approximate the statistical properties of a real LLM residual stream (calibrated to Gemma-2-2b layer 12).
+The SynthSAEBench-16k model is our standardized benchmark model.
 
 **Configuration:**
 
@@ -193,3 +193,22 @@ for hidden_dim in [256, 512, 768, 1024, 1536]:
 ```
 
 For the full API reference on all configuration options, see [Synthetic Data](synthetic_data.md).
+
+## Benchmark Results
+
+We have trained and evaluated a series of SAEs on SynthSAEBench-16k. The code for these experiments is at [https://github.com/decoderesearch/synth-sae-bench-experiments](https://github.com/decoderesearch/synth-sae-bench-experiments). Full results and SAEs are available at [https://huggingface.co/decoderesearch/synth-sae-bench-16k-v1-saes](https://huggingface.co/decoderesearch/synth-sae-bench-16k-v1-saes).
+
+![SynthSAEBench-16k results](assets/vary-l0_combined_2x3.png)
+
+## Citation
+
+If you use SynthSAEBench in your research, please cite:
+
+```
+@article{synthsaebench2026,
+  title={SynthSAEBench: Evaluating Sparse Autoencoders on Scalable Realistic Synthetic Data},
+  author={David Chanin and Adrià Garriga-Alonso},
+  journal={arXiv preprint arXiv:2602.14687},
+  year={2026}
+}
+```

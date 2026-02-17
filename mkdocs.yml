@@ -50,9 +50,9 @@ nav:
   - Usage: usage.md
   - Training SAEs: training_saes.md
   - Synthetic Data: synthetic_data.md
-  - SynthSAEBench: synth_sae_bench.md
   - Custom SAEs: custom_saes.md
   - Extending SAELens: extending_saelens.md
+  - SynthSAEBench: synth_sae_bench.md
   - Citation: citation.md
   - Contributing: contributing.md
   - Migrating to v6: migrating.md
