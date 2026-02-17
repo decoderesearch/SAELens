@@ -408,7 +408,7 @@ runner_cfg = SyntheticSAERunnerConfig(
         wandb_project="my_project",
         wandb_entity="my_team",  # Optional
         run_name="my-run",       # Auto-generated if not set
-        wandb_log_frequency=10,  # Log metrics every N training steps
+        wandb_log_frequency=100,  # Log metrics every N training steps
     ),
 
     device="cuda",

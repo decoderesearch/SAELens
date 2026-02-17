@@ -186,8 +186,7 @@ for hidden_dim in [256, 512, 768, 1024, 1536]:
         training_samples=200_000_000,
         batch_size=1024,
         lr=3e-4,
-        device="cuda",
-        # ... other parameters ...
+        # ... other parameters skipped for brevity ...
     )
     results = SyntheticSAERunner(runner_cfg).run()
 ```
