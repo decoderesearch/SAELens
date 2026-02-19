@@ -8,6 +8,14 @@ import pytest
 import torch
 from transformer_lens.hook_points import HookPoint
 
+from sae_lens.analysis.compat import has_transformer_bridge
+
+if not has_transformer_bridge():
+    pytest.skip(
+        "SAETransformerBridge requires transformer-lens v3+",
+        allow_module_level=True,
+    )
+
 from sae_lens.analysis.hooked_sae_transformer import (
     HookedSAETransformer,
     _SAEWrapper,

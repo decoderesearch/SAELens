@@ -5,7 +5,9 @@ from typing import Any
 import torch
 from transformer_lens.ActivationCache import ActivationCache
 from transformer_lens.hook_points import HookPoint
-from transformer_lens.model_bridge import TransformerBridge
+from transformer_lens.model_bridge import (  # type: ignore[import-not-found]
+    TransformerBridge,
+)
 
 from sae_lens import logger
 from sae_lens.analysis.hooked_sae_transformer import (
