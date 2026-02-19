@@ -1,6 +1,7 @@
 import sys
 
 import pytest
+import torch
 from mamba_lens import HookedMamba
 from transformer_lens import HookedTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -34,26 +35,21 @@ def test_load_model_works_with_mamba():
 def test_load_model_works_without_model_kwargs():
     model = load_model(
         model_class_name="HookedTransformer",
-        model_name="pythia-14m",
+        model_name="tiny-stories-1M",
         device="cpu",
     )
     assert isinstance(model, HookedTransformer)
-    assert model.cfg.checkpoint_index is None
 
 
-# TODO: debug why this is suddenly failing on CI. It may resolve itself in the future.
-@pytest.mark.skip(
-    reason="This is failing on CI but not locally due to huggingface headers."
-)
 def test_load_model_works_with_model_kwargs():
     model = load_model(
         model_class_name="HookedTransformer",
-        model_name="pythia-14m",
+        model_name="tiny-stories-1M",
         device="cpu",
-        model_from_pretrained_kwargs={"checkpoint_index": 0},
+        model_from_pretrained_kwargs={"dtype": "float16"},
     )
     assert isinstance(model, HookedTransformer)
-    assert model.cfg.checkpoint_index == 0
+    assert model.cfg.dtype == torch.float16
 
 
 def test_load_model_with_generic_huggingface_lm():

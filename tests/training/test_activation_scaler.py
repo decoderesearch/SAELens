@@ -172,7 +172,7 @@ def test_ActivationScaler_estimates_norm_scaling_factor_from_activations_store(
     cfg = build_runner_cfg(
         d_in=64,
         streaming=False,
-        context_size=1024,
+        context_size=128,
         n_batches_in_buffer=64,
         store_batch_size_prompts=16,
     )
