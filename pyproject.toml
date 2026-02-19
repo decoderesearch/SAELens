@@ -60,7 +60,7 @@ trio = "^0.30.0"
 dictionary-learning = "^0.1.0"
 kaleido = "^1.2.0"
 ipykernel = "^7.1.0"
-transformer-lens = { version = "3.0.0b1", allow-prereleases = true }
+transformer-lens = { git = "https://github.com/TransformerLensOrg/TransformerLens.git", branch = "dev-3.x" }
 
 [tool.poetry.extras]
 mamba = ["mamba-lens"]
