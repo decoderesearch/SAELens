@@ -355,7 +355,15 @@ def test_MatryoshkaBatchTopKTrainingSAE_matches_dictionary_learning() -> None:
     x = torch.randn(4, 5)
 
     with torch.no_grad():
-        output = sae.training_forward_pass(TrainStepInput(x, {}, None, 0, False))
+        output = sae.training_forward_pass(
+            TrainStepInput(
+                sae_in=x,
+                coefficients={},
+                dead_neuron_mask=None,
+                n_training_steps=0,
+                is_logging_step=False,
+            )
+        )
 
         comp_feats = comparison_sae.encode(x, use_threshold=False)
         comp_sae_out = comparison_sae.decode(comp_feats)  # type: ignore
@@ -406,7 +414,15 @@ def test_MatryoshkaBatchTopKTrainingSAE_matches_dictionary_learning_losses() -> 
     x = torch.randn(4, 5)
 
     with torch.no_grad():
-        output = sae.training_forward_pass(TrainStepInput(x, {}, None, 0, False))
+        output = sae.training_forward_pass(
+            TrainStepInput(
+                sae_in=x,
+                coefficients={},
+                dead_neuron_mask=None,
+                n_training_steps=0,
+                is_logging_step=False,
+            )
+        )
         comp_losses = comparison_trainer.loss(x, logging=True, step=0).losses  # type: ignore
 
     # Compare losses

@@ -456,7 +456,7 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
 
 
 def _unwrap_item(
-    item: float | torch.Tensor | Callable[[], float | torch.Tensor],
+    item: float | int | torch.Tensor | Callable[[], float | int | torch.Tensor],
 ) -> float:
     if callable(item):
         item = item()
