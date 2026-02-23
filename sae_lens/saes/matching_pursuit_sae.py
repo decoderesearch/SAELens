@@ -226,14 +226,15 @@ class MatchingPursuitTrainingSAE(TrainingSAE[MatchingPursuitTrainingSAEConfig]):
     @override
     def training_forward_pass(self, step_input: TrainStepInput) -> TrainStepOutput:
         output = super().training_forward_pass(step_input)
-        l0 = output.feature_acts.bool().float().sum(-1).to_dense()
-        residual_norm = (step_input.sae_in - output.sae_out).norm(dim=-1)
-        output.metrics["max_l0"] = l0.max()
-        output.metrics["min_l0"] = l0.min()
-        output.metrics["residual_norm"] = residual_norm.mean()
-        output.metrics["residual_threshold_converged_portion"] = (
-            (residual_norm < self.cfg.residual_threshold).float().mean()
-        )
+        if step_input.is_logging_step:
+            l0 = output.feature_acts.bool().float().sum(-1).to_dense()
+            residual_norm = (step_input.sae_in - output.sae_out).norm(dim=-1)
+            output.metrics["max_l0"] = l0.max()
+            output.metrics["min_l0"] = l0.min()
+            output.metrics["residual_norm"] = residual_norm.mean()
+            output.metrics["residual_threshold_converged_portion"] = (
+                (residual_norm < self.cfg.residual_threshold).float().mean()
+            )
         return output
 
     @override

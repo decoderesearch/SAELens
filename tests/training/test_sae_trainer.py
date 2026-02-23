@@ -20,6 +20,7 @@ from sae_lens.training.sae_trainer import (
     SAETrainer,
     TrainStepOutput,
     _log_feature_sparsity,
+    _unwrap_item,
     _update_sae_lens_training_version,
 )
 from tests.helpers import (
@@ -224,6 +225,39 @@ def test_build_train_step_log_dict(
     }
     assert log_dict.keys() == expected.keys()
     assert log_dict == pytest.approx(expected)
+
+
+def test_build_train_step_log_dict_callable_metrics(
+    trainer: SAETrainer[StandardTrainingSAE, StandardTrainingSAEConfig],
+) -> None:
+    train_output = TrainStepOutput(
+        sae_in=torch.tensor([[-1, 0], [0, 2], [1, 1]]).float(),
+        sae_out=torch.tensor([[0, 0], [0, 2], [0.5, 1]]).float(),
+        feature_acts=torch.tensor([[0, 0, 0, 1], [1, 0, 0, 1], [1, 0, 1, 1]]).float(),
+        hidden_pre=torch.tensor([[-1, 0, 0, 1], [1, -1, 0, 1], [1, -1, 1, 1]]).float(),
+        loss=torch.tensor(0.5),
+        losses={"mse_loss": torch.tensor(0.25)},
+        metrics={
+            "eager_metric": torch.tensor(1.5),
+            "lazy_tensor_metric": lambda: torch.tensor(2.5),
+            "lazy_float_metric": lambda: 3.5,
+        },
+    )
+
+    log_dict = trainer._build_train_step_log_dict(
+        output=train_output, n_training_samples=100
+    )
+
+    assert log_dict["metrics/eager_metric"] == pytest.approx(1.5)
+    assert log_dict["metrics/lazy_tensor_metric"] == pytest.approx(2.5)
+    assert log_dict["metrics/lazy_float_metric"] == pytest.approx(3.5)
+
+
+def test_unwrap_item_handles_all_types() -> None:
+    assert _unwrap_item(3.14) == pytest.approx(3.14)
+    assert _unwrap_item(torch.tensor(2.5)) == pytest.approx(2.5)
+    assert _unwrap_item(lambda: torch.tensor(1.5)) == pytest.approx(1.5)
+    assert _unwrap_item(lambda: 0.75) == pytest.approx(0.75)
 
 
 def test_train_sae_group_on_language_model__runs(

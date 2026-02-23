@@ -59,6 +59,7 @@ def test_TopKTrainingSAE_topk_aux_loss_matches_unnormalized_sparsify_implementat
             dead_neuron_mask=dead_neuron_mask,
             coefficients={},
             n_training_steps=0,
+            is_logging_step=False,
         ),
     )
     comparison_sae_out = sparse_coder_sae.forward(

@@ -470,6 +470,7 @@ def test_standard_sae_training_hook_z_equivalence(hook_name: str):
             coefficients={"l1": old_training_cfg.l1_coefficient},
             dead_neuron_mask=None,
             n_training_steps=0,
+            is_logging_step=False,
         )
     )
 
@@ -786,6 +787,7 @@ def test_standard_sae_training_equivalence():
             coefficients={"l1": l1_coefficient},
             dead_neuron_mask=None,
             n_training_steps=0,
+            is_logging_step=False,
         )
     )
 
@@ -889,6 +891,7 @@ def test_sae_hook_z_training_equivalence():
             coefficients={"l1": l1_coefficient},
             dead_neuron_mask=None,
             n_training_steps=0,
+            is_logging_step=False,
         )
     )
 

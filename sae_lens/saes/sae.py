@@ -206,7 +206,9 @@ class TrainStepOutput:
     loss: torch.Tensor  # we need to call backwards on this
     losses: dict[str, torch.Tensor]
     # any extra metrics to log can be added here
-    metrics: dict[str, torch.Tensor | float | int] = field(default_factory=dict)
+    metrics: dict[
+        str, torch.Tensor | float | int | Callable[[], torch.Tensor | float | int]
+    ] = field(default_factory=dict)
 
 
 @dataclass
@@ -217,6 +219,7 @@ class TrainStepInput:
     coefficients: dict[str, float]
     dead_neuron_mask: torch.Tensor | None
     n_training_steps: int
+    is_logging_step: bool
 
 
 class TrainCoefficientConfig(NamedTuple):

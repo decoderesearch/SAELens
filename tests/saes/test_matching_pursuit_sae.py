@@ -10,7 +10,7 @@ from sae_lens.saes.matching_pursuit_sae import (
     MatchingPursuitTrainingSAEConfig,
     _encode_matching_pursuit,
 )
-from sae_lens.saes.sae import SAE
+from sae_lens.saes.sae import SAE, TrainStepInput
 from tests.helpers import (
     assert_close,
     build_matching_pursuit_sae_cfg,
@@ -248,3 +248,34 @@ def test_encode_matching_pursuit_stop_on_duplicate_support_false_runs():
 
     recon_without_stop = acts_without_stop @ W_dec
     assert recon_without_stop.shape == sae_in.shape
+
+
+@pytest.mark.parametrize("is_logging_step", [True, False])
+def test_MatchingPursuitTrainingSAE_training_forward_pass_populates_metrics_only_on_logging_step(
+    is_logging_step: bool,
+):
+    sae = MatchingPursuitTrainingSAE(
+        build_matching_pursuit_sae_training_cfg(
+            d_in=10, d_sae=20, residual_threshold=1e-2
+        )
+    )
+    random_params(sae)
+
+    sae_in = torch.randn(8, 10)
+    step_input = TrainStepInput(
+        sae_in=sae_in,
+        coefficients={},
+        dead_neuron_mask=None,
+        n_training_steps=0,
+        is_logging_step=is_logging_step,
+    )
+
+    output = sae.training_forward_pass(step_input)
+
+    if is_logging_step:
+        assert "max_l0" in output.metrics
+        assert "min_l0" in output.metrics
+        assert "residual_norm" in output.metrics
+        assert "residual_threshold_converged_portion" in output.metrics
+    else:
+        assert len(output.metrics) == 0

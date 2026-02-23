@@ -63,6 +63,7 @@ step_input = TrainStepInput(
     dead_neuron_mask=dead_neuron_mask,
     coefficients={},
     n_training_steps=0,
+    is_logging_step=False,
 )
 
 

@@ -109,6 +109,7 @@ def test_MatryoshkaBatchTopKTrainingSAE_training_forward_pass_computes_inner_los
         coefficients={},
         dead_neuron_mask=None,
         n_training_steps=0,
+        is_logging_step=False,
     )
 
     output = sae.training_forward_pass(train_step_input)
@@ -138,6 +139,7 @@ def test_MatryoshkaBatchTopKTrainingSAE_training_forward_pass_adds_inner_losses_
         coefficients={},
         dead_neuron_mask=None,
         n_training_steps=0,
+        is_logging_step=False,
     )
 
     output = sae.training_forward_pass(train_step_input)
@@ -170,6 +172,7 @@ def test_MatryoshkaBatchTopKTrainingSAE_with_single_matryoshka_level_matches_bat
         coefficients={},
         dead_neuron_mask=None,
         n_training_steps=0,
+        is_logging_step=False,
     )
 
     output = sae.training_forward_pass(train_step_input)
@@ -199,6 +202,7 @@ def test_MatryoshkaBatchTopKTrainingSAE_with_two_matryoshka_levels():
         coefficients={},
         dead_neuron_mask=None,
         n_training_steps=0,
+        is_logging_step=False,
     )
 
     output = sae.training_forward_pass(train_step_input)
@@ -250,6 +254,7 @@ def test_MatryoshkaBatchTopKTrainingSAE_save_and_load_inference_sae(
         coefficients={},
         dead_neuron_mask=None,
         n_training_steps=0,
+        is_logging_step=False,
     )
 
     # run some test data through to learn the correct threshold
@@ -350,7 +355,7 @@ def test_MatryoshkaBatchTopKTrainingSAE_matches_dictionary_learning() -> None:
     x = torch.randn(4, 5)
 
     with torch.no_grad():
-        output = sae.training_forward_pass(TrainStepInput(x, {}, None, 0))
+        output = sae.training_forward_pass(TrainStepInput(x, {}, None, 0, False))
 
         comp_feats = comparison_sae.encode(x, use_threshold=False)
         comp_sae_out = comparison_sae.decode(comp_feats)  # type: ignore
@@ -401,7 +406,7 @@ def test_MatryoshkaBatchTopKTrainingSAE_matches_dictionary_learning_losses() -> 
     x = torch.randn(4, 5)
 
     with torch.no_grad():
-        output = sae.training_forward_pass(TrainStepInput(x, {}, None, 0))
+        output = sae.training_forward_pass(TrainStepInput(x, {}, None, 0, False))
         comp_losses = comparison_trainer.loss(x, logging=True, step=0).losses  # type: ignore
 
     # Compare losses
@@ -752,6 +757,7 @@ def test_aux_loss_rescale_acts_matches_fold_W_dec_norm(use_matryoshka_aux_loss: 
         coefficients={},
         dead_neuron_mask=dead_neuron_mask,
         n_training_steps=0,
+        is_logging_step=False,
     )
 
     with torch.no_grad():

@@ -298,6 +298,7 @@ def test_topk_sae_training_equivalence():
             coefficients={},  # topk SAEs don't care about L1 coefficient
             dead_neuron_mask=None,
             n_training_steps=0,
+            is_logging_step=False,
         )
     )
 
