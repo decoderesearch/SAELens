@@ -323,7 +323,10 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
         return train_step_output
 
     def _is_logging_step(self) -> bool:
-        return (self.n_training_steps + 1) % self.cfg.logger.wandb_log_frequency == 0
+        return (
+            self.cfg.logger.log_to_wandb
+            and (self.n_training_steps + 1) % self.cfg.logger.wandb_log_frequency == 0
+        )
 
     @torch.no_grad()
     def _log_train_step(self, step_output: TrainStepOutput):
@@ -457,7 +460,7 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
 
 def _unwrap_item(
     item: float | int | torch.Tensor | Callable[[], float | int | torch.Tensor],
-) -> float:
+) -> float | int:
     if callable(item):
         item = item()
     return item.item() if isinstance(item, torch.Tensor) else item
