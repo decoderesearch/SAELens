@@ -45,6 +45,8 @@ The new v6 update is a major refactor to SAELens and changes the way training co
   [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/training_a_sparse_autoencoder.ipynb)
 - [Training SAEs on Synthetic Data](tutorials/training_saes_on_synthetic_data.ipynb)
   [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/training_saes_on_synthetic_data.ipynb)
+- [SynthSAEBench: Evaluating SAE Architectures on Synthetic Data](tutorials/synth_sae_bench.ipynb)
+  [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/synth_sae_bench.ipynb)
 
 ## Join the Slack!
 

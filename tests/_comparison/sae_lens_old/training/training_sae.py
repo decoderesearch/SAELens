@@ -8,7 +8,6 @@ from typing import Any
 import einops
 import numpy as np
 import torch
-from jaxtyping import Float
 from torch import nn
 from typing_extensions import deprecated
 
@@ -293,9 +292,7 @@ class TrainingSAE(SAE):
         if self.cfg.architecture == "gated" and self.use_error_term:
             raise ValueError("Gated SAEs do not support error terms")
 
-    def encode_standard(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> Float[torch.Tensor, "... d_sae"]:
+    def encode_standard(self, x: torch.Tensor) -> torch.Tensor:
         """
         Calcuate SAE features from inputs
         """
@@ -303,8 +300,8 @@ class TrainingSAE(SAE):
         return feature_acts
 
     def encode_with_hidden_pre_jumprelu(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> tuple[Float[torch.Tensor, "... d_sae"], Float[torch.Tensor, "... d_sae"]]:
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         sae_in = self.process_sae_in(x)
 
         hidden_pre = sae_in @ self.W_enc + self.b_enc
@@ -321,8 +318,8 @@ class TrainingSAE(SAE):
         return feature_acts, hidden_pre  # type: ignore
 
     def encode_with_hidden_pre(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> tuple[Float[torch.Tensor, "... d_sae"], Float[torch.Tensor, "... d_sae"]]:
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         sae_in = self.process_sae_in(x)
 
         # "... d_in, d_in d_sae -> ... d_sae",
@@ -335,8 +332,8 @@ class TrainingSAE(SAE):
         return feature_acts, hidden_pre_noised
 
     def encode_with_hidden_pre_gated(
-        self, x: Float[torch.Tensor, "... d_in"]
-    ) -> tuple[Float[torch.Tensor, "... d_sae"], Float[torch.Tensor, "... d_sae"]]:
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         sae_in = self.process_sae_in(x)
 
         # Gating path with Heaviside step function
@@ -360,8 +357,8 @@ class TrainingSAE(SAE):
 
     def forward(
         self,
-        x: Float[torch.Tensor, "... d_in"],
-    ) -> Float[torch.Tensor, "... d_in"]:
+        x: torch.Tensor,
+    ) -> torch.Tensor:
         feature_acts, _ = self.encode_with_hidden_pre_fn(x)
         return self.decode(feature_acts)
 

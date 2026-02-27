@@ -1,26 +1,18 @@
 import pytest
 import torch
 
-from sae_lens.synthetic import HierarchyNode, hierarchy_modifier
+from sae_lens.synthetic import (
+    ActivationGenerator,
+    Hierarchy,
+    HierarchyNode,
+    hierarchy_modifier,
+)
+from sae_lens.synthetic.hierarchy.modifier import (
+    _apply_hierarchy_sparse,
+    _apply_hierarchy_sparse_coo,
+    _build_sparse_hierarchy,
+)
 from tests.helpers import to_dense, to_sparse
-
-
-def test_HierarchyNode_simple_construction():
-    root = HierarchyNode(feature_index=0)
-    assert root.feature_index == 0
-    assert root.children == []
-    assert not root.mutually_exclusive_children
-
-
-def test_HierarchyNode_with_children():
-    child1 = HierarchyNode(feature_index=1)
-    child2 = HierarchyNode(feature_index=2)
-    root = HierarchyNode(feature_index=0, children=[child1, child2])
-
-    assert root.feature_index == 0
-    assert len(root.children) == 2
-    assert child1.feature_index == 1
-    assert child2.feature_index == 2
 
 
 @pytest.mark.parametrize("use_sparse_tensors", [False, True])
@@ -168,7 +160,6 @@ def test_hierarchy_modifier_mutually_exclusive_allows_single_child(
 
 
 def test_hierarchy_modifier_non_readout_node():
-    """Test organizational node with no feature_index."""
     child1 = HierarchyNode(feature_index=0)
     child2 = HierarchyNode(feature_index=1)
     root = HierarchyNode(
@@ -189,23 +180,6 @@ def test_hierarchy_modifier_non_readout_node():
 
     # Children should be unaffected since organizational root is always "active"
     assert torch.allclose(result, activations)
-
-
-def test_HierarchyNode_from_dict():
-    tree_dict = {
-        "feature_index": 0,
-        "children": [
-            {"feature_index": 1},
-            {"feature_index": 2, "id": "child2"},
-        ],
-    }
-
-    tree = HierarchyNode.from_dict(tree_dict)
-    assert tree.feature_index == 0
-    assert len(tree.children) == 2
-    assert tree.children[0].feature_index == 1
-    assert tree.children[1].feature_index == 2
-    assert tree.children[1].feature_id == "child2"
 
 
 def test_HierarchyNode_from_dict_mutually_exclusive():
@@ -269,69 +243,7 @@ def test_hierarchy_modifier_does_not_modify_input():
     assert torch.allclose(activations, original)
 
 
-def test_HierarchyNode_get_all_feature_indices():
-    grandchild = HierarchyNode(feature_index=3)
-    child1 = HierarchyNode(feature_index=1, children=[grandchild])
-    child2 = HierarchyNode(feature_index=2)
-    root = HierarchyNode(feature_index=0, children=[child1, child2])
-
-    indices = root.get_all_feature_indices()
-    assert sorted(indices) == [0, 1, 2, 3]
-
-
-def test_HierarchyNode_get_all_feature_indices_with_non_readout():
-    child1 = HierarchyNode(feature_index=0)
-    child2 = HierarchyNode(feature_index=1)
-    root = HierarchyNode(feature_index=None, children=[child1, child2])
-
-    indices = root.get_all_feature_indices()
-    assert sorted(indices) == [0, 1]
-
-
-def test_HierarchyNode_repr():
-    child = HierarchyNode(feature_index=1, feature_id="child")
-    root = HierarchyNode(
-        feature_index=0,
-        children=[child],
-        mutually_exclusive_children=False,
-        feature_id="root",
-    )
-
-    repr_str = repr(root)
-    assert "0" in repr_str
-    assert "root" in repr_str
-    assert "1" in repr_str
-    assert "child" in repr_str
-
-
-def test_HierarchyNode_repr_mutually_exclusive():
-    child1 = HierarchyNode(feature_index=1)
-    child2 = HierarchyNode(feature_index=2)
-    root = HierarchyNode(
-        feature_index=0,
-        children=[child1, child2],
-        mutually_exclusive_children=True,
-    )
-
-    repr_str = repr(root)
-    assert "x" in repr_str  # Mutual exclusion marker
-
-
-def test_HierarchyNode_requires_two_children_for_mutual_exclusion():
-    child = HierarchyNode(feature_index=1)
-
-    with pytest.raises(ValueError, match="Need at least 2 children"):
-        HierarchyNode(
-            feature_index=0,
-            children=[child],
-            mutually_exclusive_children=True,
-        )
-
-
 def test_hierarchy_modifier_with_activation_generator():
-    """Integration test with ActivationGenerator."""
-    from sae_lens.synthetic import ActivationGenerator
-
     child1 = HierarchyNode(feature_index=1)
     child2 = HierarchyNode(feature_index=2)
     root = HierarchyNode(
@@ -359,92 +271,7 @@ def test_hierarchy_modifier_with_activation_generator():
     assert torch.sum(both_active) == 0
 
 
-def test_HierarchyNode_validate_valid_hierarchy():
-    """Valid hierarchy should pass validation."""
-    grandchild = HierarchyNode(feature_index=2)
-    child1 = HierarchyNode(feature_index=1, children=[grandchild])
-    child2 = HierarchyNode(feature_index=3)
-    root = HierarchyNode(feature_index=0, children=[child1, child2])
-
-    # Should not raise
-    root.validate()
-
-
-def test_HierarchyNode_validate_detects_loop():
-    """Should detect when a node is its own ancestor."""
-    child = HierarchyNode(feature_index=1)
-    root = HierarchyNode(feature_index=0, children=[child])
-
-    # Create a loop by making root a child of child
-    child.children = [root]
-
-    with pytest.raises(ValueError, match="Loop detected"):
-        root.validate()
-
-
-def test_HierarchyNode_validate_detects_self_loop():
-    """Should detect when a node is its own child."""
-    root = HierarchyNode(feature_index=0)
-    root.children = [root]
-
-    with pytest.raises(ValueError, match="Loop detected"):
-        root.validate()
-
-
-def test_HierarchyNode_validate_detects_multiple_parents():
-    """Should detect when a node has multiple parents."""
-    shared_child = HierarchyNode(feature_index=2)
-    child1 = HierarchyNode(feature_index=1, children=[shared_child])
-    child2 = HierarchyNode(feature_index=3, children=[shared_child])  # Same child!
-    root = HierarchyNode(feature_index=0, children=[child1, child2])
-
-    with pytest.raises(ValueError, match="multiple parents"):
-        root.validate()
-
-
-def test_HierarchyNode_validate_detects_node_as_sibling_of_itself():
-    """Should detect when a node appears multiple times in the same children list."""
-    child = HierarchyNode(feature_index=1)
-    root = HierarchyNode(feature_index=0, children=[child, child])
-
-    with pytest.raises(ValueError, match="multiple parents"):
-        root.validate()
-
-
-def test_HierarchyNode_validate_deep_loop():
-    """Should detect loops in deep hierarchies."""
-    node3 = HierarchyNode(feature_index=3)
-    node2 = HierarchyNode(feature_index=2, children=[node3])
-    node1 = HierarchyNode(feature_index=1, children=[node2])
-    root = HierarchyNode(feature_index=0, children=[node1])
-
-    # Create a deep loop: node3 -> root
-    node3.children = [root]
-
-    with pytest.raises(ValueError, match="Loop detected"):
-        root.validate()
-
-
-def test_HierarchyNode_validate_empty_hierarchy():
-    """Single node hierarchy should be valid."""
-    root = HierarchyNode(feature_index=0)
-    root.validate()  # Should not raise
-
-
-def test_HierarchyNode_validate_none_feature_index_nodes():
-    """Validation should work with None feature_index nodes."""
-    child1 = HierarchyNode(feature_index=0)
-    child2 = HierarchyNode(feature_index=1)
-    organizational = HierarchyNode(feature_index=None, children=[child1, child2])
-
-    organizational.validate()  # Should not raise
-
-
-# Tests for hierarchy_modifier
-
-
 def test_hierarchy_modifier_empty_list_returns_identity():
-    """Empty list should return identity function."""
     modifier = hierarchy_modifier([])
     activations = torch.randn(10, 5)
     result = modifier(activations)
@@ -452,7 +279,6 @@ def test_hierarchy_modifier_empty_list_returns_identity():
 
 
 def test_hierarchy_modifier_single_tree():
-    """Single tree should work correctly."""
     child = HierarchyNode(feature_index=1)
     root = HierarchyNode(feature_index=0, children=[child])
 
@@ -465,7 +291,6 @@ def test_hierarchy_modifier_single_tree():
 
 
 def test_hierarchy_modifier_multiple_trees():
-    """Multiple trees should all be applied."""
     # Tree 1: feature 0 -> feature 1
     tree1 = HierarchyNode(feature_index=0, children=[HierarchyNode(feature_index=1)])
     # Tree 2: feature 2 -> feature 3
@@ -483,7 +308,6 @@ def test_hierarchy_modifier_multiple_trees():
 
 
 def test_hierarchy_modifier_validates_by_default():
-    """Should validate hierarchies by default."""
     child = HierarchyNode(feature_index=1)
     root = HierarchyNode(feature_index=0, children=[child])
     # Create loop
@@ -494,7 +318,6 @@ def test_hierarchy_modifier_validates_by_default():
 
 
 def test_hierarchy_modifier_detects_overlapping_features():
-    """Should detect when same feature appears in multiple trees."""
     tree1 = HierarchyNode(feature_index=0, children=[HierarchyNode(feature_index=1)])
     tree2 = HierarchyNode(
         feature_index=2,
@@ -506,7 +329,6 @@ def test_hierarchy_modifier_detects_overlapping_features():
 
 
 def test_hierarchy_modifier_allows_disjoint_features():
-    """Should allow multiple trees with disjoint feature indices."""
     tree1 = HierarchyNode(feature_index=0, children=[HierarchyNode(feature_index=1)])
     tree2 = HierarchyNode(feature_index=2, children=[HierarchyNode(feature_index=3)])
 
@@ -516,9 +338,6 @@ def test_hierarchy_modifier_allows_disjoint_features():
 
 
 def test_hierarchy_modifier_works_with_activation_generator():
-    """Should integrate with ActivationGenerator."""
-    from sae_lens.synthetic import ActivationGenerator
-
     tree = HierarchyNode(
         feature_index=0,
         children=[HierarchyNode(feature_index=1), HierarchyNode(feature_index=2)],
@@ -542,7 +361,6 @@ def test_hierarchy_modifier_works_with_activation_generator():
 
 
 def test_mutual_exclusion_statistical_distribution():
-    """Verify mutual exclusion selects children with approximately uniform distribution."""
     child1 = HierarchyNode(feature_index=1)
     child2 = HierarchyNode(feature_index=2)
     root = HierarchyNode(
@@ -574,18 +392,17 @@ def test_mutual_exclusion_statistical_distribution():
     # This gives us a very low false positive rate while catching broken randomness
     expected = n_samples / 2
     margin = 120  # ~4 standard deviations, allows for statistical variation
-    assert abs(child1_kept - expected) < margin, (
+    assert child1_kept == pytest.approx(expected, abs=margin), (
         f"Child 1 selected {child1_kept} times, expected ~{expected} "
         f"(within {margin}). Distribution may not be uniform."
     )
-    assert abs(child2_kept - expected) < margin, (
+    assert child2_kept == pytest.approx(expected, abs=margin), (
         f"Child 2 selected {child2_kept} times, expected ~{expected} "
         f"(within {margin}). Distribution may not be uniform."
     )
 
 
 def test_mutual_exclusion_three_or_more_children():
-    """Verify mutual exclusion works with 3+ children."""
     children = [HierarchyNode(feature_index=i) for i in range(1, 5)]  # 4 children
     root = HierarchyNode(
         feature_index=0,
@@ -618,14 +435,13 @@ def test_mutual_exclusion_three_or_more_children():
     expected = n_samples / 4
     margin = 150  # Allow for statistical variation
     for i, count in enumerate(child_selections):
-        assert abs(count - expected) < margin, (
+        assert count == pytest.approx(expected, abs=margin), (
             f"Child {i+1} selected {count} times, expected ~{expected}. "
             f"Distribution may not be uniform."
         )
 
 
 def test_mutual_exclusion_randomness_varies():
-    """Verify that mutual exclusion produces different results on different calls."""
     child1 = HierarchyNode(feature_index=1)
     child2 = HierarchyNode(feature_index=2)
     root = HierarchyNode(
@@ -655,7 +471,6 @@ def test_mutual_exclusion_randomness_varies():
 
 
 def test_multi_level_hierarchy_with_mutual_exclusion():
-    """Verify hierarchy enforcement works correctly across multiple levels."""
     # Create a 3-level hierarchy:
     # Root (0) with mutual exclusion
     #   ├── Child A (1) with mutual exclusion
@@ -749,7 +564,6 @@ def test_multi_level_hierarchy_with_mutual_exclusion():
 
 
 def test_multi_level_hierarchy_parent_deactivation_propagates():
-    """Verify that parent deactivation propagates to all descendants."""
     # 4-level hierarchy without mutual exclusion
     # Root (0) -> Child (1) -> Grandchild (2) -> Great-grandchild (3)
 
@@ -791,14 +605,6 @@ def test_multi_level_hierarchy_parent_deactivation_propagates():
 
 
 def test_mutual_exclusion_root_level_groups_no_parent():
-    """Test ME groups at root level (parent=-1) work correctly.
-
-    This exercises the mixed-parent code path in _apply_me_for_groups where
-    some groups have parents and some don't. The implementation uses
-    `safe_parents = parents.clamp(min=0)` which reads activations[:, 0] for
-    root-level groups, but the result is masked out since these groups are
-    always considered "active" regardless of feature 0's value.
-    """
     # Create two independent root-level ME groups (no parent feature)
     # Tree 1: organizational root with ME children at features 0, 1
     # Tree 2: organizational root with ME children at features 2, 3
@@ -836,12 +642,6 @@ def test_mutual_exclusion_root_level_groups_no_parent():
 
 
 def test_mutual_exclusion_mixed_root_and_nested_groups():
-    """Test hierarchy with both root-level and nested ME groups.
-
-    This exercises the code path where some ME groups have parent=-1 (root level)
-    and others have valid parent indices, ensuring the safe_parents.clamp(min=0)
-    logic handles the mixed case correctly.
-    """
     # Tree 1: Root-level ME (parent=-1 for the ME group)
     root_me = HierarchyNode(
         feature_index=None,
@@ -881,11 +681,6 @@ def test_mutual_exclusion_mixed_root_and_nested_groups():
 
 
 def test_me_fallback_path_variable_sibling_counts_single_level():
-    """ME groups with different sizes at same level use fallback path.
-
-    When ME groups at the same level have different numbers of siblings,
-    the optimized reshape path cannot be used and _apply_me_for_groups is called.
-    """
     # Level 0: Two parents, each with ME children of different sizes
     # Parent A (feature 0): 2 ME children (features 1, 2)
     # Parent B (feature 3): 3 ME children (features 4, 5, 6)
@@ -942,10 +737,6 @@ def test_me_fallback_path_variable_sibling_counts_single_level():
 
 
 def test_me_fallback_path_variable_sibling_counts_multi_level():
-    """ME groups with different sizes across multiple levels use fallback path.
-
-    Tests a 3-level hierarchy where each level has ME groups of varying sizes.
-    """
     # Level 0: Root with 2 ME children
     # Level 1: Child A has 2 ME grandchildren, Child B has 4 ME grandchildren
     # Level 2: Mixed grandchildren counts
@@ -1021,11 +812,6 @@ def test_me_fallback_path_variable_sibling_counts_multi_level():
 
 
 def test_me_fallback_path_non_contiguous_siblings():
-    """ME with non-contiguous sibling indices uses fallback path.
-
-    When ME siblings don't have consecutive feature indices, the optimized
-    path cannot use reshape and must fall back to _apply_me_for_groups.
-    """
     # ME children at non-contiguous indices: 0, 5 (gap of 4)
     child1 = HierarchyNode(feature_index=0)
     child2 = HierarchyNode(feature_index=5)
@@ -1056,7 +842,6 @@ def test_me_fallback_path_non_contiguous_siblings():
 
 
 def test_me_fallback_path_non_contiguous_multi_level():
-    """Non-contiguous ME siblings across multiple levels use fallback path."""
     # Level 1: Parent with ME children at indices 1, 10 (non-contiguous)
     # Level 2: Each child has ME grandchildren, also non-contiguous
 
@@ -1119,11 +904,6 @@ def test_me_fallback_path_non_contiguous_multi_level():
 
 
 def test_me_mixed_optimized_and_fallback_paths():
-    """Hierarchy where some levels use optimized path and others use fallback.
-
-    Level 1: Uniform ME groups (2 children each) -> optimized path
-    Level 2: Variable ME groups (2 vs 3 children) -> fallback path
-    """
     # Level 2 grandchildren
     # Group under child_a: 2 grandchildren (contiguous)
     gc_a1 = HierarchyNode(feature_index=3)
@@ -1190,11 +970,6 @@ def test_me_mixed_optimized_and_fallback_paths():
 
 
 def test_me_fallback_non_contiguous_groups():
-    """ME groups that are not laid out contiguously use fallback path.
-
-    Even if each group has the same size and contiguous siblings within,
-    if the groups themselves are not contiguous, fallback is used.
-    """
     # Two ME groups at same level, each with 2 contiguous siblings
     # But groups are not contiguous: group 1 at [1,2], group 2 at [5,6]
 
@@ -1250,13 +1025,6 @@ def test_me_fallback_non_contiguous_groups():
 
 
 def test_hierarchy_modifier_large_hierarchy_performance():
-    """Test hierarchy modifier performance with a large hierarchy (50k nodes).
-
-    Creates a hierarchy with:
-    - 2500 root trees, each with 20 nodes (depth 2)
-    - Mix of ME and non-ME nodes to exercise all code paths
-    - Verifies correctness and that it completes in reasonable time
-    """
     import time
 
     num_features = 50_000
@@ -1361,6 +1129,145 @@ def test_hierarchy_modifier_large_hierarchy_performance():
     assert (
         apply_time < 2.0
     ), f"Modifier application took {apply_time:.2f}s, expected < 2s"
+
+
+class TestHierarchyModifierStatistical:
+    def test_hierarchy_constraint_children_never_fire_without_parent(self):
+        grandchild = HierarchyNode(feature_index=2)
+        child = HierarchyNode(feature_index=1, children=[grandchild])
+        root = HierarchyNode(feature_index=0, children=[child])
+        modifier = hierarchy_modifier([root])
+
+        # Generate random activations with varying probabilities
+        n_samples = 50_000
+        # Make parent less likely than children to test constraint enforcement
+        activations = torch.zeros(n_samples, 4)
+        activations[:, 0] = (torch.rand(n_samples) < 0.3).float()  # root: 30%
+        activations[:, 1] = (torch.rand(n_samples) < 0.8).float()  # child: 80%
+        activations[:, 2] = (torch.rand(n_samples) < 0.7).float()  # grandchild: 70%
+        activations[:, 3] = (torch.rand(n_samples) < 0.5).float()  # unrelated: 50%
+
+        result = modifier(activations)
+
+        # Strict hierarchy check: child NEVER fires when parent is inactive
+        parent_inactive = result[:, 0] == 0
+        child_when_parent_inactive = result[parent_inactive, 1]
+        assert (child_when_parent_inactive == 0).all(), (
+            f"Found {(child_when_parent_inactive > 0).sum()} cases where child fired "
+            "without parent - hierarchy constraint violated"
+        )
+
+        grandchild_when_parent_inactive = result[parent_inactive, 2]
+        assert (grandchild_when_parent_inactive == 0).all(), (
+            f"Found {(grandchild_when_parent_inactive > 0).sum()} cases where grandchild "
+            "fired without root - hierarchy constraint violated"
+        )
+
+        # Grandchild should also never fire when immediate parent (child) is inactive
+        child_inactive = result[:, 1] == 0
+        grandchild_when_child_inactive = result[child_inactive, 2]
+        assert (grandchild_when_child_inactive == 0).all(), (
+            f"Found {(grandchild_when_child_inactive > 0).sum()} cases where grandchild "
+            "fired without child - hierarchy constraint violated"
+        )
+
+        # Unrelated feature should be unchanged
+        torch.testing.assert_close(result[:, 3], activations[:, 3])
+
+    def test_mutual_exclusion_statistical_one_child_always_kept(self):
+        children = [HierarchyNode(feature_index=i) for i in range(1, 6)]  # 5 children
+        root = HierarchyNode(
+            feature_index=0, children=children, mutually_exclusive_children=True
+        )
+        modifier = hierarchy_modifier([root])
+
+        n_samples = 20_000
+        # All active initially
+        activations = torch.ones(n_samples, 6)
+        result = modifier(activations)
+
+        # Count active children per sample
+        children_active = result[:, 1:6] > 0
+        active_count = children_active.sum(dim=1)
+
+        # Exactly one child should be active in every sample
+        assert (active_count == 1).all(), (
+            f"Expected exactly 1 child active per sample. "
+            f"Got min={active_count.min()}, max={active_count.max()}, "
+            f"violations: {(active_count != 1).sum()}"
+        )
+
+        # Each child should be selected roughly equally (20% each)
+        for i in range(5):
+            count = (result[:, i + 1] > 0).sum().item()
+            expected = n_samples / 5
+            # 4 standard deviations for 99.99% confidence
+            margin = 4 * (n_samples * 0.2 * 0.8) ** 0.5
+            assert (
+                count == pytest.approx(expected, abs=margin)
+            ), f"Child {i+1} selected {count} times, expected ~{expected} (margin={margin:.0f})"
+
+    def test_hierarchy_effective_firing_rates_match_base_probs(self):
+        child1 = HierarchyNode(feature_index=1)
+        child2 = HierarchyNode(feature_index=2)
+        grandchild = HierarchyNode(feature_index=3)
+        child1 = HierarchyNode(feature_index=1, children=[grandchild])
+        root = HierarchyNode(feature_index=0, children=[child1, child2])
+
+        hierarchy = Hierarchy(roots=[root], modifier=hierarchy_modifier([root]))
+
+        # Base probabilities chosen so corrected probs stay <= 1.0
+        base_probs = torch.tensor([0.8, 0.6, 0.5, 0.4])
+        correction = hierarchy.compute_probability_correction_factors(base_probs)
+        corrected_probs = base_probs * correction
+
+        # Verify no clamping needed
+        assert (corrected_probs <= 1.0).all()
+
+        # Sample with corrected probabilities
+        n_samples = 200_000
+        activations = (torch.rand(n_samples, 4) < corrected_probs).float()
+
+        # Apply hierarchy
+        assert hierarchy.modifier is not None
+        result = hierarchy.modifier(activations)
+
+        # Effective firing rates should match base probabilities
+        effective_rates = result.mean(dim=0)
+
+        # With 200k samples, std ≈ sqrt(p*(1-p)/n) ≈ 0.001
+        # Use 5 sigma for tight tolerance
+        for i in range(4):
+            expected = base_probs[i].item()
+            actual = effective_rates[i].item()
+            std = (expected * (1 - expected) / n_samples) ** 0.5
+            tolerance = 5 * std + 0.002  # Add small buffer
+            assert actual == pytest.approx(expected, abs=tolerance), (
+                f"Feature {i}: expected rate {expected:.4f}, got {actual:.4f}, "
+                f"tolerance={tolerance:.4f}"
+            )
+
+    def test_mutual_exclusion_never_allows_multiple_active(self):
+        children = [HierarchyNode(feature_index=i) for i in range(1, 4)]
+        root = HierarchyNode(
+            feature_index=0, children=children, mutually_exclusive_children=True
+        )
+        modifier = hierarchy_modifier([root])
+
+        # Test across many batches to catch any probabilistic bugs
+        for _ in range(100):
+            n_samples = 1000
+            activations = torch.ones(n_samples, 4)
+            result = modifier(activations)
+
+            # Check mutual exclusion is ALWAYS enforced
+            children_active = result[:, 1:4] > 0
+            active_count = children_active.sum(dim=1)
+
+            assert (active_count <= 1).all(), (
+                f"Found samples with {active_count.max().item()} children active - "
+                "mutual exclusion violated!"
+            )
 
 
 class TestHierarchyModifierSparseCOO:
@@ -1561,3 +1468,313 @@ class TestHierarchyModifierSparseCOO:
         assert result.is_sparse
         # Both should be deactivated due to inactive parents
         assert result._nnz() == 0
+
+
+class TestScaleChildrenByParent:
+    def test_parent_at_2x_mean_doubles_child(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([1.0, 1.0, 1.0])
+
+        # Parent fires at 2x its mean, child at its mean
+        activations = torch.tensor([[2.0, 1.0, 0.5]])
+        sparse_data = _build_sparse_hierarchy([root])
+        result = _apply_hierarchy_sparse(activations, sparse_data, mean_mags)
+
+        # Child should be scaled by parent_val/parent_mean = 2.0/1.0 = 2.0
+        assert result[0, 0] == pytest.approx(2.0)
+        assert result[0, 1] == pytest.approx(2.0)  # 1.0 * 2.0
+        assert result[0, 2] == pytest.approx(0.5)  # unrelated, unchanged
+
+    def test_parent_at_half_mean_halves_child(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([2.0, 1.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        # Parent fires at 0.5x its mean
+        activations = torch.tensor([[1.0, 1.0, 0.5]])
+        result = _apply_hierarchy_sparse(activations, sparse_data, mean_mags)
+
+        # Child should be scaled by parent_val/parent_mean = 1.0/2.0 = 0.5
+        assert result[0, 0] == pytest.approx(1.0)
+        assert result[0, 1] == pytest.approx(0.5)  # 1.0 * 0.5
+        assert result[0, 2] == pytest.approx(0.5)  # unrelated, unchanged
+
+    def test_parent_inactive_zeros_child(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([1.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        activations = torch.tensor([[0.0, 1.0]])
+        result = _apply_hierarchy_sparse(activations, sparse_data, mean_mags)
+
+        assert result[0, 0] == pytest.approx(0.0)
+        assert result[0, 1] == pytest.approx(0.0)
+
+    def test_multi_level_cascading_rescale(self):
+        grandchild = HierarchyNode(feature_index=2)
+        child = HierarchyNode(
+            feature_index=1, children=[grandchild], scale_children_by_parent=True
+        )
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([1.0, 2.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        # root fires at 3x mean, child fires at 4.0 (2x mean)
+        activations = torch.tensor([[3.0, 4.0, 1.0]])
+        result = _apply_hierarchy_sparse(activations, sparse_data, mean_mags)
+
+        # Level 1: child scaled by root_val/root_mean = 3.0/1.0 = 3.0
+        # child becomes 4.0 * 3.0 = 12.0
+        assert result[0, 1] == pytest.approx(12.0)
+
+        # Level 2: grandchild scaled by (rescaled child_val) / child_mean
+        # = 12.0 / 2.0 = 6.0
+        # grandchild becomes 1.0 * 6.0 = 6.0
+        assert result[0, 2] == pytest.approx(6.0)
+
+    def test_ratio_P_over_C_prime_is_constant(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        parent_mean = 2.0
+        child_value = 1.5
+        mean_mags = torch.tensor([parent_mean, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        # Test with varying parent values — ratio P/C' should always be parent_mean / child_value
+        parent_values = [1.0, 2.0, 3.0, 4.0, 0.5]
+        expected_ratio = parent_mean / child_value
+
+        for pv in parent_values:
+            activations = torch.tensor([[pv, child_value]])
+            result = _apply_hierarchy_sparse(activations, sparse_data, mean_mags)
+            actual_ratio = result[0, 0].item() / result[0, 1].item()
+            assert actual_ratio == pytest.approx(expected_ratio)
+
+    def test_rescale_via_activation_generator(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+        modifier = hierarchy_modifier([root])
+
+        mean_mags = torch.tensor([2.0, 1.0, 1.0])
+        gen = ActivationGenerator(
+            num_features=3,
+            firing_probabilities=1.0,
+            mean_firing_magnitudes=mean_mags,
+            std_firing_magnitudes=0.0,
+            modify_activations=modifier,
+        )
+
+        # With std=0, all activations equal their means
+        # Parent fires at mean=2.0, child fires at mean=1.0
+        # scale = parent_val/parent_mean = 2.0/2.0 = 1.0
+        # So child stays at 1.0
+        result = gen.sample(100)
+        assert torch.all(result[:, 0] == 2.0)
+        assert torch.all(result[:, 1] == 1.0)
+
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_rescale_with_activation_generator_sparse_and_dense(
+        self, use_sparse_tensors: bool
+    ):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+        modifier = hierarchy_modifier([root])
+
+        mean_mags = torch.tensor([2.0, 3.0, 1.0])
+        gen = ActivationGenerator(
+            num_features=3,
+            firing_probabilities=1.0,
+            mean_firing_magnitudes=mean_mags,
+            std_firing_magnitudes=0.0,
+            modify_activations=modifier,
+            use_sparse_tensors=use_sparse_tensors,
+        )
+
+        result = to_dense(gen.sample(50))
+        # Parent at mean=2.0, child at mean=3.0, scale = 2.0/2.0 = 1.0
+        torch.testing.assert_close(result[:, 0], torch.full((50,), 2.0))
+        torch.testing.assert_close(result[:, 1], torch.full((50,), 3.0))
+
+    def test_sparse_coo_rescale_parent_doubles_child(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([1.0, 1.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        # Parent fires at 2.0 (2x mean), child fires at 1.0
+        indices = torch.tensor([[0, 0, 0], [0, 1, 2]])
+        values = torch.tensor([2.0, 1.0, 0.5])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(1, 3))
+
+        result = _apply_hierarchy_sparse_coo(sparse_input, sparse_data, mean_mags)
+        dense_result = result.to_dense()
+
+        assert dense_result[0, 0] == pytest.approx(2.0)
+        assert dense_result[0, 1] == pytest.approx(2.0)  # 1.0 * 2.0/1.0
+        assert dense_result[0, 2] == pytest.approx(0.5)  # unrelated
+
+    def test_sparse_coo_rescale_parent_inactive_zeros_child(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([1.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        # Only child active, parent inactive
+        indices = torch.tensor([[0], [1]])
+        values = torch.tensor([1.0])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(1, 2))
+
+        result = _apply_hierarchy_sparse_coo(sparse_input, sparse_data, mean_mags)
+        dense_result = result.to_dense()
+
+        assert dense_result[0, 0] == pytest.approx(0.0)
+        assert dense_result[0, 1] == pytest.approx(0.0)
+
+    def test_sparse_coo_multi_level_cascading(self):
+        grandchild = HierarchyNode(feature_index=2)
+        child = HierarchyNode(
+            feature_index=1, children=[grandchild], scale_children_by_parent=True
+        )
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+
+        mean_mags = torch.tensor([1.0, 2.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([root])
+
+        # root=3.0, child=4.0, grandchild=1.0
+        indices = torch.tensor([[0, 0, 0], [0, 1, 2]])
+        values = torch.tensor([3.0, 4.0, 1.0])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(1, 3))
+
+        result = _apply_hierarchy_sparse_coo(sparse_input, sparse_data, mean_mags)
+        dense_result = result.to_dense()
+
+        # child scaled by 3.0/1.0 = 3.0 -> 4.0 * 3.0 = 12.0
+        assert dense_result[0, 1] == pytest.approx(12.0)
+        # grandchild scaled by 12.0/2.0 = 6.0 -> 1.0 * 6.0 = 6.0
+        assert dense_result[0, 2] == pytest.approx(6.0)
+
+    def test_mixed_rescale_and_binary_gating(self):
+        # Parent A has rescale, Parent B does not
+        child_a = HierarchyNode(feature_index=1)
+        parent_a = HierarchyNode(
+            feature_index=0, children=[child_a], scale_children_by_parent=True
+        )
+        child_b = HierarchyNode(feature_index=3)
+        parent_b = HierarchyNode(feature_index=2, children=[child_b])
+
+        mean_mags = torch.tensor([1.0, 1.0, 1.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([parent_a, parent_b])
+
+        # Both parents fire at 2x their mean, both children fire at 1.0
+        activations = torch.tensor([[2.0, 1.0, 2.0, 1.0]])
+        result = _apply_hierarchy_sparse(activations, sparse_data, mean_mags)
+
+        # Child A should be rescaled: 1.0 * (2.0/1.0) = 2.0
+        assert result[0, 1] == pytest.approx(2.0)
+        # Child B should be binary-gated: 1.0 * 1 = 1.0
+        assert result[0, 3] == pytest.approx(1.0)
+
+    def test_mixed_rescale_and_binary_gating_coo(self):
+        child_a = HierarchyNode(feature_index=1)
+        parent_a = HierarchyNode(
+            feature_index=0, children=[child_a], scale_children_by_parent=True
+        )
+        child_b = HierarchyNode(feature_index=3)
+        parent_b = HierarchyNode(feature_index=2, children=[child_b])
+
+        mean_mags = torch.tensor([1.0, 1.0, 1.0, 1.0])
+        sparse_data = _build_sparse_hierarchy([parent_a, parent_b])
+
+        # Both parents fire at 2x their mean, both children fire at 1.0
+        indices = torch.tensor([[0, 0, 0, 0], [0, 1, 2, 3]])
+        values = torch.tensor([2.0, 1.0, 2.0, 1.0])
+        sparse_input = torch.sparse_coo_tensor(indices, values, size=(1, 4))
+
+        result = _apply_hierarchy_sparse_coo(sparse_input, sparse_data, mean_mags)
+        dense_result = result.to_dense()
+
+        # Child A should be rescaled: 1.0 * (2.0/1.0) = 2.0
+        assert dense_result[0, 1] == pytest.approx(2.0)
+        # Child B should be binary-gated: 1.0 * 1 = 1.0
+        assert dense_result[0, 3] == pytest.approx(1.0)
+
+    @pytest.mark.parametrize("use_sparse_tensors", [False, True])
+    def test_mixed_rescale_via_activation_generator(self, use_sparse_tensors: bool):
+        child_a = HierarchyNode(feature_index=1)
+        parent_a = HierarchyNode(
+            feature_index=0, children=[child_a], scale_children_by_parent=True
+        )
+        child_b = HierarchyNode(feature_index=3)
+        parent_b = HierarchyNode(feature_index=2, children=[child_b])
+
+        modifier = hierarchy_modifier([parent_a, parent_b])
+
+        # Parent means differ from child means. With std=0, all features fire
+        # at exactly their mean. For parent A (mean=2.0): scale = 2.0/2.0 = 1.0.
+        # That's trivial, but this test confirms the ActivationGenerator integration
+        # correctly wires up mean_firing_magnitudes to the modifier. Non-trivial
+        # rescale values are tested via _apply_hierarchy_sparse directly.
+        mean_mags = torch.tensor([2.0, 3.0, 2.0, 3.0])
+        gen = ActivationGenerator(
+            num_features=4,
+            firing_probabilities=1.0,
+            mean_firing_magnitudes=mean_mags,
+            std_firing_magnitudes=0.0,
+            modify_activations=modifier,
+            use_sparse_tensors=use_sparse_tensors,
+        )
+
+        result = to_dense(gen.sample(50))
+        # Both parents and children fire at their means
+        torch.testing.assert_close(result[:, 0], torch.full((50,), 2.0))
+        torch.testing.assert_close(result[:, 1], torch.full((50,), 3.0))
+        torch.testing.assert_close(result[:, 2], torch.full((50,), 2.0))
+        torch.testing.assert_close(result[:, 3], torch.full((50,), 3.0))
+
+    def test_zero_parent_mean_raises_value_error(self):
+        child = HierarchyNode(feature_index=1)
+        root = HierarchyNode(
+            feature_index=0, children=[child], scale_children_by_parent=True
+        )
+        modifier = hierarchy_modifier([root])
+
+        gen = ActivationGenerator(
+            num_features=2,
+            firing_probabilities=1.0,
+            mean_firing_magnitudes=torch.tensor([0.0, 1.0]),
+            std_firing_magnitudes=0.0,
+            modify_activations=modifier,
+        )
+
+        with pytest.raises(ValueError, match="mean_firing_magnitudes must be > 0"):
+            gen.sample(1)

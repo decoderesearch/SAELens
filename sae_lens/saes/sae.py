@@ -206,7 +206,9 @@ class TrainStepOutput:
     loss: torch.Tensor  # we need to call backwards on this
     losses: dict[str, torch.Tensor]
     # any extra metrics to log can be added here
-    metrics: dict[str, torch.Tensor | float | int] = field(default_factory=dict)
+    metrics: dict[
+        str, torch.Tensor | float | int | Callable[[], torch.Tensor | float | int]
+    ] = field(default_factory=dict)
 
 
 @dataclass
@@ -217,6 +219,7 @@ class TrainStepInput:
     coefficients: dict[str, float]
     dead_neuron_mask: torch.Tensor | None
     n_training_steps: int
+    is_logging_step: bool
 
 
 class TrainCoefficientConfig(NamedTuple):
@@ -230,7 +233,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
     cfg: T_SAE_CONFIG
     dtype: torch.dtype
     device: torch.device
-    use_error_term: bool
+    _use_error_term: bool
 
     # For type checking only - don't provide default values
     # These will be initialized by subclasses
@@ -255,7 +258,9 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         self.dtype = str_to_dtype(cfg.dtype)
         self.device = torch.device(cfg.device)
-        self.use_error_term = use_error_term
+        self._use_error_term = False  # Set directly to avoid warning during init
+        if use_error_term:
+            self.use_error_term = True  # Use property setter to trigger warning
 
         # Set up activation function
         self.activation_fn = self.get_activation_fn()
@@ -281,6 +286,22 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         self._setup_activation_normalization()
 
         self.setup()  # Required for HookedRootModule
+
+    @property
+    def use_error_term(self) -> bool:
+        return self._use_error_term
+
+    @use_error_term.setter
+    def use_error_term(self, value: bool) -> None:
+        if value and not self._use_error_term:
+            warnings.warn(
+                "Setting use_error_term directly on SAE is deprecated. "
+                "Use HookedSAETransformer.add_sae(sae, use_error_term=True) instead. "
+                "This will be removed in a future version.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        self._use_error_term = value
 
     @torch.no_grad()
     def fold_activation_norm_scaling_factor(self, scaling_factor: float):
@@ -578,7 +599,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         Args:
             release: The release name. This will be mapped to a huggingface repo id based on the pretrained_saes.yaml file.
-            id: The id of the SAE to load. This will be mapped to a path in the huggingface repo.
+            sae_id: The id of the SAE to load. This will be mapped to a path in the huggingface repo.
             device: The device to load the SAE on, defaults to "cpu".
             dtype: The dtype to load the SAE on, defaults to "float32".
             force_download: Whether to force download the SAE weights and config, defaults to False.
@@ -609,7 +630,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         Args:
             release: The release name. This will be mapped to a huggingface repo id based on the pretrained_saes.yaml file.
-            id: The id of the SAE to load. This will be mapped to a path in the huggingface repo.
+            sae_id: The id of the SAE to load. This will be mapped to a path in the huggingface repo.
             device: The device to load the SAE on, defaults to "cpu".
             dtype: The dtype to load the SAE on, defaults to "float32".
             force_download: Whether to force download the SAE weights and config, defaults to False.
@@ -638,24 +659,6 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
                     stacklevel=2,
                 )
         elif sae_id not in sae_directory[release].saes_map:
-            # Handle special cases like Gemma Scope
-            if (
-                "gemma-scope" in release
-                and "canonical" not in release
-                and f"{release}-canonical" in sae_directory
-            ):
-                canonical_ids = list(
-                    sae_directory[release + "-canonical"].saes_map.keys()
-                )
-                # Shorten the lengthy string of valid IDs
-                if len(canonical_ids) > 5:
-                    str_canonical_ids = str(canonical_ids[:5])[:-1] + ", ...]"
-                else:
-                    str_canonical_ids = str(canonical_ids)
-                value_suffix = f" If you don't want to specify an L0 value, consider using release {release}-canonical which has valid IDs {str_canonical_ids}"
-            else:
-                value_suffix = ""
-
             valid_ids = list(sae_directory[release].saes_map.keys())
             # Shorten the lengthy string of valid IDs
             if len(valid_ids) > 5:
@@ -665,7 +668,6 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
             raise ValueError(
                 f"ID {sae_id} not found in release {release}. Valid IDs are {str_valid_ids}."
-                + value_suffix
             )
 
         conversion_loader = (

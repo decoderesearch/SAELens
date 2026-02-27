@@ -104,6 +104,9 @@ cfg = LanguageModelSAERunnerConfig(
     dtype="float32"
 )
 sparse_autoencoder = LanguageModelSAETrainingRunner(cfg).run()
+
+# Save for inference
+sparse_autoencoder.save_inference_model("path/to/save/dir")
 ```
 
 As you can see, the training setup provides a large number of options to explore. The full list of options can be found by inspecting the `LanguageModelSAERunnerConfig` class and the specific SAE configuration class you intend to use (e.g., `StandardTrainingSAEConfig`, `TopKTrainingSAEConfig`, etc.).

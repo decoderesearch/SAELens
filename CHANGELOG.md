@@ -1,5 +1,234 @@
 # CHANGELOG
 
+## v6.37.4 (2026-02-23)
+
+### Performance
+
+* perf: report metrics only when the metrics will be read (#652) ([`3f05736`](https://github.com/decoderesearch/SAELens/commit/3f0573694e9fbb8a0cb502f5a88456b511be95e2))
+
+## v6.37.3 (2026-02-20)
+
+### Fix
+
+* fix: Handle HF ModelOutput logits in HookedProxyLM (#651) ([`110de31`](https://github.com/decoderesearch/SAELens/commit/110de3126c0e24e9e6459d5fb6a110024eb0875b))
+
+## v6.37.2 (2026-02-19)
+
+### Chore
+
+* chore: fixing broken link in docs (#649) ([`bcb817e`](https://github.com/decoderesearch/SAELens/commit/bcb817e4ec57875df57e68bc8a6f36485799d0c3))
+
+* chore: updating docs for synthsaebench (#646)
+
+* updating docs for synthsaebench
+
+* Update docs/synthsaebench.md
+
+Co-authored-by: Copilot &lt;175728472+Copilot@users.noreply.github.com&gt;
+
+* Update docs/synthetic_data.md
+
+Co-authored-by: Copilot &lt;175728472+Copilot@users.noreply.github.com&gt;
+
+* Update docs/synthetic_data.md
+
+Co-authored-by: Copilot &lt;175728472+Copilot@users.noreply.github.com&gt;
+
+* changes from CR
+
+* adding synth sae bench tutorial notebook
+
+* updating tutorial notebook
+
+* changes from CR
+
+* changes from CR
+
+* adding link to paper
+
+* changes from CR
+
+---------
+
+Co-authored-by: Copilot &lt;175728472+Copilot@users.noreply.github.com&gt; ([`d44e201`](https://github.com/decoderesearch/SAELens/commit/d44e201241a85b7263341c39fe013229804b2426))
+
+### Fix
+
+* fix: relax transformers dep to allow v5 (#650) ([`610d6e5`](https://github.com/decoderesearch/SAELens/commit/610d6e5c01686abdfc41e432728c4bf36c9409c1))
+
+## v6.37.1 (2026-02-14)
+
+### Fix
+
+* fix: fold scaling factor when loading Llama Scope SAEs (#645) ([`696d08b`](https://github.com/decoderesearch/SAELens/commit/696d08bde53b4e15f0c2c7913c5cf299a4a94d4b))
+
+## v6.37.0 (2026-02-13)
+
+### Feature
+
+* feat: Matryoshka auxiliary loss (#643)
+
+* adding matryoshka topk aux loss
+
+* adding tests
+
+* changes from CR
+
+* don&#39;t add b_dec during mat topk recons
+
+* fixing rescaling issues
+
+* changes from CR
+
+* removing unused method ([`f5c5110`](https://github.com/decoderesearch/SAELens/commit/f5c511067beef6537d4afde50e0cd8796fb33e32))
+
+## v6.36.2 (2026-02-11)
+
+### Fix
+
+* fix: do not add b_dec into topk aux loss (#644)
+
+* fix: do not add b_dec into aux loss
+
+* changes from CR ([`6ec9736`](https://github.com/decoderesearch/SAELens/commit/6ec9736c0e360db7f420a67d77cbf76cb3470f36))
+
+## v6.36.1 (2026-02-09)
+
+### Fix
+
+* fix: reset random state after synthetic model init (#642) ([`cbf423c`](https://github.com/decoderesearch/SAELens/commit/cbf423ce4f36d8f80aa7fbdd8229449bb27fb365))
+
+## v6.36.0 (2026-02-07)
+
+### Chore
+
+* chore: update tests for `transformers` v5.0.0 compatibility (#639)
+
+* pre transformers v5 upgrade minor test fix
+
+* Add support for transformers v5.0.0
+
+- Add hf_to_tokens() test helper and update tests in test_activations_store.py to use HookedTransformer.to_tokens() for v4/v5 BOS compatibility
+- Fix pyright/type issue by annotating tokenizer.special_tokens_map.values() in util.py and corresponding comparison test file
+- update pyproject.toml to use transformers v5.0.0 and upstream transformer_lens branch that supports it (will be replaced with the appropriate released transformer-lens version when available)
+
+* fix for huggingface_hub&gt;=1.0 API change with RepositoryNotFoundError
+
+* apply some review suggestions, fix annotation typo, adjust temporary pyproject.toml changes
+
+* explicitly comment out standard transformer-lens and transformer deps to avoid temporary conflicts until upstream PR is merged
+
+* prepare pyproject.toml to use v4 transformers again now that we have vetted v5 in CI ([`dae4706`](https://github.com/decoderesearch/SAELens/commit/dae4706c7719c915a047ad1b2110c35aec4758ae))
+
+* chore: Add save_inference_move to doc (#625) ([`3f90c7b`](https://github.com/decoderesearch/SAELens/commit/3f90c7b6d7eeed81db4e3444a4ea0f0c677e1650))
+
+### Feature
+
+* feat: add option to scale child magnitudes based on parent magnitudes (#641) ([`78b92fc`](https://github.com/decoderesearch/SAELens/commit/78b92fc03d9866b4c9acceb9674d29cd277a3cd2))
+
+## v6.35.0 (2026-02-04)
+
+### Feature
+
+* feat: training and evaluating SAEs on large-scale synthetic models (#638) ([`961cdb1`](https://github.com/decoderesearch/SAELens/commit/961cdb1e3ecafd36170d8e3022878268445c41b3))
+
+## v6.34.2 (2026-02-02)
+
+### Fix
+
+* fix: properly handle hook_sae_error and hook_sae_output in SAE wrapper (#637)
+
+The _SAEWrapper now correctly handles the error term computation and
+hook calls:
+
+- Creates new HookPoints for hook_sae_error and hook_sae_output instead
+  of copying from the SAE, since the wrapper controls these hooks
+- Computes error term from clean reconstruction (without hook
+  interventions) so that feature ablations have their intended effect
+- Calls hook_sae_error and hook_sae_output at the appropriate times
+
+Also fixes SAETransformerBridge to register wrapper&#39;s internal hooks
+in _hook_registry so they appear in cache and can be targeted by
+fwd_hooks.
+
+Adds tests verifying error term is unchanged when latents are ablated. ([`1d35eca`](https://github.com/decoderesearch/SAELens/commit/1d35eca8f2b87a75c0c51e1ad50d99ac5bfffcbb))
+
+## v6.34.1 (2026-02-02)
+
+### Fix
+
+* fix: avoid deprecation warnings in normal usage of HookedSAETransformer (#636) ([`bfad65e`](https://github.com/decoderesearch/SAELens/commit/bfad65ea4d1391ef333e3215db00109179388ddb))
+
+## v6.34.0 (2026-02-01)
+
+### Feature
+
+* feat: support Transcoders in HookedSAETransformer (#635)
+
+Properly handle transcoders in HookedSAETransformer and SAETransformerBridge ([`1fa3245`](https://github.com/decoderesearch/SAELens/commit/1fa3245aafdcdef4de1d437ad723f403950c127d))
+
+## v6.33.0 (2026-02-01)
+
+### Chore
+
+* chore: cleaning up types and adding tests (#633) ([`ad9869e`](https://github.com/decoderesearch/SAELens/commit/ad9869e17ddd3bd831fc9482d5f5dbb5c9252212))
+
+### Feature
+
+* feat: adding stats for correlation/superposition for synth data (#634) ([`927144a`](https://github.com/decoderesearch/SAELens/commit/927144aedc8ba1298511361786653155a36a7ba6))
+
+## v6.32.1 (2026-01-31)
+
+### Fix
+
+* fix: do not apply hook_z reshaping to gemma scope 2 (#632) ([`1dc44a9`](https://github.com/decoderesearch/SAELens/commit/1dc44a9a43572f20b7275319c86c88f4649083fd))
+
+## v6.32.0 (2026-01-30)
+
+### Feature
+
+* feat: SAETransformerBridge (#631) ([`878653e`](https://github.com/decoderesearch/SAELens/commit/878653e72730523ff719cc8d4734baf168ea30c6))
+
+## v6.31.0 (2026-01-29)
+
+### Feature
+
+* feat: Add log_weights_to_wandb option to logging config (#629) ([`25caed5`](https://github.com/decoderesearch/SAELens/commit/25caed582d5e40aa27c2fae722373dabe18eae45))
+
+## v6.30.2 (2026-01-26)
+
+### Chore
+
+* chore: Use correct reference link in temporal_sae.py (#626) ([`1d6f6f0`](https://github.com/decoderesearch/SAELens/commit/1d6f6f098833400287ca99d228dc799f0cc65a9d))
+
+### Fix
+
+* fix: raise error when context_size &gt; training_tokens (#627)
+
+Fixes #581 ([`64ab87b`](https://github.com/decoderesearch/SAELens/commit/64ab87bed0b1c14a90d779f114d88937c7f2f3d4))
+
+* fix: add leave=False to nested tqdm progress bars for Jupyter (#628)
+
+Fixes #495
+
+Nested progress bars without leave=False cause newlines on every
+update in Jupyter notebooks. This adds the parameter to progress
+bars that run inside other loops:
+- activation_scaler.py: norm estimation during training
+- evals.py: reconstruction and sparsity batches during eval ([`da5420e`](https://github.com/decoderesearch/SAELens/commit/da5420e970103eb4752dad1a0b99c3becfa6245f))
+
+## v6.30.1 (2026-01-20)
+
+### Fix
+
+* fix: correct TLens hook names for gemma scope 2 and fix non-affine transcoders (#624) ([`a70ad12`](https://github.com/decoderesearch/SAELens/commit/a70ad1292c4f8f67931771f952868771a00718b5))
+
+## v6.30.0 (2026-01-13)
+
+### Feature
+
+* feat: add neuronpedia entries in pretrained_saes (#623) ([`dc059ae`](https://github.com/decoderesearch/SAELens/commit/dc059ae49acc0f59894c7a4adc06687f97b99d3e))
+
 ## v6.29.1 (2026-01-12)
 
 ### Performance

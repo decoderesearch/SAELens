@@ -335,7 +335,7 @@ def get_downstream_reconstruction_metrics(
 
     batch_iter = range(n_batches)
     if verbose:
-        batch_iter = tqdm(batch_iter, desc="Reconstruction Batches")
+        batch_iter = tqdm(batch_iter, desc="Reconstruction Batches", leave=False)
 
     for _ in batch_iter:
         batch_tokens = activation_store.get_batch_tokens(eval_batch_size_prompts)
@@ -430,7 +430,7 @@ def get_sparsity_and_variance_metrics(
 
     batch_iter = range(n_batches)
     if verbose:
-        batch_iter = tqdm(batch_iter, desc="Sparsity and Variance Batches")
+        batch_iter = tqdm(batch_iter, desc="Sparsity and Variance Batches", leave=False)
 
     for _ in batch_iter:
         batch_tokens = activation_store.get_batch_tokens(eval_batch_size_prompts)

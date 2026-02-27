@@ -575,7 +575,7 @@ def build_matryoshka_batchtopk_runner_cfg(
     **kwargs: Any,
 ) -> LanguageModelSAERunnerConfig[MatryoshkaBatchTopKTrainingSAEConfig]:
     """Helper to create a mock instance for Matryoshka BatchTopK SAE."""
-    default_sae_config: TrainingSAEConfigDict = {
+    default_sae_config: dict[str, Any] = {
         "matryoshka_widths": [10, kwargs.get("d_sae", 20)],
         "d_in": 64,
         "d_sae": 256,
@@ -586,18 +586,17 @@ def build_matryoshka_batchtopk_runner_cfg(
         "apply_b_dec_to_input": False,
         "k": 10,
         "topk_threshold_lr": 0.02,
+        "use_matryoshka_aux_loss": False,
     }
     # Ensure activation_fn_kwargs has k if k is overridden
     temp_sae_overrides = {
         k: v for k, v in kwargs.items() if k in TrainingSAEConfigDict.__annotations__
     }
     temp_sae_config = {**default_sae_config, **temp_sae_overrides}
-    # Update the default config *before* passing it to _build_runner_config
-    final_default_sae_config = cast(dict[str, Any], temp_sae_config)
 
     runner_cfg = _build_runner_config(
         MatryoshkaBatchTopKTrainingSAEConfig,
-        final_default_sae_config,
+        temp_sae_config,
         **kwargs,
     )
     _update_sae_metadata(runner_cfg)

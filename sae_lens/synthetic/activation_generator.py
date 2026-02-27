@@ -2,6 +2,9 @@
 Functions for generating synthetic feature activations.
 """
 
+from __future__ import annotations
+
+import inspect
 import math
 from collections.abc import Callable, Sequence
 
@@ -12,7 +15,10 @@ from torch.distributions import MultivariateNormal
 from sae_lens.synthetic.correlation import LowRankCorrelationMatrix
 from sae_lens.util import str_to_dtype
 
-ActivationsModifier = Callable[[torch.Tensor], torch.Tensor]
+ActivationsModifier = (
+    Callable[[torch.Tensor], torch.Tensor]
+    | Callable[[torch.Tensor, "ActivationGenerator"], torch.Tensor]
+)
 ActivationsModifierInput = ActivationsModifier | Sequence[ActivationsModifier] | None
 CorrelationMatrixInput = (
     torch.Tensor | LowRankCorrelationMatrix | tuple[torch.Tensor, torch.Tensor]
@@ -30,7 +36,7 @@ class ActivationGenerator(nn.Module):
     firing_probabilities: torch.Tensor
     std_firing_magnitudes: torch.Tensor
     mean_firing_magnitudes: torch.Tensor
-    modify_activations: ActivationsModifier | None
+    modify_activations: _ModifierWrapper | None
     correlation_matrix: torch.Tensor | None
     low_rank_correlation: tuple[torch.Tensor, torch.Tensor] | None
     correlation_thresholds: torch.Tensor | None
@@ -191,7 +197,7 @@ class ActivationGenerator(nn.Module):
             feature_activations[firing_indices] = activations_at_firing
 
         if self.modify_activations is not None:
-            feature_activations = self.modify_activations(feature_activations)
+            feature_activations = self.modify_activations(feature_activations, self)
             if feature_activations.is_sparse:
                 # Apply relu to sparse values
                 feature_activations = feature_activations.coalesce()
@@ -302,28 +308,54 @@ def _to_tensor(
     return value.to(device, dtype)
 
 
+def _modifier_param_count(fn: Callable[..., torch.Tensor]) -> int:
+    """Return the number of parameters a modifier function accepts."""
+    return len(inspect.signature(fn).parameters)
+
+
+class _ModifierWrapper:
+    """Wraps a modifier (1-arg or 2-arg) to present a uniform 2-arg interface."""
+
+    def __init__(self, fn: ActivationsModifier):
+        self._fn = fn
+        self._takes_generator = _modifier_param_count(fn) >= 2
+
+    def __call__(
+        self, activations: torch.Tensor, generator: ActivationGenerator
+    ) -> torch.Tensor:
+        if self._takes_generator:
+            return self._fn(activations, generator)  # type: ignore[call-arg]
+        return self._fn(activations)  # type: ignore[call-arg]
+
+
 def _normalize_modifiers(
     modify_activations: ActivationsModifierInput,
-) -> ActivationsModifier | None:
-    """Convert modifier input to a single modifier or None."""
+) -> _ModifierWrapper | None:
+    """Convert modifier input to a single _ModifierWrapper or None."""
     if modify_activations is None:
         return None
     if callable(modify_activations):
-        return modify_activations
+        if isinstance(modify_activations, _ModifierWrapper):
+            return modify_activations
+        return _ModifierWrapper(modify_activations)
     # It's a sequence of modifiers - chain them
     modifiers = list(modify_activations)
     if len(modifiers) == 0:
         return None
     if len(modifiers) == 1:
-        return modifiers[0]
+        return _ModifierWrapper(modifiers[0])
 
-    def chained(activations: torch.Tensor) -> torch.Tensor:
+    wrappers = [_ModifierWrapper(m) for m in modifiers]
+
+    def chained(
+        activations: torch.Tensor, generator: ActivationGenerator
+    ) -> torch.Tensor:
         result = activations
-        for modifier in modifiers:
-            result = modifier(result)
+        for wrapper in wrappers:
+            result = wrapper(result, generator)
         return result
 
-    return chained
+    return _ModifierWrapper(chained)
 
 
 def _validate_correlation_matrix(

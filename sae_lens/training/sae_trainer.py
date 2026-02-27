@@ -288,6 +288,7 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
                     dead_neuron_mask=self.dead_neurons,
                     coefficients=self.get_coefficients(),
                     n_training_steps=self.n_training_steps,
+                    is_logging_step=self._is_logging_step(),
                 ),
             )
 
@@ -321,9 +322,15 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
 
         return train_step_output
 
+    def _is_logging_step(self) -> bool:
+        return (
+            self.cfg.logger.log_to_wandb
+            and (self.n_training_steps + 1) % self.cfg.logger.wandb_log_frequency == 0
+        )
+
     @torch.no_grad()
     def _log_train_step(self, step_output: TrainStepOutput):
-        if (self.n_training_steps + 1) % self.cfg.logger.wandb_log_frequency == 0:
+        if self._is_logging_step():
             wandb.log(
                 self._build_train_step_log_dict(
                     output=step_output,
@@ -451,5 +458,9 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
             pbar.update(update_interval * self.cfg.train_batch_size_samples)
 
 
-def _unwrap_item(item: float | torch.Tensor) -> float:
+def _unwrap_item(
+    item: float | int | torch.Tensor | Callable[[], float | int | torch.Tensor],
+) -> float | int:
+    if callable(item):
+        item = item()
     return item.item() if isinstance(item, torch.Tensor) else item

@@ -259,6 +259,7 @@ def test_BatchTopKTrainingSAE_save_and_load_inference_sae(
         coefficients={},
         dead_neuron_mask=None,
         n_training_steps=0,
+        is_logging_step=False,
     )
 
     # run some test data through to learn the correct threshold
@@ -340,6 +341,7 @@ def test_BatchTopKTrainingSAE_training_step_updates_threshold() -> None:
         coefficients={},
         dead_neuron_mask=None,
         n_training_steps=0,
+        is_logging_step=False,
     )
 
     # Do training step

@@ -3,6 +3,7 @@ import torch
 
 from sae_lens.synthetic import ActivationGenerator, LowRankCorrelationMatrix
 from sae_lens.synthetic.activation_generator import (
+    _ModifierWrapper,
     _normalize_modifiers,
     _to_tensor,
     _validate_correlation_matrix,
@@ -268,22 +269,22 @@ class TestNormalizeModifiers:
     def test_none_returns_none(self):
         assert _normalize_modifiers(None) is None
 
-    def test_callable_returns_callable(self):
+    def test_callable_returns_wrapper(self):
         def my_modifier(x: torch.Tensor) -> torch.Tensor:
             return x
 
         result = _normalize_modifiers(my_modifier)
-        assert result is my_modifier
+        assert isinstance(result, _ModifierWrapper)
 
     def test_empty_list_returns_none(self):
         assert _normalize_modifiers([]) is None
 
-    def test_single_item_list_returns_item(self):
+    def test_single_item_list_returns_wrapper(self):
         def my_modifier(x: torch.Tensor) -> torch.Tensor:
             return x
 
         result = _normalize_modifiers([my_modifier])
-        assert result is my_modifier
+        assert isinstance(result, _ModifierWrapper)
 
     def test_multiple_items_returns_chained(self):
         def add_one(x: torch.Tensor) -> torch.Tensor:
@@ -295,11 +296,78 @@ class TestNormalizeModifiers:
         result = _normalize_modifiers([add_one, multiply_two])
         assert result is not None
 
-        # Test the chained function
+        # Test the chained function via a dummy generator
+        gen = ActivationGenerator(
+            num_features=3,
+            firing_probabilities=1.0,
+        )
         input_tensor = torch.tensor([1.0, 2.0, 3.0])
-        output = result(input_tensor)
+        output = result(input_tensor, gen)
         expected = (input_tensor + 1) * 2
         torch.testing.assert_close(output, expected)
+
+    def test_two_arg_modifier_receives_generator(self):
+        received_generators: list[ActivationGenerator] = []
+
+        def my_modifier(
+            x: torch.Tensor, generator: ActivationGenerator
+        ) -> torch.Tensor:
+            received_generators.append(generator)
+            return x * 2
+
+        gen = ActivationGenerator(
+            num_features=3,
+            firing_probabilities=1.0,
+            mean_firing_magnitudes=1.0,
+            std_firing_magnitudes=0.0,
+            modify_activations=my_modifier,
+        )
+        gen.sample(10)
+
+        assert len(received_generators) == 1
+        assert received_generators[0] is gen
+
+    def test_chaining_mix_of_one_and_two_arg_modifiers(self):
+        def add_one(x: torch.Tensor) -> torch.Tensor:
+            return x + 1
+
+        def scale_by_mean(
+            x: torch.Tensor, generator: ActivationGenerator
+        ) -> torch.Tensor:
+            return x * generator.mean_firing_magnitudes
+
+        gen = ActivationGenerator(
+            num_features=3,
+            firing_probabilities=1.0,
+            mean_firing_magnitudes=torch.tensor([2.0, 3.0, 4.0]),
+            std_firing_magnitudes=0.0,
+            modify_activations=[add_one, scale_by_mean],
+        )
+
+        result = gen.sample(1)
+        # Original values are all 1.0 (mean=various, std=0), then:
+        # add_one: [2.0, 3.0, 4.0] + 1 = [3.0, 4.0, 5.0]
+        # Actually no: add_one gets the raw activations which are
+        # [2.0, 3.0, 4.0] (mean magnitudes with std=0)
+        # add_one -> [3.0, 4.0, 5.0]
+        # scale_by_mean -> [3.0*2.0, 4.0*3.0, 5.0*4.0] = [6.0, 12.0, 20.0]
+        expected = torch.tensor([[6.0, 12.0, 20.0]])
+        torch.testing.assert_close(result, expected)
+
+    def test_one_arg_modifiers_still_work(self):
+        def double(x: torch.Tensor) -> torch.Tensor:
+            return x * 2
+
+        gen = ActivationGenerator(
+            num_features=3,
+            firing_probabilities=1.0,
+            mean_firing_magnitudes=1.0,
+            std_firing_magnitudes=0.0,
+            modify_activations=double,
+        )
+
+        result = gen.sample(5)
+        torch.testing.assert_close(result, torch.full((5, 3), 2.0))
 
 
 class TestValidateCorrelationMatrix:
@@ -407,7 +475,6 @@ class TestValidateLowRankCorrelationMatrix:
 
 class TestActivationGeneratorLowRankCorrelationMatrix:
     def test_with_low_rank_correlation_tuple(self):
-        """Test that low-rank correlation as tuple works."""
         num_features = 5
         rank = 2
         factor = torch.randn(num_features, rank) * 0.1
@@ -425,7 +492,6 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
         assert torch.all(samples >= 0)
 
     def test_with_low_rank_correlation_named_tuple(self):
-        """Test that LowRankCorrelationMatrix NamedTuple works."""
         num_features = 5
         rank = 2
         factor = torch.randn(num_features, rank) * 0.1
@@ -443,7 +509,6 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
         assert torch.all(samples >= 0)
 
     def test_low_rank_preserves_marginal_probabilities(self):
-        """Test that low-rank correlation preserves marginal firing probabilities."""
         num_features = 5
         rank = 2
         factor = torch.randn(num_features, rank) * 0.3
@@ -464,13 +529,6 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
         torch.testing.assert_close(actual_probs, firing_probs, atol=0.02, rtol=0)
 
     def test_full_matrix_and_low_rank_equivalent_produce_same_statistics(self):
-        """Test that a full correlation matrix and its low-rank representation produce
-        statistically equivalent results.
-
-        This is a key test: if we construct a correlation matrix from low-rank factors
-        (C = F @ F.T + diag(D)), then using either the full matrix or the low-rank
-        representation should yield the same firing statistics.
-        """
         num_features = 5
         rank = 3
         batch_size = 50000
@@ -532,12 +590,6 @@ class TestActivationGeneratorLowRankCorrelationMatrix:
         torch.testing.assert_close(corr_full, corr_low_rank, atol=0.02, rtol=0)
 
     def test_exact_low_rank_matches_full_matrix_statistics(self):
-        """Test that when we use the exact same covariance in both forms,
-        the statistics match closely.
-
-        We construct a low-rank covariance, compute the equivalent full matrix,
-        and verify both produce the same firing statistics.
-        """
         num_features = 4
         rank = 2
         batch_size = 20000

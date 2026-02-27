@@ -3,6 +3,7 @@ from typing import NamedTuple
 
 import torch
 
+from sae_lens import logger
 from sae_lens.util import str_to_dtype
 
 
@@ -268,7 +269,7 @@ def generate_random_correlation_matrix(
 def generate_random_low_rank_correlation_matrix(
     num_features: int,
     rank: int,
-    correlation_scale: float = 0.1,
+    correlation_scale: float = 0.075,
     seed: int | None = None,
     device: torch.device | str = "cpu",
     dtype: torch.dtype | str = torch.float32,
@@ -331,20 +332,17 @@ def generate_random_low_rank_correlation_matrix(
     factor_sq_sum = (factor**2).sum(dim=1)
     diag_term = 1 - factor_sq_sum
 
-    # Ensure diagonal terms are at least _MIN_DIAG for numerical stability
-    # If any diagonal term is too small, scale down the factor matrix
-    if torch.any(diag_term < _MIN_DIAG):
-        # Scale factor so max row norm squared is at most (1 - _MIN_DIAG)
-        # This ensures all diagonal terms are >= _MIN_DIAG
-        max_factor_contribution = 1 - _MIN_DIAG
-        max_sq_sum = factor_sq_sum.max()
-        scale = torch.sqrt(
-            torch.tensor(max_factor_contribution, device=device, dtype=dtype)
-            / max_sq_sum
+    # alternatively, we can rescale each row independently to ensure the diagonal is 1
+    mask = diag_term < _MIN_DIAG
+    factor[mask, :] *= torch.sqrt((1 - _MIN_DIAG) / factor_sq_sum[mask].unsqueeze(1))
+    factor_sq_sum = (factor**2).sum(dim=1)
+    diag_term = 1 - factor_sq_sum
+
+    total_rescaled = mask.sum().item()
+    if total_rescaled > 0:
+        logger.warning(
+            f"{total_rescaled} / {num_features} rows were capped. Either reduce the rank or reduce the correlation_scale to avoid rescaling."
         )
-        factor = factor * scale
-        factor_sq_sum = (factor**2).sum(dim=1)
-        diag_term = 1 - factor_sq_sum
 
     return LowRankCorrelationMatrix(
         correlation_factor=factor, correlation_diag=diag_term

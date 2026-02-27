@@ -13,7 +13,6 @@ import torch
 from datasets import Dataset, DatasetDict, IterableDataset, load_dataset
 from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import HfHubHTTPError
-from jaxtyping import Float, Int
 from requests import HTTPError
 from safetensors.torch import save_file
 from torch.utils.data import DataLoader
@@ -579,8 +578,8 @@ class ActivationsStore:
         d_in: int,
         raise_on_epoch_end: bool,
     ) -> tuple[
-        Float[torch.Tensor, "(total_size context_size) num_layers d_in"],
-        Int[torch.Tensor, "(total_size context_size)"] | None,
+        torch.Tensor,
+        torch.Tensor | None,
     ]:
         """
         Loads `total_size` activations from `cached_activation_dataset`
@@ -857,7 +856,8 @@ def _get_special_token_ids(tokenizer: PreTrainedTokenizerBase) -> list[int]:
 
     # Get any additional special tokens from the tokenizer's special tokens map
     if hasattr(tokenizer, "special_tokens_map"):
-        for token in tokenizer.special_tokens_map.values():
+        token_map_values: Any = tokenizer.special_tokens_map.values()  # type: ignore
+        for token in token_map_values:
             if isinstance(token, str):
                 token_id = tokenizer.convert_tokens_to_ids(token)  # type: ignore
                 special_tokens.add(token_id)

@@ -28,7 +28,9 @@ class ActivationScaler:
     ) -> float:
         norms_per_batch: list[float] = []
         for _ in tqdm(
-            range(n_batches_for_norm_estimate), desc="Estimating norm scaling factor"
+            range(n_batches_for_norm_estimate),
+            desc="Estimating norm scaling factor",
+            leave=False,
         ):
             acts = next(data_provider)
             norms_per_batch.append(acts.norm(dim=-1).mean().item())

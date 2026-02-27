@@ -46,7 +46,7 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
-*.py,cover
+*.py.cover
 .hypothesis/
 .pytest_cache/
 cover/
@@ -172,6 +172,8 @@ activations/
 *.html
 *.DS_Store
 
+.devcontainer/
+
 feature_dashboards/
 research/
 
@@ -190,7 +192,6 @@ scripts/ansible/cache_acts.yml
 scripts/ansible/jobs/
 scripts/ansible/configs/
 scripts/ansible/ansible.log
-
 
 *.pt
 

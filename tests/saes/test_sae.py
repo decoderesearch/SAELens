@@ -9,6 +9,7 @@ import pytest
 import torch
 
 from sae_lens import __version__
+from sae_lens.loading.pretrained_sae_loaders import sae_lens_disk_loader
 from sae_lens.registry import get_sae_class, get_sae_training_class
 from sae_lens.saes.sae import (
     SAE,
@@ -364,9 +365,6 @@ def test_SAE_from_pretrained_uses_meta_device_optimization(tmp_path: Path):
     random_params(sae)
     sae.save_model(tmp_path)
 
-    # Create a mock loader that returns our saved SAE's config and state dict
-    from sae_lens.loading.pretrained_sae_loaders import sae_lens_disk_loader
-
     cfg_dict, state_dict = sae_lens_disk_loader(tmp_path, device="cpu")
 
     def mock_loader(
@@ -434,3 +432,68 @@ def test_SAE_from_pretrained_uses_meta_device_optimization(tmp_path: Path):
     assert meta_device_verified, "SAE should use meta device before load_state_dict"
     assert used_assign_true, "load_state_dict should be called with assign=True"
     assert loaded_sae.W_enc.device.type == "cpu"
+
+
+def test_from_pretrained_folds_norm_scaling_factor(tmp_path: Path):
+    cfg = build_sae_training_cfg_for_arch("standard", d_in=256, d_sae=512)
+    sae = TrainingSAE.from_dict(cfg.to_dict())
+    random_params(sae)
+    sae.save_model(tmp_path)
+
+    cfg_dict, state_dict = sae_lens_disk_loader(tmp_path, device="cpu")
+    cfg_dict["normalize_activations"] = "expected_average_only_in"
+
+    # Save original weights for comparison
+    original_W_enc = state_dict["W_enc"].clone()
+    original_W_dec = state_dict["W_dec"].clone()
+    original_b_dec = state_dict["b_dec"].clone()
+
+    scaling_factor = 2.0
+
+    def mock_loader(
+        repo_id: str,  # noqa: ARG001
+        folder_name: str,  # noqa: ARG001
+        device: str = "cpu",  # noqa: ARG001
+        force_download: bool = False,  # noqa: ARG001
+        cfg_overrides: dict[str, Any] | None = None,  # noqa: ARG001
+    ):
+        return cfg_dict, state_dict, None
+
+    mock_sae_info = type(
+        "MockSAEInfo", (), {"conversion_func": None, "saes_map": {"mock-sae-id": {}}}
+    )()
+
+    with (
+        patch(
+            "sae_lens.saes.sae.NAMED_PRETRAINED_SAE_LOADERS",
+            {"sae_lens": mock_loader},
+        ),
+        patch(
+            "sae_lens.saes.sae.get_pretrained_saes_directory",
+            return_value={"mock-release": mock_sae_info},
+        ),
+        patch(
+            "sae_lens.saes.sae.get_conversion_loader_name",
+            return_value="sae_lens",
+        ),
+        patch(
+            "sae_lens.saes.sae.get_repo_id_and_folder_name",
+            return_value=("mock/repo", "mock_folder"),
+        ),
+        patch(
+            "sae_lens.saes.sae.get_config_overrides",
+            return_value={},
+        ),
+        patch(
+            "sae_lens.saes.sae.get_norm_scaling_factor",
+            return_value=scaling_factor,
+        ),
+    ):
+        loaded_sae = SAE.from_pretrained(
+            "mock-release", "mock-sae-id", device="cpu", dtype="float32"
+        )
+
+    assert_close(loaded_sae.W_enc, original_W_enc * scaling_factor)
+    assert_close(loaded_sae.W_dec, original_W_dec / scaling_factor)
+    assert_close(loaded_sae.b_dec, original_b_dec / scaling_factor)
+    assert loaded_sae.cfg.normalize_activations == "none"

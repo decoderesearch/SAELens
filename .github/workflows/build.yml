@@ -68,6 +68,8 @@ jobs:
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction
+      - name: Install TransformerLens dev-3.x
+        run: poetry run pip install git+https://github.com/TransformerLensOrg/TransformerLens.git@dev-3.x
       - name: Check disk space before tests
         run: |
           echo "=== Disk Space Summary ==="

@@ -1,11 +1,16 @@
 import sys
 
 import pytest
+import torch
 from mamba_lens import HookedMamba
 from transformer_lens import HookedTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from sae_lens.load_model import HookedProxyLM, _extract_logits_from_output, load_model
+from sae_lens.load_model import (
+    HookedProxyLM,
+    _extract_logits_from_output,
+    load_model,
+)
 from tests.helpers import assert_close
 
 
@@ -30,26 +35,21 @@ def test_load_model_works_with_mamba():
 def test_load_model_works_without_model_kwargs():
     model = load_model(
         model_class_name="HookedTransformer",
-        model_name="pythia-14m",
+        model_name="tiny-stories-1M",
         device="cpu",
     )
     assert isinstance(model, HookedTransformer)
-    assert model.cfg.checkpoint_index is None
 
 
-# TODO: debug why this is suddenly failing on CI. It may resolve itself in the future.
-@pytest.mark.skip(
-    reason="This is failing on CI but not locally due to huggingface headers."
-)
 def test_load_model_works_with_model_kwargs():
     model = load_model(
         model_class_name="HookedTransformer",
-        model_name="pythia-14m",
+        model_name="tiny-stories-1M",
         device="cpu",
-        model_from_pretrained_kwargs={"checkpoint_index": 0},
+        model_from_pretrained_kwargs={"dtype": "float16"},
     )
     assert isinstance(model, HookedTransformer)
-    assert model.cfg.checkpoint_index == 0
+    assert model.cfg.dtype == torch.float16
 
 
 def test_load_model_with_generic_huggingface_lm():
@@ -120,6 +120,8 @@ def test_extract_logits_from_output_works_with_multiple_return_types():
     logits_dict = _extract_logits_from_output(out_dict)
     logits_tuple = _extract_logits_from_output(out_tuple)
 
+    assert logits_dict is not None
+    assert logits_tuple is not None
     assert_close(logits_dict, logits_tuple)
 
 
@@ -251,3 +253,38 @@ def test_HookedProxyLM_forward_raises_error_on_stop_at_layer_with_return_both(
             stop_at_layer=3,
             _names_filter=["transformer.h.0"],
         )
+
+
+def test_load_model_raises_on_unknown_model_class():
+    with pytest.raises(ValueError, match="Unknown model class: FakeModelClass"):
+        load_model(
+            model_class_name="FakeModelClass",
+            model_name="some-model",
+            device="cpu",
+        )
+
+
+def test_extract_logits_from_output_raises_on_unknown_type():
+    with pytest.raises(ValueError, match="Unsupported model output type"):
+        _extract_logits_from_output("not a valid output type")
+
+
+def test_extract_logits_from_output_works_with_object_logits_attribute():
+    logits = torch.randn(2, 10)
+
+    class FakeModelOutput:
+        def __init__(self, logits: torch.Tensor | None):
+            self.logits = logits
+
+    result = _extract_logits_from_output(FakeModelOutput(logits))
+    assert result is not None
+    assert_close(result, logits)
+
+
+def test_extract_logits_from_output_returns_none_when_object_logits_is_none():
+    class FakeModelOutput:
+        def __init__(self) -> None:
+            self.logits = None
+
+    result = _extract_logits_from_output(FakeModelOutput())
+    assert result is None

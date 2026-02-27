@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 import torch
 
@@ -557,3 +559,26 @@ class TestGenerateRandomLowRankCorrelationMatrix:
             dim=1
         ) + result.correlation_diag
         torch.testing.assert_close(implied_diag, torch.ones(50), atol=1e-5, rtol=0)
+
+    def test_logs_warning_when_rows_are_capped(self, caplog: pytest.LogCaptureFixture):
+        with caplog.at_level(logging.WARNING):
+            generate_random_low_rank_correlation_matrix(
+                num_features=50, rank=20, correlation_scale=10.0, seed=42
+            )
+
+        assert len(caplog.records) == 1
+        assert "rows were capped" in caplog.records[0].message
+        assert "50 / 50" in caplog.records[0].message
+        assert (
+            "reduce the rank or reduce the correlation_scale"
+            in caplog.records[0].message
+        )
+
+    def test_no_warning_when_no_rows_capped(self, caplog: pytest.LogCaptureFixture):
+        with caplog.at_level(logging.WARNING):
+            generate_random_low_rank_correlation_matrix(
+                num_features=50, rank=5, correlation_scale=0.05, seed=42
+            )
+
+        warning_records = [r for r in caplog.records if "rows were capped" in r.message]
+        assert len(warning_records) == 0

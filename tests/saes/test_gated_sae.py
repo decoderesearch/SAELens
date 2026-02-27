@@ -99,6 +99,7 @@ def test_GatedTrainingSAE_loss():
             coefficients={"l1": sae.cfg.l1_coefficient},
             dead_neuron_mask=None,
             n_training_steps=0,
+            is_logging_step=False,
         ),
     )
 
@@ -169,6 +170,7 @@ def test_GatedTrainingSAE_forward_pass():
             coefficients={"l1": sae.cfg.l1_coefficient},
             dead_neuron_mask=None,
             n_training_steps=0,
+            is_logging_step=False,
         ),
     )
 

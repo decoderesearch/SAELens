@@ -516,6 +516,7 @@ def test_all_loadable_saes(mock_get_pretrained_saes_directory: MagicMock):
             expected_var_explained={"sae1": 0.9, "sae2": 0.85},
             expected_l0={"sae1": 0.1, "sae2": 0.15},
             neuronpedia_id={},
+            norm_scaling_factor={},
             config_overrides=None,
         ),
         "release2": PretrainedSAELookup(
@@ -527,6 +528,7 @@ def test_all_loadable_saes(mock_get_pretrained_saes_directory: MagicMock):
             expected_var_explained={"sae3": 0.8},
             expected_l0={"sae3": 0.2},
             neuronpedia_id={},
+            norm_scaling_factor={},
             config_overrides=None,
         ),
     }

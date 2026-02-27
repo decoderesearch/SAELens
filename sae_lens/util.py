@@ -3,7 +3,7 @@ import tempfile
 from contextlib import contextmanager
 from dataclasses import asdict, fields, is_dataclass
 from pathlib import Path
-from typing import Sequence, TypeVar
+from typing import Any, Sequence, TypeVar
 
 import torch
 from transformers import PreTrainedTokenizerBase
@@ -56,6 +56,22 @@ def extract_layer_from_tlens_hook_name(hook_name: str) -> int | None:
 
 
 @contextmanager
+def temporary_seed(seed: int | None):
+    """Context manager that temporarily sets the global torch random seed.
+
+    If seed is None, this is a no-op. Otherwise the RNG state for CPU and all
+    CUDA devices is saved before and restored after the block, so only code
+    inside the ``with`` statement is affected by the seed.
+    """
+    if seed is None:
+        yield
+        return
+    with torch.random.fork_rng():
+        torch.manual_seed(seed)
+        yield
+
+
+@contextmanager
 def path_or_tmp_dir(path: str | Path | None):
     """Context manager that yields a concrete Path for path.
 
@@ -83,7 +99,8 @@ def get_special_token_ids(tokenizer: PreTrainedTokenizerBase) -> list[int]:
 
     # Get any additional special tokens from the tokenizer's special tokens map
     if hasattr(tokenizer, "special_tokens_map"):
-        for token in tokenizer.special_tokens_map.values():
+        token_map_values: Any = tokenizer.special_tokens_map.values()  # type: ignore
+        for token in token_map_values:
             if isinstance(token, str):
                 token_id = tokenizer.convert_tokens_to_ids(token)  # type: ignore
                 special_tokens.add(token_id)

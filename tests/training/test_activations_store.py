@@ -29,10 +29,47 @@ from tests.helpers import (
 )
 
 
-def tokenize_with_bos(model: HookedTransformer, text: str) -> list[int]:
+def hf_to_tokens(
+    model: HookedTransformer, text: str, prepend_bos: bool = False
+) -> list[int]:
+    """
+    Helper to tokenize text in a transformers v4/v5 invariant manner.
+
+    TransformerLens loads tokenizers with add_bos_token=True via
+    get_tokenizer_with_bos(). The behavior of this setting changed between
+    transformers v4 and v5:
+
+    - v4: tokenizer.encode("text") does NOT auto-prepend BOS, even when
+      add_bos_token=True is set at initialization. The attribute is stored but
+      not applied during encoding.
+    - v5: tokenizer.encode("text") DOES auto-prepend BOS when add_bos_token=True,
+      as the setting is now properly respected by the tokenizer backend.
+
+    TransformerLens detects this at runtime via:
+        tokenizer_prepends_bos = len(tokenizer.encode("")) > 0
+
+    Its to_tokens() method then handles BOS correctly in either version:
+    - If prepend_bos=True and tokenizer_prepends_bos=False (v4): manually prepends
+    - If prepend_bos=False and tokenizer_prepends_bos=True (v5): removes auto-BOS
+
+    This helper uses to_tokens() to ensure consistent tokenization across versions. Once v5 is the minimum supported
+    version or we decide to require v5 for testing, we can remove this helper and refactor tests to use
+    tokenizer.encode() again.
+
+    Args:
+        model: HookedTransformer model with tokenizer
+        text: Text to tokenize
+        prepend_bos: Whether to prepend BOS token
+
+    Returns:
+        List of token IDs
+    """
     assert model.tokenizer is not None
-    assert model.tokenizer.bos_token_id is not None
-    return [model.tokenizer.bos_token_id] + model.tokenizer.encode(text)  # type: ignore
+    return (
+        model.to_tokens(text, prepend_bos=prepend_bos, move_to_device=False)
+        .squeeze(0)
+        .tolist()
+    )
 
 
 # Define a new fixture for different configurations
@@ -216,7 +253,7 @@ def test_activations_store__get_batch_tokens__fills_the_context_separated_by_bos
     activation_store = ActivationsStore.from_config(
         ts_model, cfg, override_dataset=dataset
     )
-    encoded_text = tokenize_with_bos(ts_model, "hello world")
+    encoded_text = hf_to_tokens(ts_model, "hello world", prepend_bos=True)
     tokens = activation_store.get_batch_tokens()
     assert tokens.shape == (2, context_size)  # batch_size x context_size
     all_expected_tokens = (encoded_text * ceil(2 * context_size / len(encoded_text)))[
@@ -248,9 +285,12 @@ def test_activations_store__iterate_raw_dataset_tokens__tokenizes_each_example_i
     )
     iterator = activation_store._iterate_raw_dataset_tokens()
 
-    assert next(iterator).tolist() == tokenizer.encode("hello world1")
-    assert next(iterator).tolist() == tokenizer.encode("hello world2")
-    assert next(iterator).tolist() == tokenizer.encode("hello world3")
+    expected1 = hf_to_tokens(ts_model, "hello world1", prepend_bos=False)
+    expected2 = hf_to_tokens(ts_model, "hello world2", prepend_bos=False)
+    expected3 = hf_to_tokens(ts_model, "hello world3", prepend_bos=False)
+    assert next(iterator).tolist() == expected1
+    assert next(iterator).tolist() == expected2
+    assert next(iterator).tolist() == expected3
 
 
 def test_activations_store__iterate_raw_dataset_tokens__can_handle_long_examples(
@@ -318,13 +358,17 @@ def test_activations_store___iterate_tokenized_sequences__yields_concat_and_batc
     )
     iterator = activation_store._iterate_tokenized_sequences()
 
+    # Build expected using hf_to_tokens for v4/v5 consistency
+    tok1 = hf_to_tokens(ts_model, "hello world1", prepend_bos=False)
+    tok2 = hf_to_tokens(ts_model, "hello world2", prepend_bos=False)
+    tok3 = hf_to_tokens(ts_model, "hello world3", prepend_bos=False)
     expected = [
         tokenizer.bos_token_id,
-        *tokenizer.encode("hello world1"),
+        *tok1,
         tokenizer.bos_token_id,
-        *tokenizer.encode("hello world2"),
+        *tok2,
         tokenizer.bos_token_id,
-        *tokenizer.encode("hello world3"),
+        *tok3,
     ]
     assert next(iterator).tolist() == expected[:5]
 
@@ -752,13 +796,12 @@ def test_activations_store_get_batch_tokens_disable_concat_sequences(
     bos_token_id = tokenizer.bos_token_id
     assert bos_token_id is not None
 
-    expected_tokens_1 = [bos_token_id] + tokenizer.encode(
-        "hello world this is long enough"
-    )[: cfg.context_size - 1]
-    expected_tokens_2 = [bos_token_id] + tokenizer.encode(
-        "another longer sequence for testing"
-    )[: cfg.context_size - 1]
-
+    tok1 = hf_to_tokens(ts_model, "hello world this is long enough", prepend_bos=False)
+    tok2 = hf_to_tokens(
+        ts_model, "another longer sequence for testing", prepend_bos=False
+    )
+    expected_tokens_1 = [bos_token_id] + tok1[: cfg.context_size - 1]
+    expected_tokens_2 = [bos_token_id] + tok2[: cfg.context_size - 1]
     assert batch_tokens[0].tolist() == expected_tokens_1
     assert batch_tokens[1].tolist() == expected_tokens_2
 
@@ -794,13 +837,12 @@ def test_activations_store_get_batch_tokens_disable_concat_sequences_no_bos(
     assert tokenizer is not None
 
     # With prepend_bos=False, should NOT have BOS token
-    expected_tokens_1 = tokenizer.encode("hello world this is long enough")[
-        : cfg.context_size
-    ]
-    expected_tokens_2 = tokenizer.encode("another longer sequence for testing")[
-        : cfg.context_size
-    ]
-
+    tok1 = hf_to_tokens(ts_model, "hello world this is long enough", prepend_bos=False)
+    tok2 = hf_to_tokens(
+        ts_model, "another longer sequence for testing", prepend_bos=False
+    )
+    expected_tokens_1 = tok1[: cfg.context_size]
+    expected_tokens_2 = tok2[: cfg.context_size]
     assert batch_tokens[0].tolist() == expected_tokens_1
     assert batch_tokens[1].tolist() == expected_tokens_2
 

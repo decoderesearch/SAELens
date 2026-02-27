@@ -46,14 +46,20 @@ def orthogonalize_embeddings(
 
     optimizer = torch.optim.Adam([embeddings], lr=lr)  # type: ignore[list-item]
 
+    num_chunks = (num_vectors + chunk_size - 1) // chunk_size
+    total_iterations = num_steps * num_chunks
+
     pbar = tqdm(
-        range(num_steps), desc="Orthogonalizing vectors", disable=not show_progress
+        total=total_iterations,
+        desc="Orthogonalizing vectors",
+        disable=not show_progress,
     )
-    for _ in pbar:
+    step_loss: float | None = None
+    for step in range(num_steps):
         optimizer.zero_grad()
 
-        off_diag_loss = torch.tensor(0.0, device=embeddings.device)
-        diag_loss = torch.tensor(0.0, device=embeddings.device)
+        # Track total loss for display (detached, no gradient)
+        total_loss = 0.0
 
         for i in range(0, num_vectors, chunk_size):
             end_i = min(i + chunk_size, num_vectors)
@@ -70,16 +76,27 @@ def orthogonalize_embeddings(
             off_diag_mask = torch.ones_like(chunk_dots, dtype=torch.bool)
             off_diag_mask[row_indices, col_indices] = False
 
-            off_diag_loss = off_diag_loss + chunk_dots[off_diag_mask].pow(2).sum()
+            off_diag_loss = chunk_dots[off_diag_mask].pow(2).sum()
 
             # Diagonal loss: keep self-dot-products at 1
             diag_vals = chunk_dots[row_indices, col_indices]
-            diag_loss = diag_loss + (diag_vals - 1).pow(2).sum()
+            diag_loss = (diag_vals - 1).pow(2).sum()
 
-        loss = off_diag_loss + num_vectors * diag_loss
-        loss.backward()
+            # Compute chunk loss and backward immediately to free memory
+            chunk_loss = off_diag_loss + num_vectors * diag_loss
+            chunk_loss.backward()
+            total_loss += chunk_loss.item()
+
+            pbar.update(1)
+            desc = f"Orthogonalizing vectors: step {step + 1}/{num_steps}"
+            if step_loss is not None:
+                desc += f", loss {step_loss:.2e}"
+            pbar.set_description(desc)
+
         optimizer.step()
-        pbar.set_description(f"loss: {loss.item():.3f}")
+        step_loss = total_loss
+
+    pbar.close()
 
     with torch.no_grad():
         embeddings = embeddings / embeddings.norm(p=2, dim=1, keepdim=True).clamp(
@@ -129,9 +146,10 @@ class FeatureDictionary(nn.Module):
         self,
         num_features: int,
         hidden_dim: int,
-        bias: bool = False,
+        bias: bool | float = False,
         initializer: FeatureDictionaryInitializer | None = orthogonal_initializer(),
         device: str | torch.device = "cpu",
+        seed: int | None = None,
     ):
         """
         Create a new FeatureDictionary.
@@ -139,25 +157,37 @@ class FeatureDictionary(nn.Module):
         Args:
             num_features: Number of features in the dictionary
             hidden_dim: Dimensionality of the hidden space
-            bias: Whether to include a bias term in the embedding
+            bias: If False, no bias. If True, bias with norm 1.0. If float, bias with that norm.
             initializer: Initializer function to use. If None, the embeddings are initialized to random unit vectors. By default will orthogonalize embeddings.
             device: Device to use for the feature dictionary.
+            seed: Random seed for reproducible initialization.
         """
         super().__init__()
         self.num_features = num_features
         self.hidden_dim = hidden_dim
 
         # Initialize feature vectors as unit vectors
-        embeddings = torch.randn(num_features, hidden_dim, device=device)
+        generator = None
+        if seed is not None:
+            generator = torch.Generator(device=device).manual_seed(seed)
+        embeddings = torch.randn(
+            num_features, hidden_dim, device=device, generator=generator
+        )
         embeddings = embeddings / embeddings.norm(p=2, dim=1, keepdim=True).clamp(
             min=1e-8
         )
         self.feature_vectors = nn.Parameter(embeddings)
 
-        # Initialize bias (zeros if not using bias, but still a parameter for consistent API)
-        self.bias = nn.Parameter(
-            torch.zeros(hidden_dim, device=device), requires_grad=bias
-        )
+        # Initialize bias
+        if bias:
+            bias_norm = 1.0 if bias is True else float(bias)
+            bias_vec = torch.randn(hidden_dim, device=device, generator=generator)
+            bias_vec = bias_vec / bias_vec.norm().clamp(min=1e-8) * bias_norm
+            self.bias = nn.Parameter(bias_vec)
+        else:
+            self.bias = nn.Parameter(
+                torch.zeros(hidden_dim, device=device), requires_grad=False
+            )
 
         if initializer is not None:
             initializer(self)
