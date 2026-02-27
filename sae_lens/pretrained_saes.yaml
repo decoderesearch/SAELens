@@ -21841,6 +21841,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_12_width_16k_l0_medium
     path: resid_post/layer_12_width_16k_l0_medium
     l0: 52
+    neuronpedia: gemma-3-12b/12-gemmascope-2-res-16k
   - id: layer_12_width_16k_l0_small
     path: resid_post/layer_12_width_16k_l0_small
     l0: 17
@@ -21850,6 +21851,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_12_width_1m_l0_medium
     path: resid_post/layer_12_width_1m_l0_medium
     l0: 52
+    neuronpedia: gemma-3-12b/12-gemmascope-2-res-1m
   - id: layer_12_width_1m_l0_small
     path: resid_post/layer_12_width_1m_l0_small
     l0: 17
@@ -21859,6 +21861,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_12_width_262k_l0_medium
     path: resid_post/layer_12_width_262k_l0_medium
     l0: 52
+    neuronpedia: gemma-3-12b/12-gemmascope-2-res-262k
   - id: layer_12_width_262k_l0_medium_seed_1
     path: resid_post/layer_12_width_262k_l0_medium_seed_1
     l0: 52
@@ -21871,6 +21874,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_12_width_65k_l0_medium
     path: resid_post/layer_12_width_65k_l0_medium
     l0: 52
+    neuronpedia: gemma-3-12b/12-gemmascope-2-res-65k
   - id: layer_12_width_65k_l0_small
     path: resid_post/layer_12_width_65k_l0_small
     l0: 17
@@ -21880,6 +21884,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_24_width_16k_l0_medium
     path: resid_post/layer_24_width_16k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/24-gemmascope-2-res-16k
   - id: layer_24_width_16k_l0_small
     path: resid_post/layer_24_width_16k_l0_small
     l0: 20
@@ -21889,6 +21894,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_24_width_1m_l0_medium
     path: resid_post/layer_24_width_1m_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/24-gemmascope-2-res-1m
   - id: layer_24_width_1m_l0_small
     path: resid_post/layer_24_width_1m_l0_small
     l0: 20
@@ -21898,6 +21904,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_24_width_262k_l0_medium
     path: resid_post/layer_24_width_262k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/24-gemmascope-2-res-262k
   - id: layer_24_width_262k_l0_medium_seed_1
     path: resid_post/layer_24_width_262k_l0_medium_seed_1
     l0: 60
@@ -21910,6 +21917,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_24_width_65k_l0_medium
     path: resid_post/layer_24_width_65k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/24-gemmascope-2-res-65k
   - id: layer_24_width_65k_l0_small
     path: resid_post/layer_24_width_65k_l0_small
     l0: 20
@@ -21919,6 +21927,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_31_width_16k_l0_medium
     path: resid_post/layer_31_width_16k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/31-gemmascope-2-res-16k
   - id: layer_31_width_16k_l0_small
     path: resid_post/layer_31_width_16k_l0_small
     l0: 20
@@ -21928,6 +21937,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_31_width_1m_l0_medium
     path: resid_post/layer_31_width_1m_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/31-gemmascope-2-res-1m
   - id: layer_31_width_1m_l0_small
     path: resid_post/layer_31_width_1m_l0_small
     l0: 20
@@ -21937,6 +21947,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_31_width_262k_l0_medium
     path: resid_post/layer_31_width_262k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/31-gemmascope-2-res-262k
   - id: layer_31_width_262k_l0_medium_seed_1
     path: resid_post/layer_31_width_262k_l0_medium_seed_1
     l0: 60
@@ -21949,6 +21960,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_31_width_65k_l0_medium
     path: resid_post/layer_31_width_65k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/31-gemmascope-2-res-65k
   - id: layer_31_width_65k_l0_small
     path: resid_post/layer_31_width_65k_l0_small
     l0: 20
@@ -21958,6 +21970,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_41_width_16k_l0_medium
     path: resid_post/layer_41_width_16k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/41-gemmascope-2-res-16k
   - id: layer_41_width_16k_l0_small
     path: resid_post/layer_41_width_16k_l0_small
     l0: 20
@@ -21967,6 +21980,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_41_width_1m_l0_medium
     path: resid_post/layer_41_width_1m_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/41-gemmascope-2-res-1m
   - id: layer_41_width_1m_l0_small
     path: resid_post/layer_41_width_1m_l0_small
     l0: 20
@@ -21976,6 +21990,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_41_width_262k_l0_medium
     path: resid_post/layer_41_width_262k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/41-gemmascope-2-res-262k
   - id: layer_41_width_262k_l0_medium_seed_1
     path: resid_post/layer_41_width_262k_l0_medium_seed_1
     l0: 60
@@ -21988,6 +22003,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_41_width_65k_l0_medium
     path: resid_post/layer_41_width_65k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/41-gemmascope-2-res-65k
   - id: layer_41_width_65k_l0_small
     path: resid_post/layer_41_width_65k_l0_small
     l0: 20
