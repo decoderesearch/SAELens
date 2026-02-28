@@ -18,6 +18,11 @@ from sae_lens.load_model import load_model
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.util import str_to_dtype
 
+# Directory names for temporary operations during caching
+_TMP_SHARDS_DIR = ".tmp_shards"
+_SHUFFLED_DIR = ".shuffled"
+_BACKUP_SUFFIX = ".backup"
+
 
 def _mk_activations_store(
     model: HookedRootModule,
@@ -28,6 +33,7 @@ def _mk_activations_store(
     Internal method used in CacheActivationsRunner. Used to create a cached dataset
     from a ActivationsStore.
     """
+    device = torch.device("cpu")  # since we're saving to disk
     return ActivationsStore(
         model=model,
         dataset=override_dataset or cfg.dataset_path,
@@ -42,13 +48,15 @@ def _mk_activations_store(
         train_batch_size_tokens=-1,
         prepend_bos=cfg.prepend_bos,
         normalize_activations="none",
-        device=torch.device("cpu"),  # since we're saving to disk
+        device=device,
         dtype=cfg.dtype,
         cached_activations_path=None,
         model_kwargs=cfg.model_kwargs,
         autocast_lm=cfg.autocast_lm,
         dataset_trust_remote_code=cfg.dataset_trust_remote_code,
         seqpos_slice=cfg.seqpos_slice,
+        disable_concat_sequences=cfg.disable_concat_sequences,
+        sequence_separator_token=cfg.sequence_separator_token,
     )
 
 
@@ -176,10 +184,10 @@ class CacheActivationsRunner:
                 f"output_dir is not an existing directory: {output_dir}"
             )
 
-        other_items = [p for p in output_dir.iterdir() if p.name != ".tmp_shards"]
+        other_items = [p for p in output_dir.iterdir() if p.name != _TMP_SHARDS_DIR]
         if other_items:
             raise FileExistsError(
-                f"output_dir must be empty (besides .tmp_shards). Found: {other_items}"
+                f"output_dir must be empty (besides {_TMP_SHARDS_DIR}). Found: {other_items}"
             )
 
         if not (source_dir / first_shard_dir_name).exists():
@@ -221,7 +229,7 @@ class CacheActivationsRunner:
             "_split": None,
         }
 
-        # fingerprint is generated from dataset.__getstate__ (not includeing _fingerprint)
+        # fingerprint is generated from dataset.__getstate__ (not including _fingerprint)
         with open(output_dir / "state.json", "w") as f:
             json.dump(new_state, f, indent=2)
 
@@ -254,7 +262,7 @@ class CacheActivationsRunner:
                 f"Activations directory ({final_cached_activation_path}) is not empty. Please delete it or specify a different path. Exiting the script to prevent accidental deletion of files."
             )
 
-        tmp_cached_activation_path = final_cached_activation_path / ".tmp_shards/"
+        tmp_cached_activation_path = final_cached_activation_path / _TMP_SHARDS_DIR
         tmp_cached_activation_path.mkdir(exist_ok=False, parents=False)
 
         ### Create temporary sharded datasets
@@ -291,8 +299,93 @@ class CacheActivationsRunner:
         )
 
         if self.cfg.shuffle:
-            logger.info("Shuffling...")
-            dataset = dataset.shuffle(seed=self.cfg.seed)
+            # shuffle_across_sequences: shuffle individual activations globally,
+            # treating the entire dataset as a flat array of (total_tokens, d_in).
+            # This breaks up sequential patterns within sequences while keeping
+            # token_ids paired with their corresponding activations.
+            if self.cfg.shuffle_across_sequences:
+                logger.info("Shuffling across sequences...")
+                dataset.set_format("torch")
+                hook_name = self.cfg.hook_name
+
+                # Load all data and flatten
+                # With torch format, [:] returns tensors directly
+                all_data = dataset[:]
+                acts = all_data[hook_name]  # (n_seq, context_size, d_in)
+                token_ids = all_data["token_ids"]  # (n_seq, context_size)
+                n_seq = acts.shape[0]
+
+                acts_flat = einops.rearrange(
+                    acts, "n_seq context_size d_in -> (n_seq context_size) d_in"
+                )
+                token_ids_flat = einops.rearrange(
+                    token_ids, "n_seq context_size -> (n_seq context_size)"
+                )
+
+                # Shuffle globally with the same permutation for both
+                generator = torch.Generator().manual_seed(self.cfg.seed)
+                perm = torch.randperm(acts_flat.shape[0], generator=generator)
+                acts_flat = acts_flat[perm]
+                token_ids_flat = token_ids_flat[perm]
+
+                # Reshape back to sequences
+                acts_shuffled = einops.rearrange(
+                    acts_flat,
+                    "(n_seq context_size) d_in -> n_seq context_size d_in",
+                    n_seq=n_seq,
+                    context_size=self.context_size,
+                )
+                token_ids_shuffled = einops.rearrange(
+                    token_ids_flat,
+                    "(n_seq context_size) -> n_seq context_size",
+                    n_seq=n_seq,
+                    context_size=self.context_size,
+                )
+
+                # Create new dataset from shuffled data
+                dataset = Dataset.from_dict(
+                    {
+                        hook_name: acts_shuffled,
+                        "token_ids": token_ids_shuffled.to(torch.int32),
+                    },
+                    features=self.features,
+                )
+            else:
+                # Sequence-level shuffle only: shuffle the order of sequences (rows)
+                # Skip if shuffle_across_sequences was used since global shuffle is stronger
+                logger.info("Shuffling sequences...")
+                dataset = dataset.shuffle(seed=self.cfg.seed)
+
+            # Save the shuffled dataset back to disk using atomic rename with backup
+            # to prevent data loss if the process crashes mid-operation.
+            # Note: shuffled_path must be a sibling (not child) of final_cached_activation_path
+            # so that renaming the parent doesn't invalidate the shuffled path.
+            shuffled_path = final_cached_activation_path.parent / (
+                final_cached_activation_path.name + _SHUFFLED_DIR
+            )
+            backup_path = final_cached_activation_path.parent / (
+                final_cached_activation_path.name + _BACKUP_SUFFIX
+            )
+
+            dataset.save_to_disk(str(shuffled_path))
+
+            # Atomic swap: rename original to backup, then shuffled to original
+            try:
+                final_cached_activation_path.rename(backup_path)
+                shuffled_path.rename(final_cached_activation_path)
+                # Success - remove backup
+                shutil.rmtree(backup_path)
+            except Exception:
+                # Rollback: restore from backup if it exists
+                if backup_path.exists() and not final_cached_activation_path.exists():
+                    backup_path.rename(final_cached_activation_path)
+                # Clean up shuffled path if it still exists
+                if shuffled_path.exists():
+                    shutil.rmtree(shuffled_path)
+                raise
+
+            # Reload the dataset from the new location
+            dataset = Dataset.load_from_disk(str(final_cached_activation_path))
 
         if self.cfg.hf_repo_id:
             logger.info("Pushing to Huggingface Hub...")
@@ -330,6 +423,7 @@ class CacheActivationsRunner:
     ) -> Dataset:
         hook_names = [self.cfg.hook_name]
         acts, token_ids = buffer
+
         acts = einops.rearrange(
             acts,
             "(bs context_size) d_in -> bs context_size d_in",
