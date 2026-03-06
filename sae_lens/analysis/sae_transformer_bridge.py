@@ -88,6 +88,32 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         # aliases values are always strings, but type checker doesn't know this
         return resolved if isinstance(resolved, str) else hook_name
 
+    def get_sae_hook_name(
+        self, sae: SAE[Any], internal: str = "hook_sae_acts_post"
+    ) -> str:
+        """Get the full resolved hook name for an SAE's internal hook point.
+
+        Since SAETransformerBridge resolves alias names (e.g.,
+        ``blocks.0.hook_resid_pre``) to canonical names (e.g.,
+        ``blocks.0.hook_in``) during :meth:`add_sae`, the actual hook
+        registration path may differ from ``sae.cfg.metadata.hook_name``.
+
+        This method returns the resolved compound name as it appears in
+        :attr:`hook_dict` and activation caches (e.g.,
+        ``blocks.0.hook_in.hook_sae_acts_post``).
+
+        Args:
+            sae: The SAE whose hook name to resolve.
+            internal: The SAE internal hook suffix
+                (default: ``hook_sae_acts_post``).
+
+        Returns:
+            The fully-resolved compound hook name.
+        """
+        base = sae.cfg.metadata.hook_name
+        resolved = self._resolve_hook_name(base)
+        return f"{resolved}.{internal}"
+
     def add_sae(self, sae: SAE[Any], use_error_term: bool | None = None) -> None:
         """Attaches an SAE or Transcoder to the model.
 
@@ -128,6 +154,12 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         if not output_hook_exists:
             logger.warning(f"No hook found for output {output_hook_alias}. Skipping.")
             return
+
+        # Bridge hook aliases provide already-flattened (batch, pos, d_model) tensors,
+        # unlike HookedTransformer's hook_z which provides (batch, pos, n_heads, d_head).
+        # Disable hook_z reshaping so the SAE doesn't incorrectly merge pos and d_model.
+        if getattr(sae, "hook_z_reshaping_mode", False):
+            sae.turn_off_forward_pass_hook_z_reshaping()
 
         # Always use wrapper - it handles both SAEs and transcoders uniformly
         # If use_error_term not specified, respect SAE's existing setting
@@ -197,6 +229,13 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         for hook_name, hook in wrapper.named_modules():
             if isinstance(hook, HookPoint) and hook_name:
                 self._hook_registry.pop(f"{output_hook}.{hook_name}", None)
+
+        # Restore hook_z reshaping if it was disabled for Bridge compatibility
+        sae = wrapper.sae
+        if sae.cfg.reshape_activations == "hook_z" and not getattr(
+            sae, "hook_z_reshaping_mode", True
+        ):
+            sae.turn_on_forward_pass_hook_z_reshaping()
 
         # Reset output hook location
         new_hook = HookPoint()
@@ -391,6 +430,10 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
                 # Include SAE's internal hooks with full path names
                 for sae_hook_name, sae_hook in hook_or_sae.sae.hook_dict.items():
                     full_name = f"{name}.{sae_hook_name}"
+                    # Set the HookPoint's name to the full compound path so that
+                    # build_alias_to_canonical_map sees key == name (no spurious alias)
+                    # and run_with_hooks can find SAE hooks by their compound names.
+                    sae_hook.name = full_name
                     hooks[full_name] = sae_hook
             else:
                 hooks[name] = hook_or_sae
