@@ -1012,7 +1012,8 @@ def test_reset_sae_restores_hook_z_reshaping_on_sae(
     actual_hook = bridge_model._resolve_hook_name(hook_alias)
     wrapper = _SAEWrapper(sae, use_error_term=False)
     set_deep_attr(bridge_model, actual_hook, wrapper)
-    bridge_model._hook_registry[actual_hook] = wrapper
+
+    bridge_model._hook_registry[actual_hook] = wrapper  # type: ignore[assignment]
     bridge_model._acts_to_saes[hook_alias] = wrapper
 
     bridge_model._reset_sae(hook_alias)
