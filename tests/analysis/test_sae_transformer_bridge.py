@@ -20,6 +20,7 @@ from sae_lens.analysis.hooked_sae_transformer import (
     HookedSAETransformer,
     _SAEWrapper,
     get_deep_attr,
+    set_deep_attr,
 )
 from sae_lens.analysis.sae_transformer_bridge import SAETransformerBridge
 from sae_lens.saes.sae import SAEMetadata
@@ -874,3 +875,146 @@ def test_error_term_unchanged_when_latents_ablated(
 
     # Verify both implementations match
     assert_close(hooked_error_ablated, bridge_error_ablated, atol=1e-5)
+
+
+# =============================================================================
+# get_sae_hook_name() tests
+# =============================================================================
+
+
+def test_get_sae_hook_name_resolves_alias_to_canonical(
+    bridge_model: SAETransformerBridge,
+) -> None:
+    """get_sae_hook_name() resolves an SAE alias to the canonical Bridge path."""
+    # blocks.0.hook_mlp_out is an alias; TransformerBridge resolves it to
+    # blocks.0.mlp.hook_out.  A caller building a cache-lookup key from
+    # sae.cfg.metadata.hook_name would get the wrong (alias-based) key.
+    sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
+    result = bridge_model.get_sae_hook_name(sae)
+    assert result == "blocks.0.mlp.hook_out.hook_sae_acts_post"
+
+
+def test_get_sae_hook_name_with_non_alias_hook(
+    bridge_model: SAETransformerBridge,
+) -> None:
+    """A canonical (non-aliased) hook name is returned unchanged."""
+    # blocks.0.mlp.hook_out is already canonical — resolves to itself.
+    sae = make_sae(bridge_model.cfg.d_model, "blocks.0.mlp.hook_out")
+    result = bridge_model.get_sae_hook_name(sae)
+    assert result == "blocks.0.mlp.hook_out.hook_sae_acts_post"
+
+
+def test_get_sae_hook_name_with_custom_internal_hook(
+    bridge_model: SAETransformerBridge,
+) -> None:
+    """get_sae_hook_name() respects a non-default internal hook suffix."""
+    sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
+    assert bridge_model.get_sae_hook_name(sae, internal="hook_sae_input") == (
+        "blocks.0.mlp.hook_out.hook_sae_input"
+    )
+    assert bridge_model.get_sae_hook_name(sae, internal="hook_sae_output") == (
+        "blocks.0.mlp.hook_out.hook_sae_output"
+    )
+
+
+def test_get_sae_hook_name_matches_actual_cache_key(
+    bridge_model: SAETransformerBridge,
+) -> None:
+    """get_sae_hook_name() must return a key that actually exists in the activation cache.
+
+    get_sae_hook_name() must return the canonical path that Bridge actually registers.
+    """
+    sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
+    resolved_name = bridge_model.get_sae_hook_name(sae)
+
+    bridge_model.add_sae(sae)
+    _, cache = bridge_model.run_with_cache(PROMPT)
+    bridge_model.reset_saes()
+
+    # The resolved key must be present in the cache.
+    assert resolved_name in cache, f"Expected '{resolved_name}' in cache keys"
+    # The naive alias-based key must be absent.
+    alias_based = f"{sae.cfg.metadata.hook_name}.hook_sae_acts_post"
+    assert (
+        alias_based not in cache
+    ), f"Alias key '{alias_based}' should not appear in Bridge cache"
+
+
+# =============================================================================
+# hook_z reshaping compatibility tests
+# =============================================================================
+
+
+def test_add_sae_disables_hook_z_reshaping_for_bridge_context(
+    bridge_model: SAETransformerBridge,
+) -> None:
+    """Bridge's add_sae() must turn off hook_z reshaping for any attached SAE.
+
+    TransformerBridge hooks deliver already-flattened ``(batch, pos, d_model)``
+    tensors.  If hook_z reshaping were left enabled the SAE's reshape_fn_in
+    would attempt ``einops.rearrange(..., 'n_heads d_head')`` on the wrong
+    tensor shape, causing a runtime error.
+
+    Fails without the hook_z-disable block in add_sae(); passes once it is
+    present.
+    """
+    sae = make_sae(bridge_model.cfg.d_model, "blocks.0.hook_mlp_out")
+    # Directly enable reshaping to simulate attaching a hook_z SAE.
+    # We bypass turn_on_forward_pass_hook_z_reshaping()'s name-validation because
+    # the Bridge hook used here is not a true _z endpoint; we are testing only
+    # that add_sae() unconditionally disables the mode when it finds it set.
+    sae.hook_z_reshaping_mode = True
+    assert sae.hook_z_reshaping_mode is True  # pre-condition
+
+    bridge_model.add_sae(sae)
+
+    assert sae.hook_z_reshaping_mode is False  # Bridge must have disabled it
+    bridge_model.reset_saes()
+
+
+def test_reset_sae_restores_hook_z_reshaping_on_sae(
+    bridge_model: SAETransformerBridge,
+) -> None:
+    """Bridge's _reset_sae() restores hook_z reshaping when the SAE config requests it.
+
+    A hook_z SAE that was disabled by add_sae() should be usable again with a
+    HookedSAETransformer after being detached from the Bridge.
+
+    Fails without the hook_z-restore block in _reset_sae(); passes once it is
+    present.
+    """
+    # Create a proper hook_z SAE.  The hook_name must end with "_z" so that
+    # turn_on_forward_pass_hook_z_reshaping() passes its name validation.
+    hook_z_cfg = StandardSAEConfig(
+        d_in=bridge_model.cfg.d_model,
+        d_sae=bridge_model.cfg.d_model * 2,
+        dtype="float32",
+        device="cpu",
+        reshape_activations="hook_z",
+        metadata=SAEMetadata(
+            model_name=MODEL,
+            hook_name="blocks.0.attn.hook_z",
+            hook_head_index=None,
+            prepend_bos=True,
+        ),
+    )
+    sae = StandardSAE(hook_z_cfg)
+    sae.initialize_weights()
+    assert sae.hook_z_reshaping_mode is True  # enabled by __init__ for hook_z config
+
+    # Simulate the disable that Bridge.add_sae() performs.
+    sae.turn_off_forward_pass_hook_z_reshaping()
+    assert sae.hook_z_reshaping_mode is False  # pre-condition for the restore test
+
+    # Inject the SAE into bridge state using a valid bridge hook alias so that
+    # _reset_sae()'s set_deep_attr and _hook_registry updates operate on a real path.
+    hook_alias = "blocks.0.hook_mlp_out"
+    actual_hook = bridge_model._resolve_hook_name(hook_alias)
+    wrapper = _SAEWrapper(sae, use_error_term=False)
+    set_deep_attr(bridge_model, actual_hook, wrapper)
+    bridge_model._hook_registry[actual_hook] = wrapper
+    bridge_model._acts_to_saes[hook_alias] = wrapper
+
+    bridge_model._reset_sae(hook_alias)
+
+    assert sae.hook_z_reshaping_mode is True  # must be restored by _reset_sae()

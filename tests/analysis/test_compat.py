@@ -34,3 +34,9 @@ def test_has_transformer_bridge_returns_true_for_v3():
 def test_has_transformer_bridge_returns_false_for_v2():
     with patch("importlib.metadata.version", return_value="2.7.1"):
         assert has_transformer_bridge() is False
+
+
+def test_has_transformer_bridge_returns_true_for_source_install():
+    """transformer-lens installed from source emits version '0.0.0'; must be treated as v3+."""
+    with patch("importlib.metadata.version", return_value="0.0.0"):
+        assert has_transformer_bridge() is True
