@@ -97,6 +97,8 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         ``blocks.0.hook_resid_pre``) to canonical names (e.g.,
         ``blocks.0.hook_in``) during :meth:`add_sae`, the actual hook
         registration path may differ from ``sae.cfg.metadata.hook_name``.
+        For transcoders, the internal hooks are registered at the resolved
+        output hook (``hook_name_out``) rather than the input hook.
 
         This method returns the resolved compound name as it appears in
         :attr:`hook_dict` and activation caches (e.g.,
@@ -110,7 +112,7 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         Returns:
             The fully-resolved compound hook name.
         """
-        base = sae.cfg.metadata.hook_name
+        base = sae.cfg.metadata.hook_name_out or sae.cfg.metadata.hook_name
         resolved = self._resolve_hook_name(base)
         return f"{resolved}.{internal}"
 
@@ -155,11 +157,13 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
             logger.warning(f"No hook found for output {output_hook_alias}. Skipping.")
             return
 
+        bridge_disabled_hook_z_reshaping = False
         # Bridge hook aliases provide already-flattened (batch, pos, d_model) tensors,
         # unlike HookedTransformer's hook_z which provides (batch, pos, n_heads, d_head).
         # Disable hook_z reshaping so the SAE doesn't incorrectly merge pos and d_model.
         if getattr(sae, "hook_z_reshaping_mode", False):
             sae.turn_off_forward_pass_hook_z_reshaping()
+            bridge_disabled_hook_z_reshaping = True
 
         # Always use wrapper - it handles both SAEs and transcoders uniformly
         # If use_error_term not specified, respect SAE's existing setting
@@ -167,6 +171,7 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
             use_error_term if use_error_term is not None else sae.use_error_term
         )
         wrapper = _SAEWrapper(sae, use_error_term=effective_use_error_term)
+        wrapper.bridge_disabled_hook_z_reshaping = bridge_disabled_hook_z_reshaping  # type: ignore[reportArgumentType]
 
         # For transcoders (input != output), capture input at input hook
         if input_hook_alias != output_hook_alias:
@@ -232,8 +237,10 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
 
         # Restore hook_z reshaping if it was disabled for Bridge compatibility
         sae = wrapper.sae
-        if sae.cfg.reshape_activations == "hook_z" and not getattr(
-            sae, "hook_z_reshaping_mode", True
+        if (
+            getattr(wrapper, "bridge_disabled_hook_z_reshaping", False)
+            and sae.cfg.reshape_activations == "hook_z"
+            and not getattr(sae, "hook_z_reshaping_mode", True)
         ):
             sae.turn_on_forward_pass_hook_z_reshaping()
 

@@ -12,7 +12,7 @@ def get_transformer_lens_version() -> tuple[int, int, int]:
 
 def has_transformer_bridge() -> bool:
     """Check if TransformerBridge is available (v3+)."""
-    # accommodate when transformerlens is installed from source and version is set to 0.0.0
+    # accommodate when transformer-lens is installed from source and version is set to 0.0.0
     if parse_version(importlib.metadata.version("transformer-lens")) == parse_version(
         "0.0.0"
     ):

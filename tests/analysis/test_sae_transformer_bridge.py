@@ -940,6 +940,23 @@ def test_get_sae_hook_name_matches_actual_cache_key(
     ), f"Alias key '{alias_based}' should not appear in Bridge cache"
 
 
+def test_get_sae_hook_name_uses_transcoder_output_hook(
+    bridge_model: SAETransformerBridge,
+) -> None:
+    """Transcoders register internal hooks at the output hook, not the input hook."""
+    transcoder = make_transcoder(bridge_model.cfg.d_model)
+
+    resolved_name = bridge_model.get_sae_hook_name(transcoder)
+
+    bridge_model.add_sae(transcoder)
+    _, cache = bridge_model.run_with_cache(PROMPT)
+    bridge_model.reset_saes()
+
+    assert resolved_name == "blocks.0.mlp.hook_out.hook_sae_acts_post"
+    assert resolved_name in cache
+    assert "blocks.0.mlp.hook_in.hook_sae_acts_post" not in cache
+
+
 # =============================================================================
 # hook_z reshaping compatibility tests
 # =============================================================================
@@ -1011,6 +1028,7 @@ def test_reset_sae_restores_hook_z_reshaping_on_sae(
     hook_alias = "blocks.0.hook_mlp_out"
     actual_hook = bridge_model._resolve_hook_name(hook_alias)
     wrapper = _SAEWrapper(sae, use_error_term=False)
+    wrapper.bridge_disabled_hook_z_reshaping = True  # type: ignore[reportArgumentType]
     set_deep_attr(bridge_model, actual_hook, wrapper)
 
     bridge_model._hook_registry[actual_hook] = wrapper  # type: ignore[assignment]
@@ -1019,3 +1037,38 @@ def test_reset_sae_restores_hook_z_reshaping_on_sae(
     bridge_model._reset_sae(hook_alias)
 
     assert sae.hook_z_reshaping_mode is True  # must be restored by _reset_sae()
+
+
+def test_reset_sae_preserves_user_disabled_hook_z_reshaping(
+    bridge_model: SAETransformerBridge,
+) -> None:
+    """Bridge reset should not re-enable hook_z reshaping if Bridge did not disable it."""
+    hook_z_cfg = StandardSAEConfig(
+        d_in=bridge_model.cfg.d_model,
+        d_sae=bridge_model.cfg.d_model * 2,
+        dtype="float32",
+        device="cpu",
+        reshape_activations="hook_z",
+        metadata=SAEMetadata(
+            model_name=MODEL,
+            hook_name="blocks.0.attn.hook_z",
+            hook_head_index=None,
+            prepend_bos=True,
+        ),
+    )
+    sae = StandardSAE(hook_z_cfg)
+    sae.initialize_weights()
+    sae.turn_off_forward_pass_hook_z_reshaping()
+
+    hook_alias = "blocks.0.hook_mlp_out"
+    actual_hook = bridge_model._resolve_hook_name(hook_alias)
+    wrapper = _SAEWrapper(sae, use_error_term=False)
+    wrapper.bridge_disabled_hook_z_reshaping = False  # type: ignore[reportArgumentType]
+    set_deep_attr(bridge_model, actual_hook, wrapper)
+
+    bridge_model._hook_registry[actual_hook] = wrapper  # type: ignore[assignment]
+    bridge_model._acts_to_saes[hook_alias] = wrapper
+
+    bridge_model._reset_sae(hook_alias)
+
+    assert sae.hook_z_reshaping_mode is False
