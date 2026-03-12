@@ -7779,6 +7779,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_0_width_262k_l0_small_affine
     path: transcoder_all/layer_0_width_262k_l0_small_affine
     l0: 10
+    neuronpedia: gemma-3-27b-it/0-gemmascope-2-transcoder-262k
   - id: layer_10_width_16k_l0_big
     path: transcoder_all/layer_10_width_16k_l0_big
     l0: 89
@@ -7803,6 +7804,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_10_width_262k_l0_small_affine
     path: transcoder_all/layer_10_width_262k_l0_small_affine
     l0: 14
+    neuronpedia: gemma-3-27b-it/10-gemmascope-2-transcoder-262k
   - id: layer_11_width_16k_l0_big
     path: transcoder_all/layer_11_width_16k_l0_big
     l0: 91
@@ -7827,6 +7829,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_11_width_262k_l0_small_affine
     path: transcoder_all/layer_11_width_262k_l0_small_affine
     l0: 15
+    neuronpedia: gemma-3-27b-it/11-gemmascope-2-transcoder-262k
   - id: layer_12_width_16k_l0_big
     path: transcoder_all/layer_12_width_16k_l0_big
     l0: 94
@@ -7851,6 +7854,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_12_width_262k_l0_small_affine
     path: transcoder_all/layer_12_width_262k_l0_small_affine
     l0: 15
+    neuronpedia: gemma-3-27b-it/12-gemmascope-2-transcoder-262k
   - id: layer_13_width_16k_l0_big
     path: transcoder_all/layer_13_width_16k_l0_big
     l0: 97
@@ -7875,6 +7879,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_13_width_262k_l0_small_affine
     path: transcoder_all/layer_13_width_262k_l0_small_affine
     l0: 16
+    neuronpedia: gemma-3-27b-it/13-gemmascope-2-transcoder-262k
   - id: layer_14_width_16k_l0_big
     path: transcoder_all/layer_14_width_16k_l0_big
     l0: 100
@@ -7899,6 +7904,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_14_width_262k_l0_small_affine
     path: transcoder_all/layer_14_width_262k_l0_small_affine
     l0: 16
+    neuronpedia: gemma-3-27b-it/14-gemmascope-2-transcoder-262k
   - id: layer_15_width_16k_l0_big
     path: transcoder_all/layer_15_width_16k_l0_big
     l0: 103
@@ -7923,6 +7929,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_15_width_262k_l0_small_affine
     path: transcoder_all/layer_15_width_262k_l0_small_affine
     l0: 17
+    neuronpedia: gemma-3-27b-it/15-gemmascope-2-transcoder-262k
   - id: layer_16_width_16k_l0_big
     path: transcoder_all/layer_16_width_16k_l0_big
     l0: 106
@@ -7947,6 +7954,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_16_width_262k_l0_small_affine
     path: transcoder_all/layer_16_width_262k_l0_small_affine
     l0: 17
+    neuronpedia: gemma-3-27b-it/16-gemmascope-2-transcoder-262k
   - id: layer_17_width_16k_l0_big
     path: transcoder_all/layer_17_width_16k_l0_big
     l0: 109
@@ -7971,6 +7979,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_17_width_262k_l0_small_affine
     path: transcoder_all/layer_17_width_262k_l0_small_affine
     l0: 18
+    neuronpedia: gemma-3-27b-it/17-gemmascope-2-transcoder-262k
   - id: layer_18_width_16k_l0_big
     path: transcoder_all/layer_18_width_16k_l0_big
     l0: 112
@@ -7995,6 +8004,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_18_width_262k_l0_small_affine
     path: transcoder_all/layer_18_width_262k_l0_small_affine
     l0: 18
+    neuronpedia: gemma-3-27b-it/18-gemmascope-2-transcoder-262k
   - id: layer_19_width_16k_l0_big
     path: transcoder_all/layer_19_width_16k_l0_big
     l0: 115
@@ -8019,6 +8029,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_19_width_262k_l0_small_affine
     path: transcoder_all/layer_19_width_262k_l0_small_affine
     l0: 19
+    neuronpedia: gemma-3-27b-it/19-gemmascope-2-transcoder-262k
   - id: layer_1_width_16k_l0_big
     path: transcoder_all/layer_1_width_16k_l0_big
     l0: 62
@@ -8043,6 +8054,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_1_width_262k_l0_small_affine
     path: transcoder_all/layer_1_width_262k_l0_small_affine
     l0: 10
+    neuronpedia: gemma-3-27b-it/1-gemmascope-2-transcoder-262k
   - id: layer_20_width_16k_l0_big
     path: transcoder_all/layer_20_width_16k_l0_big
     l0: 118
@@ -8067,6 +8079,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_20_width_262k_l0_small_affine
     path: transcoder_all/layer_20_width_262k_l0_small_affine
     l0: 19
+    neuronpedia: gemma-3-27b-it/20-gemmascope-2-transcoder-262k
   - id: layer_21_width_16k_l0_big
     path: transcoder_all/layer_21_width_16k_l0_big
     l0: 120
@@ -8091,6 +8104,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_21_width_262k_l0_small_affine
     path: transcoder_all/layer_21_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/21-gemmascope-2-transcoder-262k
   - id: layer_22_width_16k_l0_big
     path: transcoder_all/layer_22_width_16k_l0_big
     l0: 120
@@ -8115,6 +8129,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_22_width_262k_l0_small_affine
     path: transcoder_all/layer_22_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/22-gemmascope-2-transcoder-262k
   - id: layer_23_width_16k_l0_big
     path: transcoder_all/layer_23_width_16k_l0_big
     l0: 120
@@ -8139,6 +8154,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_23_width_262k_l0_small_affine
     path: transcoder_all/layer_23_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/23-gemmascope-2-transcoder-262k
   - id: layer_24_width_16k_l0_big
     path: transcoder_all/layer_24_width_16k_l0_big
     l0: 120
@@ -8163,6 +8179,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_24_width_262k_l0_small_affine
     path: transcoder_all/layer_24_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/24-gemmascope-2-transcoder-262k
   - id: layer_25_width_16k_l0_big
     path: transcoder_all/layer_25_width_16k_l0_big
     l0: 120
@@ -8187,6 +8204,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_25_width_262k_l0_small_affine
     path: transcoder_all/layer_25_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/25-gemmascope-2-transcoder-262k
   - id: layer_26_width_16k_l0_big
     path: transcoder_all/layer_26_width_16k_l0_big
     l0: 120
@@ -8211,6 +8229,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_26_width_262k_l0_small_affine
     path: transcoder_all/layer_26_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/26-gemmascope-2-transcoder-262k
   - id: layer_27_width_16k_l0_big
     path: transcoder_all/layer_27_width_16k_l0_big
     l0: 120
@@ -8235,6 +8254,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_27_width_262k_l0_small_affine
     path: transcoder_all/layer_27_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/27-gemmascope-2-transcoder-262k
   - id: layer_28_width_16k_l0_big
     path: transcoder_all/layer_28_width_16k_l0_big
     l0: 120
@@ -8259,6 +8279,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_28_width_262k_l0_small_affine
     path: transcoder_all/layer_28_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/28-gemmascope-2-transcoder-262k
   - id: layer_29_width_16k_l0_big
     path: transcoder_all/layer_29_width_16k_l0_big
     l0: 120
@@ -8283,6 +8304,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_29_width_262k_l0_small_affine
     path: transcoder_all/layer_29_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/29-gemmascope-2-transcoder-262k
   - id: layer_2_width_16k_l0_big
     path: transcoder_all/layer_2_width_16k_l0_big
     l0: 65
@@ -8307,6 +8329,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_2_width_262k_l0_small_affine
     path: transcoder_all/layer_2_width_262k_l0_small_affine
     l0: 10
+    neuronpedia: gemma-3-27b-it/2-gemmascope-2-transcoder-262k
   - id: layer_30_width_16k_l0_big
     path: transcoder_all/layer_30_width_16k_l0_big
     l0: 120
@@ -8331,6 +8354,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_30_width_262k_l0_small_affine
     path: transcoder_all/layer_30_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/30-gemmascope-2-transcoder-262k
   - id: layer_31_width_16k_l0_big
     path: transcoder_all/layer_31_width_16k_l0_big
     l0: 120
@@ -8355,6 +8379,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_31_width_262k_l0_small_affine
     path: transcoder_all/layer_31_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/31-gemmascope-2-transcoder-262k
   - id: layer_32_width_16k_l0_big
     path: transcoder_all/layer_32_width_16k_l0_big
     l0: 120
@@ -8379,6 +8404,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_32_width_262k_l0_small_affine
     path: transcoder_all/layer_32_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/32-gemmascope-2-transcoder-262k
   - id: layer_33_width_16k_l0_big
     path: transcoder_all/layer_33_width_16k_l0_big
     l0: 120
@@ -8403,6 +8429,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_33_width_262k_l0_small_affine
     path: transcoder_all/layer_33_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/33-gemmascope-2-transcoder-262k
   - id: layer_34_width_16k_l0_big
     path: transcoder_all/layer_34_width_16k_l0_big
     l0: 120
@@ -8427,6 +8454,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_34_width_262k_l0_small_affine
     path: transcoder_all/layer_34_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/34-gemmascope-2-transcoder-262k
   - id: layer_35_width_16k_l0_big
     path: transcoder_all/layer_35_width_16k_l0_big
     l0: 120
@@ -8451,6 +8479,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_35_width_262k_l0_small_affine
     path: transcoder_all/layer_35_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/35-gemmascope-2-transcoder-262k
   - id: layer_36_width_16k_l0_big
     path: transcoder_all/layer_36_width_16k_l0_big
     l0: 120
@@ -8475,6 +8504,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_36_width_262k_l0_small_affine
     path: transcoder_all/layer_36_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/36-gemmascope-2-transcoder-262k
   - id: layer_37_width_16k_l0_big
     path: transcoder_all/layer_37_width_16k_l0_big
     l0: 120
@@ -8499,6 +8529,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_37_width_262k_l0_small_affine
     path: transcoder_all/layer_37_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/37-gemmascope-2-transcoder-262k
   - id: layer_38_width_16k_l0_big
     path: transcoder_all/layer_38_width_16k_l0_big
     l0: 120
@@ -8523,6 +8554,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_38_width_262k_l0_small_affine
     path: transcoder_all/layer_38_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/38-gemmascope-2-transcoder-262k
   - id: layer_39_width_16k_l0_big
     path: transcoder_all/layer_39_width_16k_l0_big
     l0: 120
@@ -8547,6 +8579,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_39_width_262k_l0_small_affine
     path: transcoder_all/layer_39_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/39-gemmascope-2-transcoder-262k
   - id: layer_3_width_16k_l0_big
     path: transcoder_all/layer_3_width_16k_l0_big
     l0: 68
@@ -8571,6 +8604,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_3_width_262k_l0_small_affine
     path: transcoder_all/layer_3_width_262k_l0_small_affine
     l0: 11
+    neuronpedia: gemma-3-27b-it/3-gemmascope-2-transcoder-262k
   - id: layer_40_width_16k_l0_big
     path: transcoder_all/layer_40_width_16k_l0_big
     l0: 120
@@ -8595,6 +8629,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_40_width_262k_l0_small_affine
     path: transcoder_all/layer_40_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/40-gemmascope-2-transcoder-262k
   - id: layer_41_width_16k_l0_big
     path: transcoder_all/layer_41_width_16k_l0_big
     l0: 120
@@ -8619,6 +8654,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_41_width_262k_l0_small_affine
     path: transcoder_all/layer_41_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/41-gemmascope-2-transcoder-262k
   - id: layer_42_width_16k_l0_big
     path: transcoder_all/layer_42_width_16k_l0_big
     l0: 120
@@ -8643,6 +8679,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_42_width_262k_l0_small_affine
     path: transcoder_all/layer_42_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/42-gemmascope-2-transcoder-262k
   - id: layer_43_width_16k_l0_big_affine
     path: transcoder_all/layer_43_width_16k_l0_big_affine
     l0: 120
@@ -8661,6 +8698,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_43_width_262k_l0_small_affine
     path: transcoder_all/layer_43_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/43-gemmascope-2-transcoder-262k
   - id: layer_44_width_16k_l0_big
     path: transcoder_all/layer_44_width_16k_l0_big
     l0: 120
@@ -8685,6 +8723,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_44_width_262k_l0_small_affine
     path: transcoder_all/layer_44_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/44-gemmascope-2-transcoder-262k
   - id: layer_45_width_16k_l0_big
     path: transcoder_all/layer_45_width_16k_l0_big
     l0: 120
@@ -8709,6 +8748,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_45_width_262k_l0_small_affine
     path: transcoder_all/layer_45_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/45-gemmascope-2-transcoder-262k
   - id: layer_46_width_16k_l0_big
     path: transcoder_all/layer_46_width_16k_l0_big
     l0: 120
@@ -8733,6 +8773,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_46_width_262k_l0_small_affine
     path: transcoder_all/layer_46_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/46-gemmascope-2-transcoder-262k
   - id: layer_47_width_16k_l0_big
     path: transcoder_all/layer_47_width_16k_l0_big
     l0: 120
@@ -8757,6 +8798,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_47_width_262k_l0_small_affine
     path: transcoder_all/layer_47_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/47-gemmascope-2-transcoder-262k
   - id: layer_48_width_16k_l0_big
     path: transcoder_all/layer_48_width_16k_l0_big
     l0: 120
@@ -8781,6 +8823,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_48_width_262k_l0_small_affine
     path: transcoder_all/layer_48_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/48-gemmascope-2-transcoder-262k
   - id: layer_49_width_16k_l0_big
     path: transcoder_all/layer_49_width_16k_l0_big
     l0: 120
@@ -8805,6 +8848,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_49_width_262k_l0_small_affine
     path: transcoder_all/layer_49_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/49-gemmascope-2-transcoder-262k
   - id: layer_4_width_16k_l0_big_affine
     path: transcoder_all/layer_4_width_16k_l0_big_affine
     l0: 71
@@ -8823,6 +8867,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_4_width_262k_l0_small_affine
     path: transcoder_all/layer_4_width_262k_l0_small_affine
     l0: 11
+    neuronpedia: gemma-3-27b-it/4-gemmascope-2-transcoder-262k
   - id: layer_50_width_16k_l0_big
     path: transcoder_all/layer_50_width_16k_l0_big
     l0: 120
@@ -8847,6 +8892,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_50_width_262k_l0_small_affine
     path: transcoder_all/layer_50_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/50-gemmascope-2-transcoder-262k
   - id: layer_51_width_16k_l0_big
     path: transcoder_all/layer_51_width_16k_l0_big
     l0: 120
@@ -8871,6 +8917,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_51_width_262k_l0_small_affine
     path: transcoder_all/layer_51_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/51-gemmascope-2-transcoder-262k
   - id: layer_52_width_16k_l0_big
     path: transcoder_all/layer_52_width_16k_l0_big
     l0: 120
@@ -8895,6 +8942,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_52_width_262k_l0_small_affine
     path: transcoder_all/layer_52_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/52-gemmascope-2-transcoder-262k
   - id: layer_53_width_16k_l0_big
     path: transcoder_all/layer_53_width_16k_l0_big
     l0: 120
@@ -8919,6 +8967,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_53_width_262k_l0_small_affine
     path: transcoder_all/layer_53_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/53-gemmascope-2-transcoder-262k
   - id: layer_54_width_16k_l0_big
     path: transcoder_all/layer_54_width_16k_l0_big
     l0: 120
@@ -8943,6 +8992,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_54_width_262k_l0_small_affine
     path: transcoder_all/layer_54_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/54-gemmascope-2-transcoder-262k
   - id: layer_55_width_16k_l0_big
     path: transcoder_all/layer_55_width_16k_l0_big
     l0: 120
@@ -8967,6 +9017,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_55_width_262k_l0_small_affine
     path: transcoder_all/layer_55_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/55-gemmascope-2-transcoder-262k
   - id: layer_56_width_16k_l0_big
     path: transcoder_all/layer_56_width_16k_l0_big
     l0: 120
@@ -8991,6 +9042,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_56_width_262k_l0_small_affine
     path: transcoder_all/layer_56_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/56-gemmascope-2-transcoder-262k
   - id: layer_57_width_16k_l0_big
     path: transcoder_all/layer_57_width_16k_l0_big
     l0: 120
@@ -9015,6 +9067,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_57_width_262k_l0_small_affine
     path: transcoder_all/layer_57_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/57-gemmascope-2-transcoder-262k
   - id: layer_58_width_16k_l0_big
     path: transcoder_all/layer_58_width_16k_l0_big
     l0: 120
@@ -9039,6 +9092,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_58_width_262k_l0_small_affine
     path: transcoder_all/layer_58_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/58-gemmascope-2-transcoder-262k
   - id: layer_59_width_16k_l0_big
     path: transcoder_all/layer_59_width_16k_l0_big
     l0: 120
@@ -9063,6 +9117,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_59_width_262k_l0_small_affine
     path: transcoder_all/layer_59_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/59-gemmascope-2-transcoder-262k
   - id: layer_5_width_16k_l0_big
     path: transcoder_all/layer_5_width_16k_l0_big
     l0: 74
@@ -9084,6 +9139,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_5_width_262k_l0_small_affine
     path: transcoder_all/layer_5_width_262k_l0_small_affine
     l0: 12
+    neuronpedia: gemma-3-27b-it/5-gemmascope-2-transcoder-262k
   - id: layer_60_width_16k_l0_big
     path: transcoder_all/layer_60_width_16k_l0_big
     l0: 120
@@ -9108,6 +9164,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_60_width_262k_l0_small_affine
     path: transcoder_all/layer_60_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/60-gemmascope-2-transcoder-262k
   - id: layer_61_width_16k_l0_big
     path: transcoder_all/layer_61_width_16k_l0_big
     l0: 120
@@ -9132,6 +9189,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_61_width_262k_l0_small_affine
     path: transcoder_all/layer_61_width_262k_l0_small_affine
     l0: 20
+    neuronpedia: gemma-3-27b-it/61-gemmascope-2-transcoder-262k
   - id: layer_6_width_16k_l0_big
     path: transcoder_all/layer_6_width_16k_l0_big
     l0: 77
@@ -9156,6 +9214,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_6_width_262k_l0_small_affine
     path: transcoder_all/layer_6_width_262k_l0_small_affine
     l0: 12
+    neuronpedia: gemma-3-27b-it/6-gemmascope-2-transcoder-262k
   - id: layer_7_width_16k_l0_big
     path: transcoder_all/layer_7_width_16k_l0_big
     l0: 80
@@ -9180,6 +9239,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_7_width_262k_l0_small_affine
     path: transcoder_all/layer_7_width_262k_l0_small_affine
     l0: 13
+    neuronpedia: gemma-3-27b-it/7-gemmascope-2-transcoder-262k
   - id: layer_8_width_16k_l0_big
     path: transcoder_all/layer_8_width_16k_l0_big
     l0: 83
@@ -9204,6 +9264,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_8_width_262k_l0_small_affine
     path: transcoder_all/layer_8_width_262k_l0_small_affine
     l0: 13
+    neuronpedia: gemma-3-27b-it/8-gemmascope-2-transcoder-262k
   - id: layer_9_width_16k_l0_big
     path: transcoder_all/layer_9_width_16k_l0_big
     l0: 86
@@ -9228,6 +9289,7 @@ gemma-scope-2-27b-it-transcoders-all:
   - id: layer_9_width_262k_l0_small_affine
     path: transcoder_all/layer_9_width_262k_l0_small_affine
     l0: 14
+    neuronpedia: gemma-3-27b-it/9-gemmascope-2-transcoder-262k
 gemma-scope-2-27b-it-transcoders:
   conversion_func: gemma_3
   model: google/gemma-3-27b-it
@@ -21779,6 +21841,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_12_width_16k_l0_medium
     path: resid_post/layer_12_width_16k_l0_medium
     l0: 52
+    neuronpedia: gemma-3-12b/12-gemmascope-2-res-16k
   - id: layer_12_width_16k_l0_small
     path: resid_post/layer_12_width_16k_l0_small
     l0: 17
@@ -21788,6 +21851,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_12_width_1m_l0_medium
     path: resid_post/layer_12_width_1m_l0_medium
     l0: 52
+    neuronpedia: gemma-3-12b/12-gemmascope-2-res-1m
   - id: layer_12_width_1m_l0_small
     path: resid_post/layer_12_width_1m_l0_small
     l0: 17
@@ -21797,6 +21861,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_12_width_262k_l0_medium
     path: resid_post/layer_12_width_262k_l0_medium
     l0: 52
+    neuronpedia: gemma-3-12b/12-gemmascope-2-res-262k
   - id: layer_12_width_262k_l0_medium_seed_1
     path: resid_post/layer_12_width_262k_l0_medium_seed_1
     l0: 52
@@ -21809,6 +21874,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_12_width_65k_l0_medium
     path: resid_post/layer_12_width_65k_l0_medium
     l0: 52
+    neuronpedia: gemma-3-12b/12-gemmascope-2-res-65k
   - id: layer_12_width_65k_l0_small
     path: resid_post/layer_12_width_65k_l0_small
     l0: 17
@@ -21818,6 +21884,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_24_width_16k_l0_medium
     path: resid_post/layer_24_width_16k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/24-gemmascope-2-res-16k
   - id: layer_24_width_16k_l0_small
     path: resid_post/layer_24_width_16k_l0_small
     l0: 20
@@ -21827,6 +21894,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_24_width_1m_l0_medium
     path: resid_post/layer_24_width_1m_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/24-gemmascope-2-res-1m
   - id: layer_24_width_1m_l0_small
     path: resid_post/layer_24_width_1m_l0_small
     l0: 20
@@ -21836,6 +21904,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_24_width_262k_l0_medium
     path: resid_post/layer_24_width_262k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/24-gemmascope-2-res-262k
   - id: layer_24_width_262k_l0_medium_seed_1
     path: resid_post/layer_24_width_262k_l0_medium_seed_1
     l0: 60
@@ -21848,6 +21917,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_24_width_65k_l0_medium
     path: resid_post/layer_24_width_65k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/24-gemmascope-2-res-65k
   - id: layer_24_width_65k_l0_small
     path: resid_post/layer_24_width_65k_l0_small
     l0: 20
@@ -21857,6 +21927,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_31_width_16k_l0_medium
     path: resid_post/layer_31_width_16k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/31-gemmascope-2-res-16k
   - id: layer_31_width_16k_l0_small
     path: resid_post/layer_31_width_16k_l0_small
     l0: 20
@@ -21866,6 +21937,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_31_width_1m_l0_medium
     path: resid_post/layer_31_width_1m_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/31-gemmascope-2-res-1m
   - id: layer_31_width_1m_l0_small
     path: resid_post/layer_31_width_1m_l0_small
     l0: 20
@@ -21875,6 +21947,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_31_width_262k_l0_medium
     path: resid_post/layer_31_width_262k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/31-gemmascope-2-res-262k
   - id: layer_31_width_262k_l0_medium_seed_1
     path: resid_post/layer_31_width_262k_l0_medium_seed_1
     l0: 60
@@ -21887,6 +21960,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_31_width_65k_l0_medium
     path: resid_post/layer_31_width_65k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/31-gemmascope-2-res-65k
   - id: layer_31_width_65k_l0_small
     path: resid_post/layer_31_width_65k_l0_small
     l0: 20
@@ -21896,6 +21970,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_41_width_16k_l0_medium
     path: resid_post/layer_41_width_16k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/41-gemmascope-2-res-16k
   - id: layer_41_width_16k_l0_small
     path: resid_post/layer_41_width_16k_l0_small
     l0: 20
@@ -21905,6 +21980,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_41_width_1m_l0_medium
     path: resid_post/layer_41_width_1m_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/41-gemmascope-2-res-1m
   - id: layer_41_width_1m_l0_small
     path: resid_post/layer_41_width_1m_l0_small
     l0: 20
@@ -21914,6 +21990,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_41_width_262k_l0_medium
     path: resid_post/layer_41_width_262k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/41-gemmascope-2-res-262k
   - id: layer_41_width_262k_l0_medium_seed_1
     path: resid_post/layer_41_width_262k_l0_medium_seed_1
     l0: 60
@@ -21926,6 +22003,7 @@ gemma-scope-2-12b-pt-res:
   - id: layer_41_width_65k_l0_medium
     path: resid_post/layer_41_width_65k_l0_medium
     l0: 60
+    neuronpedia: gemma-3-12b/41-gemmascope-2-res-65k
   - id: layer_41_width_65k_l0_small
     path: resid_post/layer_41_width_65k_l0_small
     l0: 20
