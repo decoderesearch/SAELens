@@ -49,6 +49,7 @@ def _mk_activations_store(
         autocast_lm=cfg.autocast_lm,
         dataset_trust_remote_code=cfg.dataset_trust_remote_code,
         seqpos_slice=cfg.seqpos_slice,
+        use_chat_formatting=cfg.use_chat_formatting,
     )
 
 

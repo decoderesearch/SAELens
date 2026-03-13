@@ -81,32 +81,35 @@ def get_special_token_from_cfg(
     raise ValueError(f"Invalid token type: {cfg_token}")
 
 
+def _tokenize_example(
+    example: Any,
+    tokenizer: PreTrainedTokenizerBase,
+    use_chat_formatting: bool,
+) -> torch.Tensor:
+    if use_chat_formatting:
+        if isinstance(example, str):
+            warnings.warn(
+                "use_chat_formatting is True but column contains strings. "
+                "Wrapping as single user messages.",
+                stacklevel=2,
+            )
+            example = [{"role": "user", "content": example}]
+        return tokenize_with_chat_template(example, tokenizer)
+    return cast(torch.Tensor, tokenizer.encode(example, return_tensors="pt")[0])
+
+
 def pretokenize_dataset(
     dataset: Dataset,
     tokenizer: PreTrainedTokenizerBase,
     cfg: PretokenizeRunnerConfig,
 ):
-    _chat_text_warned = False
-
-    def _tokenize_example(example: Any) -> torch.Tensor:
-        nonlocal _chat_text_warned
-        if cfg.use_chat_formatting:
-            if isinstance(example, str):
-                if not _chat_text_warned:
-                    warnings.warn(
-                        "use_chat_formatting is True but column contains strings. "
-                        "Wrapping as single user messages.",
-                        stacklevel=2,
-                    )
-                    _chat_text_warned = True
-                example = [{"role": "user", "content": example}]
-            return tokenize_with_chat_template(example, tokenizer)
-        return cast(torch.Tensor, tokenizer.encode(example, return_tensors="pt")[0])
-
     def process_examples(examples: dict[str, list[Any]]):
         tokens_iterator = cast(
             Iterator[torch.Tensor],
-            (_tokenize_example(item) for item in examples[cfg.column_name]),
+            (
+                _tokenize_example(item, tokenizer, cfg.use_chat_formatting)
+                for item in examples[cfg.column_name]
+            ),
         )
         return {
             "input_ids": list(

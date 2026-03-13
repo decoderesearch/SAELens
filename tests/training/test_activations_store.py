@@ -1005,3 +1005,38 @@ def test_activations_store_chat_formatting_wraps_text_as_user_message(
 
     decoded = ts_model.tokenizer.decode(tokens[0])  # type: ignore
     assert "<|user|>" in decoded
+
+
+def test_activations_store_detects_conversations_column_with_chat_formatting(
+    ts_model: HookedTransformer,
+):
+    ts_model.tokenizer.chat_template = (  # type: ignore
+        "{% for message in messages %}"
+        "{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}"
+        "{% endfor %}"
+    )
+
+    conversation = [
+        {"role": "user", "content": "Hello"},
+    ]
+    dataset = Dataset.from_list([{"conversations": conversation}] * 100)
+    cfg = build_runner_cfg(use_chat_formatting=True, context_size=10)
+
+    store = ActivationsStore.from_config(ts_model, cfg, override_dataset=dataset)
+    assert store.tokens_column == "conversations"
+
+
+def test_activations_store_chat_formatting_errors_with_no_valid_column(
+    ts_model: HookedTransformer,
+):
+    ts_model.tokenizer.chat_template = (  # type: ignore
+        "{% for message in messages %}"
+        "{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}"
+        "{% endfor %}"
+    )
+
+    dataset = Dataset.from_list([{"other_column": "value"}] * 100)
+    cfg = build_runner_cfg(use_chat_formatting=True, context_size=10)
+
+    with pytest.raises(ValueError, match="must have a 'conversation'"):
+        ActivationsStore.from_config(ts_model, cfg, override_dataset=dataset)
