@@ -47,6 +47,12 @@ from sae_lens.saes import (
 )
 
 from .analysis.hooked_sae_transformer import HookedSAETransformer
+from .analysis.preflight import (
+    check_sae_hook_compatibility,
+    check_sae_metadata,
+    check_sae_reconstruction,
+    run_sae_preflight,
+)
 from .cache_activations_runner import CacheActivationsRunner
 from .config import (
     CacheActivationsRunnerConfig,
@@ -72,6 +78,10 @@ __all__ = [
     "TrainingSAE",
     "TrainingSAEConfig",
     "HookedSAETransformer",
+    "check_sae_metadata",
+    "check_sae_hook_compatibility",
+    "check_sae_reconstruction",
+    "run_sae_preflight",
     "ActivationsStore",
     "LanguageModelSAERunnerConfig",
     "LanguageModelSAETrainingRunner",

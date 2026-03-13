@@ -481,3 +481,33 @@ print(f"Encoder weights shape: {sae.W_enc.shape}")  # (d_in, d_sae)
 print(f"Decoder weights shape: {sae.W_dec.shape}")  # (d_sae, d_in)
 print(f"Decoder bias shape: {sae.b_dec.shape}")     # (d_in,)
 ```
+
+## Lightweight Preflight Checks
+
+Before doing interpretation, steering, or attribution work, it is often useful to run a small
+preflight check on the SAE you plan to use.
+
+```python
+from sae_lens.analysis import run_sae_preflight
+
+report = run_sae_preflight(
+    sae,
+    model=model,
+    activations=layer_12_acts,
+    expected_metadata={
+        "model_name": "google/gemma-2-2b",
+        "hook_name": "blocks.12.hook_resid_post",
+    },
+)
+
+print(report["status"])
+print(report["details"]["metadata"])
+print(report["details"]["hook_compatibility"])
+print(report["details"]["reconstruction"])
+```
+
+This helper is intentionally lightweight. It checks:
+
+- whether the SAE exposes the expected metadata
+- whether the SAE hook is compatible with the loaded model
+- whether `decode(encode(activations))` behaves sensibly on the activations you want to analyze
