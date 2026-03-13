@@ -68,6 +68,7 @@ class LanguageModelSAERunnerConfigDict(TypedDict, total=False):
     dataset_trust_remote_code: bool
     streaming: bool
     is_dataset_tokenized: bool
+    use_chat_formatting: bool
     context_size: int
     use_cached_activations: bool
     cached_activations_path: str | None
@@ -172,6 +173,7 @@ def _get_default_runner_config() -> LanguageModelSAERunnerConfigDict:
         "streaming": False,
         "dataset_trust_remote_code": True,
         "is_dataset_tokenized": False,
+        "use_chat_formatting": False,
         "context_size": 6,
         "use_cached_activations": False,
         "cached_activations_path": None,

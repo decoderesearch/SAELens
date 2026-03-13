@@ -194,3 +194,26 @@ def test_LanguageModelSAERunnerConfig_exclude_special_tokens_validation():
             sae=StandardTrainingSAEConfig(d_in=10, d_sae=10),
             exclude_special_tokens=["not", "integers"],  # type: ignore
         )
+
+
+def test_LanguageModelSAERunnerConfig_errors_when_chat_formatting_and_tokenized():
+    with pytest.raises(
+        ValueError,
+        match="use_chat_formatting and is_dataset_tokenized cannot both be True",
+    ):
+        LanguageModelSAERunnerConfig(
+            sae=StandardTrainingSAEConfig(d_in=10, d_sae=10),
+            use_chat_formatting=True,
+            is_dataset_tokenized=True,
+        )
+
+
+def test_LanguageModelSAERunnerConfig_allows_chat_formatting_with_exclude_special_tokens():
+    cfg = LanguageModelSAERunnerConfig(
+        sae=StandardTrainingSAEConfig(d_in=10, d_sae=10),
+        use_chat_formatting=True,
+        is_dataset_tokenized=False,
+        exclude_special_tokens=True,
+    )
+    assert cfg.use_chat_formatting is True
+    assert cfg.exclude_special_tokens is True

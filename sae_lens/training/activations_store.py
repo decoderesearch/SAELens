@@ -27,7 +27,10 @@ from sae_lens.config import (
 from sae_lens.constants import ACTIVATIONS_STORE_STATE_FILENAME
 from sae_lens.pretokenize_runner import get_special_token_from_cfg
 from sae_lens.saes.sae import SAE, T_SAE_CONFIG, T_TRAINING_SAE_CONFIG
-from sae_lens.tokenization_and_batching import concat_and_batch_sequences
+from sae_lens.tokenization_and_batching import (
+    concat_and_batch_sequences,
+    tokenize_with_chat_template,
+)
 from sae_lens.training.mixing_buffer import mixing_buffer
 from sae_lens.util import (
     extract_stop_at_layer_from_tlens_hook_name,
@@ -47,7 +50,15 @@ class ActivationsStore:
     dataset: HfDataset
     cached_activations_path: str | None
     cached_activation_dataset: Dataset | None = None
-    tokens_column: Literal["tokens", "input_ids", "text", "problem"]
+    tokens_column: Literal[
+        "tokens",
+        "input_ids",
+        "text",
+        "problem",
+        "conversation",
+        "conversations",
+        "messages",
+    ]
     hook_name: str
     hook_head_index: int | None
     _dataloader: Iterator[Any] | None = None
@@ -149,6 +160,7 @@ class ActivationsStore:
             disable_concat_sequences=cfg.disable_concat_sequences,
             sequence_separator_token=cfg.sequence_separator_token,
             activations_mixing_fraction=cfg.activations_mixing_fraction,
+            use_chat_formatting=cfg.use_chat_formatting,
         )
 
     @classmethod
@@ -224,6 +236,7 @@ class ActivationsStore:
         disable_concat_sequences: bool = False,
         sequence_separator_token: int | Literal["bos", "eos", "sep"] | None = "bos",
         activations_mixing_fraction: float = 0.5,
+        use_chat_formatting: bool = False,
     ):
         self.model = model
         if model_kwargs is None:
@@ -271,6 +284,7 @@ class ActivationsStore:
             sequence_separator_token
         )
         self.activations_mixing_fraction = activations_mixing_fraction
+        self.use_chat_formatting = use_chat_formatting
 
         self.n_dataset_processed = 0
 
@@ -278,7 +292,26 @@ class ActivationsStore:
         dataset_sample = next(iter(self.dataset))
 
         # check if it's tokenized
-        if "tokens" in dataset_sample:
+        if self.use_chat_formatting:
+            self.is_dataset_tokenized = False
+            if "conversation" in dataset_sample:
+                self.tokens_column = "conversation"
+            elif "conversations" in dataset_sample:
+                self.tokens_column = "conversations"
+            elif "messages" in dataset_sample:
+                self.tokens_column = "messages"
+            elif "text" in dataset_sample:
+                warnings.warn(
+                    "use_chat_formatting is True but no conversation column found. "
+                    "Falling back to 'text' column and wrapping as user messages."
+                )
+                self.tokens_column = "text"
+            else:
+                raise ValueError(
+                    "Dataset must have a 'conversation', 'conversations', 'messages', or 'text' column "
+                    "when use_chat_formatting is True."
+                )
+        elif "tokens" in dataset_sample:
             self.is_dataset_tokenized = True
             self.tokens_column = "tokens"
         elif "input_ids" in dataset_sample:
@@ -332,7 +365,7 @@ class ActivationsStore:
 
     def _iterate_raw_dataset(
         self,
-    ) -> Generator[torch.Tensor | list[int] | str, None, None]:
+    ) -> Generator[Any, None, None]:
         """
         Helper to iterate over the dataset while incrementing n_dataset_processed
         """
@@ -345,6 +378,25 @@ class ActivationsStore:
         """
         Helper to create an iterator which tokenizes raw text from the dataset on the fly
         """
+        if self.use_chat_formatting:
+            tokenizer = getattr(self.model, "tokenizer", None)
+            if tokenizer is None:
+                raise ValueError(
+                    "Model must have a tokenizer when use_chat_formatting is True"
+                )
+            for row in self._iterate_raw_dataset():
+                if isinstance(row, str):
+                    conversation: list[dict[str, Any]] = [
+                        {"role": "user", "content": row}
+                    ]
+                else:
+                    conversation = cast(list[dict[str, Any]], row)
+                tokens = tokenize_with_chat_template(conversation, tokenizer).to(
+                    self.device
+                )
+                yield tokens
+            return
+
         for row in self._iterate_raw_dataset():
             tokens = (
                 self.model.to_tokens(

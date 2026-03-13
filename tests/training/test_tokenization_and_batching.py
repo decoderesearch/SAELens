@@ -2,10 +2,12 @@ from itertools import islice
 
 import pytest
 import torch
+from transformers import AutoTokenizer
 
 from sae_lens.tokenization_and_batching import (
     _add_tokens_to_batch,
     concat_and_batch_sequences,
+    tokenize_with_chat_template,
 )
 
 
@@ -506,3 +508,46 @@ def test_concat_and_batch_sequences_handles_empty_sequences_with_begin_sequence_
         [999, 0, 1, 2, 3],
     ]
     assert batches.tolist() == expected
+
+
+def test_tokenize_with_chat_template_produces_correct_tokens():
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    tokenizer.chat_template = (
+        "{% for message in messages %}"
+        "{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}"
+        "{% endfor %}"
+    )
+
+    conversation = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi"},
+    ]
+
+    tokens = tokenize_with_chat_template(conversation, tokenizer)
+    assert tokens.dtype == torch.long
+    assert tokens.dim() == 1
+
+    # Decode and verify the chat template was applied
+    decoded = tokenizer.decode(tokens)
+    assert "<|user|>" in decoded
+    assert "Hello" in decoded
+    assert "<|assistant|>" in decoded
+    assert "Hi" in decoded
+
+
+def test_tokenize_with_chat_template_single_message():
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    tokenizer.chat_template = (
+        "{% for message in messages %}"
+        "{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}"
+        "{% endfor %}"
+    )
+
+    conversation = [{"role": "user", "content": "Test"}]
+    tokens = tokenize_with_chat_template(conversation, tokenizer)
+    assert tokens.dtype == torch.long
+    assert tokens.dim() == 1
+
+    decoded = tokenizer.decode(tokens)
+    assert "<|user|>" in decoded
+    assert "Test" in decoded

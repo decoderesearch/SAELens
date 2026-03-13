@@ -202,6 +202,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     dataset_trust_remote_code: bool = True
     streaming: bool = True
     is_dataset_tokenized: bool = True
+    use_chat_formatting: bool = False
     context_size: int = 128
     use_cached_activations: bool = False
     cached_activations_path: str | None = (
@@ -289,6 +290,12 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
                 "It is not currently used and can be safely removed from your config.",
                 DeprecationWarning,
                 stacklevel=2,
+            )
+
+        if self.use_chat_formatting and self.is_dataset_tokenized:
+            raise ValueError(
+                "use_chat_formatting and is_dataset_tokenized cannot both be True. "
+                "Chat formatting requires raw conversation data."
             )
 
         if self.use_cached_activations and self.cached_activations_path is None:
@@ -531,6 +538,7 @@ class CacheActivationsRunnerConfig:
 
     # Activation Store
     prepend_bos: bool = True
+    use_chat_formatting: bool = False
     seqpos_slice: tuple[int | None, ...] = (None,)
     streaming: bool = True
     autocast_lm: bool = False
@@ -651,6 +659,7 @@ class PretokenizeRunnerConfig:
     num_proc: int = 4
     context_size: int = 128
     column_name: str = "text"
+    use_chat_formatting: bool = False
     shuffle: bool = True
     seed: int | None = None
     streaming: bool = False

@@ -264,3 +264,66 @@ def test_pretokenize_runner_raises_error_when_num_proc_is_greater_than_1_and_str
     )
     with pytest.raises(ValueError):
         PretokenizeRunner(cfg).run()
+
+
+def test_pretokenize_dataset_with_chat_formatting(
+    ts_tokenizer: PreTrainedTokenizerBase,
+):
+    ts_tokenizer.chat_template = (
+        "{% for message in messages %}"
+        "{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}"
+        "{% endfor %}"
+    )
+
+    conversation = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi there"},
+    ]
+    dataset = Dataset.from_list([{"conversation": conversation}] * 30)
+    cfg = PretokenizeRunnerConfig(
+        context_size=10,
+        num_proc=1,
+        shuffle=False,
+        column_name="conversation",
+        use_chat_formatting=True,
+        begin_batch_token=None,
+        sequence_separator_token=None,
+        begin_sequence_token=None,
+    )
+
+    tokenized_dataset = cast(Any, pretokenize_dataset(dataset, ts_tokenizer, cfg))
+    assert np.array(tokenized_dataset["input_ids"]).shape[1] == cfg.context_size
+
+    # Verify the chat template was actually applied by checking the decoded output
+    decoded = ts_tokenizer.decode(tokenized_dataset["input_ids"][0])
+    assert "<|user|>" in decoded
+    assert "Hello" in decoded
+
+
+def test_pretokenize_dataset_with_chat_formatting_wraps_text_as_user_message(
+    ts_tokenizer: PreTrainedTokenizerBase,
+):
+    ts_tokenizer.chat_template = (
+        "{% for message in messages %}"
+        "{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}"
+        "{% endfor %}"
+    )
+
+    dataset = Dataset.from_list([{"text": "hello world"}] * 30)
+    cfg = PretokenizeRunnerConfig(
+        context_size=10,
+        num_proc=1,
+        shuffle=False,
+        column_name="text",
+        use_chat_formatting=True,
+        begin_batch_token=None,
+        sequence_separator_token=None,
+        begin_sequence_token=None,
+    )
+
+    tokenized_dataset = cast(Any, pretokenize_dataset(dataset, ts_tokenizer, cfg))
+    assert np.array(tokenized_dataset["input_ids"]).shape[1] == cfg.context_size
+
+    decoded = ts_tokenizer.decode(tokenized_dataset["input_ids"][0])
+    assert "<|user|>" in decoded
+    assert "hello world" in decoded

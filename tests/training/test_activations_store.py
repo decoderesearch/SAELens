@@ -899,3 +899,109 @@ def test_activations_store_from_sae_allows_null_context_size_with_override(
     )
 
     assert store.context_size == custom_context_size
+
+
+def test_activations_store_detects_conversation_column_with_chat_formatting(
+    ts_model: HookedTransformer,
+):
+    ts_model.tokenizer.chat_template = (  # type: ignore
+        "{% for message in messages %}"
+        "{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}"
+        "{% endfor %}"
+    )
+
+    conversation = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi there"},
+    ]
+    dataset = Dataset.from_list([{"conversation": conversation}] * 100)
+    cfg = build_runner_cfg(use_chat_formatting=True, context_size=10)
+
+    store = ActivationsStore.from_config(ts_model, cfg, override_dataset=dataset)
+    assert store.tokens_column == "conversation"
+    assert store.use_chat_formatting is True
+    assert store.is_dataset_tokenized is False
+
+
+def test_activations_store_detects_messages_column_with_chat_formatting(
+    ts_model: HookedTransformer,
+):
+    ts_model.tokenizer.chat_template = (  # type: ignore
+        "{% for message in messages %}"
+        "{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}"
+        "{% endfor %}"
+    )
+
+    conversation = [
+        {"role": "user", "content": "Hello"},
+    ]
+    dataset = Dataset.from_list([{"messages": conversation}] * 100)
+    cfg = build_runner_cfg(use_chat_formatting=True, context_size=10)
+
+    store = ActivationsStore.from_config(ts_model, cfg, override_dataset=dataset)
+    assert store.tokens_column == "messages"
+
+
+def test_activations_store_chat_formatting_falls_back_to_text_column(
+    ts_model: HookedTransformer,
+):
+    ts_model.tokenizer.chat_template = (  # type: ignore
+        "{% for message in messages %}"
+        "{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}"
+        "{% endfor %}"
+    )
+
+    dataset = Dataset.from_list([{"text": "hello world"}] * 100)
+    cfg = build_runner_cfg(use_chat_formatting=True, context_size=10)
+
+    with pytest.warns(match="Falling back to 'text' column"):
+        store = ActivationsStore.from_config(ts_model, cfg, override_dataset=dataset)
+    assert store.tokens_column == "text"
+
+
+def test_activations_store_chat_formatting_tokenizes_conversations(
+    ts_model: HookedTransformer,
+):
+    ts_model.tokenizer.chat_template = (  # type: ignore
+        "{% for message in messages %}"
+        "{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}"
+        "{% endfor %}"
+    )
+
+    conversation = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi"},
+    ]
+    dataset = Dataset.from_list([{"conversation": conversation}] * 100)
+    cfg = build_runner_cfg(use_chat_formatting=True, context_size=10)
+
+    store = ActivationsStore.from_config(ts_model, cfg, override_dataset=dataset)
+
+    tokens = store.get_batch_tokens(batch_size=1)
+    assert tokens.shape == (1, 10)
+
+    # Verify tokens contain chat template markers
+    decoded = ts_model.tokenizer.decode(tokens[0])  # type: ignore
+    assert "<|user|>" in decoded or "Hello" in decoded
+
+
+def test_activations_store_chat_formatting_wraps_text_as_user_message(
+    ts_model: HookedTransformer,
+):
+    ts_model.tokenizer.chat_template = (  # type: ignore
+        "{% for message in messages %}"
+        "{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}"
+        "{% endfor %}"
+    )
+
+    dataset = Dataset.from_list([{"text": "hello world"}] * 100)
+    cfg = build_runner_cfg(use_chat_formatting=True, context_size=10)
+
+    with pytest.warns(match="Falling back to 'text' column"):
+        store = ActivationsStore.from_config(ts_model, cfg, override_dataset=dataset)
+
+    tokens = store.get_batch_tokens(batch_size=1)
+    assert tokens.shape == (1, 10)
+
+    decoded = ts_model.tokenizer.decode(tokens[0])  # type: ignore
+    assert "<|user|>" in decoded

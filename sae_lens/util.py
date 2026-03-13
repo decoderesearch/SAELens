@@ -3,7 +3,7 @@ import tempfile
 from contextlib import contextmanager
 from dataclasses import asdict, fields, is_dataclass
 from pathlib import Path
-from typing import Any, Sequence, TypeVar
+from typing import Sequence, TypeVar
 
 import torch
 from transformers import PreTrainedTokenizerBase
@@ -86,29 +86,30 @@ def path_or_tmp_dir(path: str | Path | None):
         yield Path(path)
 
 
+_SPECIAL_TOKEN_ATTRS = (
+    "bos_token_id",
+    "eos_token_id",
+    "pad_token_id",
+    "unk_token_id",
+    "sep_token_id",
+    "cls_token_id",
+    "mask_token_id",
+)
+
+
 def get_special_token_ids(tokenizer: PreTrainedTokenizerBase) -> list[int]:
-    """Get all special token IDs from a tokenizer."""
+    """Get the core special token IDs (BOS, EOS, PAD, UNK, SEP, CLS, MASK).
+
+    This only returns tokens with dedicated tokenizer attributes, not
+    additional_special_tokens. Chat template tokens (e.g. <start_of_turn>,
+    <end_of_turn>) are typically registered as additional special tokens and
+    are intentionally excluded so they are not filtered from activations.
+    """
     special_tokens = set()
-
-    # Get special tokens from tokenizer attributes
-    for attr in dir(tokenizer):
-        if attr.endswith("_token_id"):
-            token_id = getattr(tokenizer, attr)
-            if token_id is not None:
-                special_tokens.add(token_id)
-
-    # Get any additional special tokens from the tokenizer's special tokens map
-    if hasattr(tokenizer, "special_tokens_map"):
-        token_map_values: Any = tokenizer.special_tokens_map.values()  # type: ignore
-        for token in token_map_values:
-            if isinstance(token, str):
-                token_id = tokenizer.convert_tokens_to_ids(token)  # type: ignore
-                special_tokens.add(token_id)
-            elif isinstance(token, list):
-                for t in token:
-                    token_id = tokenizer.convert_tokens_to_ids(t)  # type: ignore
-                    special_tokens.add(token_id)
-
+    for attr in _SPECIAL_TOKEN_ATTRS:
+        token_id = getattr(tokenizer, attr, None)
+        if token_id is not None:
+            special_tokens.add(token_id)
     return list(special_tokens)
 
 

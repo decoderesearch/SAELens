@@ -86,35 +86,57 @@ def test_path_or_tmp_dir_with_string_path(tmp_path: Path):
 
 
 def test_get_special_token_ids():
-    # Create a mock tokenizer with some special tokens
     class MockTokenizer:
         def __init__(self):
             self.bos_token_id = 1
             self.eos_token_id = 2
             self.pad_token_id = 3
             self.unk_token_id = None  # Test handling of None values
-            self.special_tokens_map = {
-                "additional_special_tokens": ["<extra_0>", "<extra_1>"],
-                "mask_token": "<mask>",
-            }
-
-        def convert_tokens_to_ids(self, token: str) -> int:
-            token_map = {"<extra_0>": 4, "<extra_1>": 5, "<mask>": 6}
-            return token_map[token]
 
     tokenizer = MockTokenizer()
     special_tokens = get_special_token_ids(tokenizer)  # type: ignore
 
-    # Check that all expected token IDs are present
-    assert set(special_tokens) == {1, 2, 3, 4, 5, 6}
-
-    # Check that None values are properly handled
+    assert set(special_tokens) == {1, 2, 3}
     assert None not in special_tokens
 
 
 def test_get_special_token_ids_works_with_real_models(ts_model: HookedTransformer):
     special_tokens = get_special_token_ids(ts_model.tokenizer)  # type: ignore
     assert special_tokens == [50256]
+
+
+def test_get_special_token_ids_excludes_chat_template_tokens():
+    """get_special_token_ids only returns core tokens (BOS, EOS, PAD, etc.),
+    not additional_special_tokens. This ensures chat template tokens like
+    <start_of_turn> are not filtered from activations when
+    exclude_special_tokens=True."""
+
+    class ChatTokenizer:
+        def __init__(self):
+            self.bos_token_id = 1
+            self.eos_token_id = 2
+            self.pad_token_id = None
+            self.unk_token_id = None
+            # Chat template tokens are typically registered here
+            self.special_tokens_map = {
+                "additional_special_tokens": [
+                    "<start_of_turn>",
+                    "<end_of_turn>",
+                ],
+            }
+
+        def convert_tokens_to_ids(self, token: str) -> int:
+            return {"<start_of_turn>": 100, "<end_of_turn>": 101}[token]
+
+    tokenizer = ChatTokenizer()
+    special_tokens = get_special_token_ids(tokenizer)  # type: ignore
+
+    # Core tokens are included
+    assert 1 in special_tokens
+    assert 2 in special_tokens
+    # Chat template tokens are NOT included
+    assert 100 not in special_tokens
+    assert 101 not in special_tokens
 
 
 @pytest.mark.parametrize(

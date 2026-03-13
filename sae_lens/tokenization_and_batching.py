@@ -1,6 +1,8 @@
 from collections.abc import Generator, Iterator
+from typing import Any
 
 import torch
+from transformers import PreTrainedTokenizerBase
 
 
 def _add_tokens_to_batch(
@@ -122,3 +124,23 @@ def concat_and_batch_sequences(
             if batch.shape[0] == context_size:
                 yield batch
                 batch = None
+
+
+def tokenize_with_chat_template(
+    conversation: list[dict[str, Any]],
+    tokenizer: PreTrainedTokenizerBase,
+) -> torch.Tensor:
+    """
+    Tokenize a conversation using the tokenizer's chat template.
+
+    Args:
+        conversation: A list of message dicts with "role" and "content" keys.
+        tokenizer: A tokenizer with a chat template configured.
+
+    Returns:
+        A 1D tensor of token IDs (torch.long).
+    """
+    result = tokenizer.apply_chat_template(
+        conversation, tokenize=True, return_tensors="pt"
+    )
+    return result["input_ids"].squeeze(0).to(torch.long)  # type: ignore[union-attr]
