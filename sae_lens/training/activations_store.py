@@ -303,7 +303,8 @@ class ActivationsStore:
             elif "text" in dataset_sample:
                 warnings.warn(
                     "use_chat_formatting is True but no conversation column found. "
-                    "Falling back to 'text' column and wrapping as user messages."
+                    "Falling back to 'text' column and wrapping as user messages.",
+                    stacklevel=2,
                 )
                 self.tokens_column = "text"
             else:
@@ -365,7 +366,7 @@ class ActivationsStore:
 
     def _iterate_raw_dataset(
         self,
-    ) -> Generator[Any, None, None]:
+    ) -> Generator[torch.Tensor | list[int] | str | list[dict[str, Any]], None, None]:
         """
         Helper to iterate over the dataset while incrementing n_dataset_processed
         """

@@ -106,11 +106,6 @@ def test_get_special_token_ids_works_with_real_models(ts_model: HookedTransforme
 
 
 def test_get_special_token_ids_excludes_chat_template_tokens():
-    """get_special_token_ids only returns core tokens (BOS, EOS, PAD, etc.),
-    not additional_special_tokens. This ensures chat template tokens like
-    <start_of_turn> are not filtered from activations when
-    exclude_special_tokens=True."""
-
     class ChatTokenizer:
         def __init__(self):
             self.bos_token_id = 1

@@ -538,7 +538,6 @@ class CacheActivationsRunnerConfig:
 
     # Activation Store
     prepend_bos: bool = True
-    use_chat_formatting: bool = False
     seqpos_slice: tuple[int | None, ...] = (None,)
     streaming: bool = True
     autocast_lm: bool = False

@@ -980,9 +980,9 @@ def test_activations_store_chat_formatting_tokenizes_conversations(
     tokens = store.get_batch_tokens(batch_size=1)
     assert tokens.shape == (1, 10)
 
-    # Verify tokens contain chat template markers
+    # Verify the chat template was actually applied
     decoded = ts_model.tokenizer.decode(tokens[0])  # type: ignore
-    assert "<|user|>" in decoded or "Hello" in decoded
+    assert "<|user|>" in decoded
 
 
 def test_activations_store_chat_formatting_wraps_text_as_user_message(
