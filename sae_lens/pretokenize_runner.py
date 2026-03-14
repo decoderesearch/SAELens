@@ -41,7 +41,9 @@ class PretokenizedDatasetMetadata:
     begin_sequence_token: int | Literal["bos", "eos", "sep"] | None
     sequence_separator_token: int | Literal["bos", "eos", "sep"] | None
     disable_concat_sequences: bool
-    use_chat_formatting: bool = False
+    use_chat_formatting: bool = (
+        False  # whether conversations were tokenized via apply_chat_template
+    )
 
 
 def metadata_from_config(cfg: PretokenizeRunnerConfig) -> PretokenizedDatasetMetadata:
@@ -91,7 +93,7 @@ def _tokenize_example(
             warnings.warn(
                 "use_chat_formatting is True but column contains strings. "
                 "Wrapping as single user messages.",
-                stacklevel=2,
+                stacklevel=1,
             )
             example = [{"role": "user", "content": example}]
         return tokenize_with_chat_template(example, tokenizer)

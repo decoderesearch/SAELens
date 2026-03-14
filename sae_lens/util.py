@@ -90,15 +90,13 @@ _SPECIAL_TOKEN_ATTRS = (
     "bos_token_id",
     "eos_token_id",
     "pad_token_id",
-    "unk_token_id",
     "sep_token_id",
-    "cls_token_id",
-    "mask_token_id",
+    "decoder_start_token_id",
 )
 
 
 def get_special_token_ids(tokenizer: PreTrainedTokenizerBase) -> list[int]:
-    """Get the core special token IDs (BOS, EOS, PAD, UNK, SEP, CLS, MASK).
+    """Get the structural special token IDs (BOS, EOS, PAD, SEP, decoder_start).
 
     This only returns tokens with dedicated tokenizer attributes, not
     additional_special_tokens. Chat template tokens (e.g. <start_of_turn>,

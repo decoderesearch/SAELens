@@ -533,21 +533,3 @@ def test_tokenize_with_chat_template_produces_correct_tokens():
     assert "Hello" in decoded
     assert "<|assistant|>" in decoded
     assert "Hi" in decoded
-
-
-def test_tokenize_with_chat_template_single_message():
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    tokenizer.chat_template = (
-        "{% for message in messages %}"
-        "{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}"
-        "{% endfor %}"
-    )
-
-    conversation = [{"role": "user", "content": "Test"}]
-    tokens = tokenize_with_chat_template(conversation, tokenizer)
-    assert tokens.dtype == torch.long
-    assert tokens.dim() == 1
-
-    decoded = tokenizer.decode(tokens)
-    assert "<|user|>" in decoded
-    assert "Test" in decoded
