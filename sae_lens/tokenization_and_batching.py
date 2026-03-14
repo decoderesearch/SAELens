@@ -141,6 +141,6 @@ def tokenize_with_chat_template(
         A 1D tensor of token IDs (torch.long).
     """
     result = tokenizer.apply_chat_template(
-        conversation, tokenize=True, return_tensors="pt"
+        conversation, tokenize=True, return_tensors="pt", return_dict=False
     )
-    return result["input_ids"][0].to(dtype=torch.long)  # type: ignore[union-attr]
+    return result[0]  # type: ignore[index]

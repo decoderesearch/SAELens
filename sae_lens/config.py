@@ -545,6 +545,11 @@ class CacheActivationsRunnerConfig:
     use_chat_formatting: bool = False
 
     def __post_init__(self):
+        if self.use_chat_formatting and self.context_size == -1:
+            raise ValueError(
+                "context_size must be explicitly set when use_chat_formatting is True."
+            )
+
         # Automatically determine context_size if dataset is tokenized
         if self.context_size == -1:
             ds = load_dataset(self.dataset_path, split="train", streaming=True)
@@ -565,11 +570,6 @@ class CacheActivationsRunnerConfig:
             _validate_seqpos(
                 seqpos=self.seqpos_slice,
                 context_size=self.context_size,
-            )
-
-        if self.use_chat_formatting and self.context_size == -1:
-            raise ValueError(
-                "context_size must be explicitly set when use_chat_formatting is True."
             )
 
         if self.context_size > self.training_tokens:
