@@ -567,6 +567,11 @@ class CacheActivationsRunnerConfig:
                 context_size=self.context_size,
             )
 
+        if self.use_chat_formatting and self.context_size == -1:
+            raise ValueError(
+                "context_size must be explicitly set when use_chat_formatting is True."
+            )
+
         if self.context_size > self.training_tokens:
             raise ValueError(
                 f"context_size ({self.context_size}) is greater than training_tokens "

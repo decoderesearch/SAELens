@@ -140,8 +140,7 @@ def tokenize_with_chat_template(
     Returns:
         A 1D tensor of token IDs (torch.long).
     """
-    result = tokenizer.apply_chat_template(conversation, tokenize=True)
-    # transformers >=5 returns a BatchEncoding; older versions return List[int]
-    if isinstance(result, list):
-        return torch.tensor(result, dtype=torch.long)
-    return torch.tensor(result["input_ids"], dtype=torch.long)  # type: ignore
+    result = tokenizer.apply_chat_template(
+        conversation, tokenize=True, return_tensors="pt"
+    )
+    return result["input_ids"][0].to(dtype=torch.long)  # type: ignore[union-attr]
