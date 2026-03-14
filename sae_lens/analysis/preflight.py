@@ -63,7 +63,7 @@ def _hook_names(model: Any) -> set[str] | None:
     if hook_dict is None:
         return None
     if isinstance(hook_dict, Mapping):
-        return {str(key) for key in hook_dict.keys()}
+        return {str(key) for key in hook_dict}
     keys = getattr(hook_dict, "keys", None)
     if callable(keys):
         return {str(key) for key in keys()}
@@ -77,7 +77,7 @@ def _tracked_keys(
     if metadata_keys is not None:
         return [str(key) for key in metadata_keys]
     if expected_metadata is not None:
-        return [str(key) for key in expected_metadata.keys()]
+        return [str(key) for key in expected_metadata]
     return None
 
 
@@ -89,7 +89,7 @@ def _subset_metadata_comparison(
 ) -> dict[str, Any]:
     tracked = _tracked_keys(expected_metadata, metadata_keys)
     if tracked is None:
-        tracked = sorted(str(key) for key in observed_metadata.keys())
+        tracked = sorted(str(key) for key in observed_metadata)
 
     mismatches: list[dict[str, Any]] = []
     missing_required: list[str] = []
@@ -181,7 +181,9 @@ def check_sae_hook_compatibility(
     get_sae_hook_name = getattr(model, "get_sae_hook_name", None)
     if callable(get_sae_hook_name):
         try:
-            resolved_internal_hook = get_sae_hook_name(sae, internal=internal_hook_suffix)
+            resolved_internal_hook = get_sae_hook_name(
+                sae, internal=internal_hook_suffix
+            )
         except Exception:
             resolved_internal_hook = None
 
@@ -192,7 +194,9 @@ def check_sae_hook_compatibility(
         status = "warn"
     else:
         base_hook_present = (
-            base_hook_name in available_hooks if isinstance(base_hook_name, str) else False
+            base_hook_name in available_hooks
+            if isinstance(base_hook_name, str)
+            else False
         )
         resolved_hook_present = (
             resolved_hook_name in available_hooks
@@ -235,7 +239,9 @@ def check_sae_hook_compatibility(
             "resolved_hook_name": resolved_hook_name,
             "resolved_internal_hook": resolved_internal_hook,
             "internal_hook_present": internal_hook_present,
-            "available_hook_count": None if available_hooks is None else len(available_hooks),
+            "available_hook_count": None
+            if available_hooks is None
+            else len(available_hooks),
             "metadata_model_name": metadata_model_name,
             "model_name": model_name,
         },
@@ -275,9 +281,7 @@ def check_sae_reconstruction(
     variance = torch.var(original_flat, unbiased=False)
     explained_variance = None
     if float(variance) > 0.0:
-        explained_variance = float(
-            1.0 - (torch.var(diff, unbiased=False) / variance)
-        )
+        explained_variance = float(1.0 - (torch.var(diff, unbiased=False) / variance))
 
     status = "pass"
     if cosine_similarity is not None and cosine_similarity < 0.8:
