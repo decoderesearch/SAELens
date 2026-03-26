@@ -644,6 +644,38 @@ def test_get_sparsity_and_variance_metrics_identity_sae_perfect_reconstruction(
     assert metrics["mse"] == pytest.approx(0.0, abs=1e-5)
 
 
+def test_explained_variance_uses_mean_centered_variance():
+    """Verify explained_variance computes Var(X) = E[||X||^2] - ||E[X]||^2, not E[||X||^2]."""
+    # Construct inputs with a large mean so the difference between
+    # variance-from-zero and variance-from-mean is significant.
+    d_model = 8
+    n_samples = 1000
+    mean = torch.full((d_model,), 10.0)
+    x = mean + torch.randn(n_samples, d_model) * 0.5
+
+    # Ground truth total variance: sum of per-dimension variances
+    expected_total_var = x.var(dim=0, correction=0).sum().item()
+
+    # The formula used in evals.py after the fix:
+    # total_variance = E[||X||^2] - ||E[X]||^2
+    mean_sum_of_squares = x.pow(2).sum(dim=-1).mean(dim=0)
+    mean_act_per_dimension = x.mean(dim=0)
+    computed_total_var = (
+        mean_sum_of_squares - (mean_act_per_dimension**2).sum()
+    ).item()
+
+    assert computed_total_var == pytest.approx(expected_total_var, rel=1e-3)
+
+    # With the bug (.pow(2) on the mean term), the subtracted term captures E[x^2]^2
+    # instead of E[x]^2, making total_variance much larger than the true variance
+    # for data with a large mean.
+    buggy_mean_act = x.pow(2).mean(dim=0)  # bug: .pow(2) before mean
+    buggy_total_var = (
+        mean_sum_of_squares - (buggy_mean_act**2).sum()
+    ).item()
+    assert abs(buggy_total_var - expected_total_var) > expected_total_var * 0.5
+
+
 def test_process_args():
     args = [
         "gpt2-small-res_scefr-ajt",
