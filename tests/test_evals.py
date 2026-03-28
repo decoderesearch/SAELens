@@ -680,30 +680,17 @@ def test_explained_variance_uses_mean_centered_variance():
 def test_explained_variance_zero_total_variance():
     """When activations are constant (zero variance), explained_variance should be 1.0
     for perfect reconstruction and 0.0 when residual is nonzero."""
-    d_model = 4
+    eps = 1e-12
 
     # Case 1: constant activations, perfect reconstruction -> 1.0
     total_var = torch.tensor(0.0)
     residual_var = torch.tensor(0.0)
-    eps = 1e-12
-    if torch.abs(total_var) <= eps:
-        if torch.abs(residual_var) <= eps:
-            ev = 1.0
-        else:
-            ev = 0.0
-    else:
-        ev = (1 - residual_var / total_var).item()
+    ev = 1.0 if torch.abs(residual_var) <= eps else 0.0
     assert ev == 1.0
 
     # Case 2: constant activations, nonzero residual -> 0.0
     residual_var = torch.tensor(0.5)
-    if torch.abs(total_var) <= eps:
-        if torch.abs(residual_var) <= eps:
-            ev = 1.0
-        else:
-            ev = 0.0
-    else:
-        ev = (1 - residual_var / total_var).item()
+    ev = 1.0 if torch.abs(residual_var) <= eps else 0.0
     assert ev == 0.0
 
 
