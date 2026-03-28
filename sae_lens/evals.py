@@ -591,7 +591,15 @@ def get_sparsity_and_variance_metrics(
         mean_act_per_dimension = torch.stack(mean_act_per_dimension).mean(dim=0)
         total_variance = mean_sum_of_squares - (mean_act_per_dimension**2).sum()
         residual_variance = torch.stack(mean_sum_of_resid_squared).mean(dim=0)
-        metrics["explained_variance"] = (1 - residual_variance / total_variance).item()
+        eps = 1e-12
+        if torch.abs(total_variance) <= eps:
+            if torch.abs(residual_variance) <= eps:
+                explained_variance = torch.tensor(1.0, device=total_variance.device)
+            else:
+                explained_variance = torch.tensor(0.0, device=total_variance.device)
+        else:
+            explained_variance = 1 - residual_variance / total_variance
+        metrics["explained_variance"] = explained_variance.item()
 
     # Aggregate feature-wise metrics
     feature_metrics: dict[str, list[float]] = {}

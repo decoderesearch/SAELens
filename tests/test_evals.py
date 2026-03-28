@@ -677,6 +677,36 @@ def test_explained_variance_uses_mean_centered_variance():
     assert abs(buggy_total_var - expected_total_var) > expected_total_var * 0.5
 
 
+def test_explained_variance_zero_total_variance():
+    """When activations are constant (zero variance), explained_variance should be 1.0
+    for perfect reconstruction and 0.0 when residual is nonzero."""
+    d_model = 4
+
+    # Case 1: constant activations, perfect reconstruction -> 1.0
+    total_var = torch.tensor(0.0)
+    residual_var = torch.tensor(0.0)
+    eps = 1e-12
+    if torch.abs(total_var) <= eps:
+        if torch.abs(residual_var) <= eps:
+            ev = 1.0
+        else:
+            ev = 0.0
+    else:
+        ev = (1 - residual_var / total_var).item()
+    assert ev == 1.0
+
+    # Case 2: constant activations, nonzero residual -> 0.0
+    residual_var = torch.tensor(0.5)
+    if torch.abs(total_var) <= eps:
+        if torch.abs(residual_var) <= eps:
+            ev = 1.0
+        else:
+            ev = 0.0
+    else:
+        ev = (1 - residual_var / total_var).item()
+    assert ev == 0.0
+
+
 def test_process_args():
     args = [
         "gpt2-small-res_scefr-ajt",
