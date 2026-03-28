@@ -666,9 +666,10 @@ def test_explained_variance_uses_mean_centered_variance():
 
     assert computed_total_var == pytest.approx(expected_total_var, rel=1e-3)
 
-    # With the bug (.pow(2) on the mean term), the subtracted term captures E[x^2]^2
-    # instead of E[x]^2, making total_variance much larger than the true variance
-    # for data with a large mean.
+    # With the bug (.pow(2) on the mean term), the subtracted term becomes
+    # sum(E[x_d^2]^2) instead of sum(E[x_d]^2). For large-mean data this
+    # makes buggy_total_var very negative (or wildly wrong in general),
+    # which distorts the explained_variance ratio.
     buggy_mean_act = x.pow(2).mean(dim=0)  # bug: .pow(2) before mean
     buggy_total_var = (
         mean_sum_of_squares - (buggy_mean_act**2).sum()
