@@ -381,6 +381,36 @@ def get_downstream_reconstruction_metrics(
     return metrics
 
 
+def compute_explained_variance(
+    input_batches: list[torch.Tensor],
+    output_batches: list[torch.Tensor],
+) -> float:
+    """Compute explained variance from lists of input/output tensor pairs.
+
+    Each tensor has shape (n_tokens, d_model). Total variance is computed as
+    Var(X) = E[||X||^2] - ||E[X]||^2, summed across dimensions.
+    """
+    mean_sum_of_squares: list[torch.Tensor] = []
+    mean_act_per_dimension: list[torch.Tensor] = []
+    mean_sum_of_resid_squared: list[torch.Tensor] = []
+
+    for sae_input, sae_output in zip(input_batches, output_batches):
+        mean_sum_of_squares.append(sae_input.pow(2).sum(dim=-1).mean(dim=0))
+        mean_act_per_dimension.append(sae_input.mean(dim=0))
+        resid_ss = (sae_input - sae_output).pow(2).sum(dim=-1)
+        mean_sum_of_resid_squared.append(resid_ss.mean(dim=0))
+
+    total_mean_ss = torch.stack(mean_sum_of_squares).mean(dim=0)
+    total_mean_act = torch.stack(mean_act_per_dimension).mean(dim=0)
+    total_variance = total_mean_ss - (total_mean_act**2).sum()
+    residual_variance = torch.stack(mean_sum_of_resid_squared).mean(dim=0)
+
+    eps = 1e-12
+    if torch.abs(total_variance) <= eps:
+        return 1.0 if torch.abs(residual_variance) <= eps else 0.0
+    return (1 - residual_variance / total_variance).item()
+
+
 def get_sparsity_and_variance_metrics(
     sae: SAE[Any],
     model: HookedRootModule,
@@ -411,9 +441,8 @@ def get_sparsity_and_variance_metrics(
         metric_dict["l0"] = []
         metric_dict["l1"] = []
 
-    mean_sum_of_squares = []  # for explained variance
-    mean_act_per_dimension = []  # for explained variance
-    mean_sum_of_resid_squared = []  # for explained variance
+    variance_inputs: list[torch.Tensor] = []
+    variance_outputs: list[torch.Tensor] = []
     if compute_variance_metrics:
         # explained_variance is left out of the dict here, since we don't want to naively
         # average over the batch dimension. This is handled later in the function.
@@ -546,18 +575,8 @@ def get_sparsity_and_variance_metrics(
             )
             explained_variance_legacy = 1 - resid_sum_of_squares / batched_variance_sum
             metric_dict["explained_variance_legacy"].append(explained_variance_legacy)
-            # Individual sums for the new (correct) formula. We're taking the mean over the batch
-            # dimension here to save memory, but we could also pass the full tensors and take the
-            # mean later (like we do for other metrics).
-            mean_sum_of_squares.append(
-                (flattened_sae_input).pow(2).sum(dim=-1).mean(dim=0)  # scalar
-            )
-            mean_act_per_dimension.append(
-                (flattened_sae_input).mean(dim=0)  # [d_model]
-            )
-            mean_sum_of_resid_squared.append(
-                resid_sum_of_squares.mean(dim=0)  # scalar
-            )
+            variance_inputs.append(flattened_sae_input)
+            variance_outputs.append(flattened_sae_out)
 
             x_normed = flattened_sae_input / torch.norm(
                 flattened_sae_input, dim=-1, keepdim=True
@@ -587,19 +606,9 @@ def get_sparsity_and_variance_metrics(
 
     # calculate explained variance
     if compute_variance_metrics:
-        mean_sum_of_squares = torch.stack(mean_sum_of_squares).mean(dim=0)
-        mean_act_per_dimension = torch.stack(mean_act_per_dimension).mean(dim=0)
-        total_variance = mean_sum_of_squares - (mean_act_per_dimension**2).sum()
-        residual_variance = torch.stack(mean_sum_of_resid_squared).mean(dim=0)
-        eps = 1e-12
-        if torch.abs(total_variance) <= eps:
-            if torch.abs(residual_variance) <= eps:
-                explained_variance = torch.tensor(1.0, device=total_variance.device)
-            else:
-                explained_variance = torch.tensor(0.0, device=total_variance.device)
-        else:
-            explained_variance = 1 - residual_variance / total_variance
-        metrics["explained_variance"] = explained_variance.item()
+        metrics["explained_variance"] = compute_explained_variance(
+            variance_inputs, variance_outputs
+        )
 
     # Aggregate feature-wise metrics
     feature_metrics: dict[str, list[float]] = {}

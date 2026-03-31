@@ -15,6 +15,7 @@ from sae_lens.evals import (
     EvalConfig,
     _kl,
     all_loadable_saes,
+    compute_explained_variance,
     get_downstream_reconstruction_metrics,
     get_eval_everything_config,
     get_saes_from_regex,
@@ -33,6 +34,7 @@ from sae_lens.saes.batchtopk_sae import (
 from sae_lens.saes.sae import SAE, TrainingSAE
 from sae_lens.saes.standard_sae import StandardSAE, StandardTrainingSAE
 from sae_lens.saes.topk_sae import TopKTrainingSAE
+from sae_lens.synthetic.evals import ExplainedVarianceCalculator
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
 from tests.helpers import (
@@ -644,51 +646,82 @@ def test_get_sparsity_and_variance_metrics_identity_sae_perfect_reconstruction(
     assert metrics["mse"] == pytest.approx(0.0, abs=1e-5)
 
 
-def test_explained_variance_uses_mean_centered_variance():
-    """Verify explained_variance computes Var(X) = E[||X||^2] - ||E[X]||^2, not E[||X||^2]."""
-    # Construct inputs with a large mean so the difference between
-    # variance-from-zero and variance-from-mean is significant.
+def test_explained_variance_single_batch_matches_formula():
     d_model = 8
-    n_samples = 1000
-    mean = torch.full((d_model,), 10.0)
-    x = mean + torch.randn(n_samples, d_model) * 0.5
+    n_samples = 10000
+    x = torch.randn(n_samples, d_model) + 5.0
+    x_hat = x + torch.randn(n_samples, d_model) * 0.3
 
-    # Ground truth total variance: sum of per-dimension variances
-    expected_total_var = x.var(dim=0, correction=0).sum().item()
+    ev = compute_explained_variance([x], [x_hat])
 
-    # The formula used in evals.py after the fix:
-    # total_variance = E[||X||^2] - ||E[X]||^2
-    mean_sum_of_squares = x.pow(2).sum(dim=-1).mean(dim=0)
-    mean_act_per_dimension = x.mean(dim=0)
-    computed_total_var = (
-        mean_sum_of_squares - (mean_act_per_dimension**2).sum()
-    ).item()
+    total_var = x.var(dim=0, correction=0).sum()
+    residual_var = (x - x_hat).pow(2).sum(dim=-1).mean()
+    expected_ev = (1 - residual_var / total_var).item()
 
-    assert computed_total_var == pytest.approx(expected_total_var, rel=1e-3)
+    assert ev == pytest.approx(expected_ev, rel=1e-5)
 
-    # With the bug (.pow(2) on the mean term), the subtracted term becomes
-    # sum(E[x_d^2]^2) instead of sum(E[x_d]^2). For large-mean data this
-    # makes buggy_total_var very negative (or wildly wrong in general),
-    # which distorts the explained_variance ratio.
-    buggy_mean_act = x.pow(2).mean(dim=0)  # bug: .pow(2) before mean
-    buggy_total_var = (mean_sum_of_squares - (buggy_mean_act**2).sum()).item()
-    assert abs(buggy_total_var - expected_total_var) > expected_total_var * 0.5
+
+def test_explained_variance_batched_matches_unbatched():
+    d_model = 8
+    n_samples = 3000
+    x = torch.randn(n_samples, d_model) + 5.0
+    x_hat = x + torch.randn(n_samples, d_model) * 0.3
+
+    ev_single = compute_explained_variance([x], [x_hat])
+
+    x_batches = list(x.chunk(3))
+    x_hat_batches = list(x_hat.chunk(3))
+    ev_batched = compute_explained_variance(x_batches, x_hat_batches)
+
+    assert ev_batched == pytest.approx(ev_single, rel=1e-5)
+
+
+def test_explained_variance_invariant_to_input_bias():
+    # Use float64 to avoid catastrophic cancellation with large biases
+    d_model = 8
+    n_samples = 10000
+    x = torch.randn(n_samples, d_model, dtype=torch.float64)
+    x_hat = x + torch.randn(n_samples, d_model, dtype=torch.float64) * 0.3
+
+    ev_original = compute_explained_variance([x], [x_hat])
+
+    bias = torch.full((d_model,), 100.0, dtype=torch.float64)
+    ev_biased = compute_explained_variance([x + bias], [x_hat + bias])
+
+    assert ev_biased == pytest.approx(ev_original, rel=1e-10)
 
 
 def test_explained_variance_zero_total_variance():
-    """When activations are constant (zero variance), explained_variance should be 1.0
-    for perfect reconstruction and 0.0 when residual is nonzero."""
-    eps = 1e-12
+    d_model = 4
+    n_samples = 100
+    x = torch.full((n_samples, d_model), 5.0)
 
-    # Case 1: constant activations, perfect reconstruction -> 1.0
-    residual_var = torch.tensor(0.0)
-    ev = 1.0 if torch.abs(residual_var) <= eps else 0.0
-    assert ev == 1.0
+    # Constant input, perfect reconstruction -> 1.0
+    assert compute_explained_variance([x], [x]) == 1.0
 
-    # Case 2: constant activations, nonzero residual -> 0.0
-    residual_var = torch.tensor(0.5)
-    ev = 1.0 if torch.abs(residual_var) <= eps else 0.0
-    assert ev == 0.0
+    # Constant input, nonzero residual -> 0.0
+    x_hat = x + 0.5
+    assert compute_explained_variance([x], [x_hat]) == 0.0
+
+
+def test_explained_variance_matches_synthetic_calculator():
+    d_model = 8
+    n_samples = 3000
+    batch_size = 1000
+    x = torch.randn(n_samples, d_model) + 5.0
+    x_hat = x + torch.randn(n_samples, d_model) * 0.3
+
+    x_batches = list(x.split(batch_size))
+    x_hat_batches = list(x_hat.split(batch_size))
+
+    ev_evals = compute_explained_variance(x_batches, x_hat_batches)
+
+    calc = ExplainedVarianceCalculator(hidden_dim=d_model)
+    for inp, out in zip(x_batches, x_hat_batches):
+        calc.add_batch(sae_output=out, hidden_acts=inp)
+    ev_synthetic = calc.compute()
+
+    assert ev_evals == pytest.approx(ev_synthetic, rel=1e-5)
 
 
 def test_process_args():
