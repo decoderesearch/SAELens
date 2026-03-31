@@ -646,6 +646,63 @@ def test_get_sparsity_and_variance_metrics_identity_sae_perfect_reconstruction(
     assert metrics["mse"] == pytest.approx(0.0, abs=1e-5)
 
 
+def test_explained_variance_invariant_to_activation_shift(
+    model: HookedTransformer,
+    example_dataset: Dataset,
+):
+    d_in = 64
+    hook_name = "blocks.1.hook_resid_pre"
+    cfg = build_runner_cfg(d_in=d_in, d_sae=2 * d_in, hook_name=hook_name)
+
+    training_sae = StandardTrainingSAE.from_dict(cfg.get_training_sae_cfg_dict())
+    sae = StandardSAE.from_dict(training_sae.cfg.get_inference_sae_cfg_dict())
+    random_params(sae)
+    # The shift invariance requires b_dec to be subtracted from the input during
+    # encoding so that the shift cancels: encode(x+c) with b_dec+c == encode(x) with b_dec.
+    sae.cfg.apply_b_dec_to_input = True
+
+    eval_kwargs: dict[str, Any] = dict(
+        sae=sae,
+        model=model,
+        activation_scaler=ActivationScaler(None),
+        n_batches=3,
+        compute_l2_norms=False,
+        compute_sparsity_metrics=False,
+        compute_variance_metrics=True,
+        compute_featurewise_density_statistics=True,
+        eval_batch_size_prompts=4,
+        model_kwargs={},
+    )
+
+    activation_store = ActivationsStore.from_config(
+        model, cfg, override_dataset=example_dataset
+    )
+    metrics_original, _ = get_sparsity_and_variance_metrics(
+        activation_store=activation_store, **eval_kwargs
+    )
+
+    # Shifting activations by a constant and adjusting b_dec by the same amount
+    # should not change explained_variance: the shift cancels in encoding
+    # (so features are identical) and both input and output shift equally.
+    shift = torch.full((d_in,), 5.0)
+    sae.b_dec.data += shift
+    model.add_hook(hook_name, lambda tensor, **_: tensor + shift, is_permanent=True)
+    try:
+        activation_store_shifted = ActivationsStore.from_config(
+            model, cfg, override_dataset=example_dataset
+        )
+        metrics_shifted, _ = get_sparsity_and_variance_metrics(
+            activation_store=activation_store_shifted, **eval_kwargs
+        )
+    finally:
+        model.reset_hooks(including_permanent=True)
+
+    # Tolerance is limited by float32 catastrophic cancellation in E[||x||^2] - ||E[x]||^2
+    assert metrics_shifted["explained_variance"] == pytest.approx(
+        metrics_original["explained_variance"], rel=1e-3
+    )
+
+
 def test_explained_variance_single_batch_matches_formula():
     d_model = 8
     n_samples = 10000
