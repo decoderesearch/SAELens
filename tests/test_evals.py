@@ -671,9 +671,7 @@ def test_explained_variance_uses_mean_centered_variance():
     # makes buggy_total_var very negative (or wildly wrong in general),
     # which distorts the explained_variance ratio.
     buggy_mean_act = x.pow(2).mean(dim=0)  # bug: .pow(2) before mean
-    buggy_total_var = (
-        mean_sum_of_squares - (buggy_mean_act**2).sum()
-    ).item()
+    buggy_total_var = (mean_sum_of_squares - (buggy_mean_act**2).sum()).item()
     assert abs(buggy_total_var - expected_total_var) > expected_total_var * 0.5
 
 
@@ -683,7 +681,6 @@ def test_explained_variance_zero_total_variance():
     eps = 1e-12
 
     # Case 1: constant activations, perfect reconstruction -> 1.0
-    total_var = torch.tensor(0.0)
     residual_var = torch.tensor(0.0)
     ev = 1.0 if torch.abs(residual_var) <= eps else 0.0
     assert ev == 1.0
