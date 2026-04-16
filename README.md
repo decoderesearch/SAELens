@@ -28,7 +28,7 @@ This library is maintained by [Joseph Bloom](https://www.decoderesearch.com/), [
 
 ## Loading Pre-trained SAEs.
 
-Pre-trained SAEs for various models can be imported via SAE Lens. See this [page](https://decoderesearch.github.io/SAELens/pretrained_saes/) for a list of all SAEs.
+Pre-trained SAEs for various models can be imported via SAE Lens. See this [page](https://decoderesearch.github.io/SAELens/latest/pretrained_saes/) for a list of all SAEs.
 
 ## Migrating to SAELens v6
 
