@@ -134,7 +134,7 @@ Ratio of SAE output norm to input norm. Values below 1.0 indicate the SAE is sys
 
 ## Creating Custom Benchmark Models
 
-You can create custom synthetic models for ablation studies or your own specialized benchmarks. Below is the code to create the synthetic model from scratch. You can customize any part of the configuation to create your own variants.
+You can create custom synthetic models for ablation studies or your own specialized benchmarks. Below is the code to create the synthetic model from scratch. You can customize any part of the configuration to create your own variants.
 
 
 ```python
