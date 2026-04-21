@@ -290,6 +290,7 @@ cfg = SyntheticModelConfig(
         branching_factor=4,
         max_depth=3,
         mutually_exclusive_portion=1.0,  # All children are mutually exclusive
+        mutually_exclusive_min_depth=0,  # Apply ME starting from root nodes
         compensate_probabilities=True,  # Try to compensate firing probabilities for hierarchy effects
         scale_children_by_parent=True,  # Scale child activations by parent activation / parent mean
     ),
@@ -310,6 +311,7 @@ cfg = SyntheticModelConfig(
     mean_firing_magnitudes=LinearMagnitudeConfig(start=5.0, end=4.0),
     std_firing_magnitudes=FoldedNormalMagnitudeConfig(mean=0.5, std=0.5),
 
+    bias=0.5,
     seed=42,
 )
 
