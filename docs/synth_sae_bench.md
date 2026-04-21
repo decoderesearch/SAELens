@@ -169,6 +169,7 @@ cfg = SyntheticModelConfig(
     correlation=LowRankCorrelationConfig(rank=25, correlation_scale=0.1),
     mean_firing_magnitudes=LinearMagnitudeConfig(start=5.0, end=4.0),
     std_firing_magnitudes=FoldedNormalMagnitudeConfig(mean=0.5, std=0.5),
+    bias=0.5,
     seed=42,
 )
 model = SyntheticModel(cfg, device="cuda")
@@ -213,6 +214,7 @@ for hidden_dim in [256, 512, 768, 1024, 1536]:
         correlation=LowRankCorrelationConfig(rank=25, correlation_scale=0.1),
         mean_firing_magnitudes=LinearMagnitudeConfig(start=5.0, end=4.0),
         std_firing_magnitudes=FoldedNormalMagnitudeConfig(mean=0.5, std=0.5),
+        bias=0.5,
         seed=42,
     )
     
