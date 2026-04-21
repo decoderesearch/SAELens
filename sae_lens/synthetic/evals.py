@@ -33,7 +33,8 @@ def mean_correlation_coefficient(
     an optimal one-to-one matching using the Hungarian algorithm and computing the
     mean absolute cosine similarity of matched pairs.
 
-    Reference: O'Neill et al. "Position: Mechanistic Interpretability Should Prioritize Feature Consistency in SAEs" (https://arxiv.org/abs/2505.20254)
+    Reference: "Position: Mechanistic Interpretability Should Prioritize Feature
+    Consistency in SAEs" (https://arxiv.org/abs/2505.20254)
 
     Args:
         features_a: Feature vectors of shape [num_features_a, hidden_dim]
