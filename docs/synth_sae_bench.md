@@ -141,8 +141,6 @@ You can create custom synthetic models for ablation studies or your own speciali
 from sae_lens.synthetic import (
     SyntheticModel,
     SyntheticModelConfig,
-    SyntheticSAERunner,
-    SyntheticSAERunnerConfig,
     ZipfianFiringProbabilityConfig,
     HierarchyConfig,
     OrthogonalizationConfig,
@@ -153,7 +151,7 @@ from sae_lens.synthetic import (
 
 cfg = SyntheticModelConfig(
     num_features=16_384,
-    hidden_dim=hidden_dim,
+    hidden_dim=768,
     firing_probability=ZipfianFiringProbabilityConfig(
         exponent=0.5,
         max_prob=0.4,
