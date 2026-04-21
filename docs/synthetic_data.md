@@ -106,7 +106,7 @@ print(f"F1: {result.classification.f1_score:.3f}")
 
 ### Metrics
 
-- **MCC (Mean Correlation Coefficient)**: Measures alignment between SAE decoder weights and true feature vectors. Uses the Hungarian algorithm to find the optimal one-to-one matching, then computes mean absolute cosine similarity. Range [0, 1] where 1 = perfect recovery. See the paper [Compute Optimal Inference and Provable Amortisation Gap in Sparse Autoencoders](https://arxiv.org/abs/2411.13117) for more details.
+- **MCC (Mean Correlation Coefficient)**: Measures alignment between SAE decoder weights and true feature vectors. Uses the Hungarian algorithm to find the optimal one-to-one matching, then computes mean absolute cosine similarity. Range [0, 1] where 1 = perfect recovery. See the paper [Position: Mechanistic Interpretability Should Prioritize Feature Consistency in SAEs](https://arxiv.org/abs/2505.20254) for more details.
 - **Explained Variance (R²)**: Fraction of input variance explained by the SAE reconstruction. 1.0 = perfect reconstruction.
 - **Uniqueness**: Fraction of SAE latents that track unique ground-truth features (i.e., no two latents map to the same ground-truth feature). 1.0 = all unique.
 - **Classification (Precision/Recall/F1)**: Treats each SAE latent as a binary classifier for its best-matching ground-truth feature. Precision = TP/(TP+FP), Recall = TP/(TP+FN), F1 = harmonic mean.

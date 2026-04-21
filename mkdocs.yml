@@ -61,7 +61,7 @@ nav:
 
 validation:
   nav:
-    not_in_nav: ignore
+    omitted_files: ignore
 
 plugins:
   - search
@@ -73,8 +73,6 @@ plugins:
         'sae_table.md': 'pretrained_saes/index.md'
   - mkdocstrings:
       custom_templates: null
-      watch:
-        - sae_lens/  # Replace with the path to your Python code
 
 hooks:
   - docs/generate_sae_table.py

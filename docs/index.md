@@ -1,6 +1,6 @@
 <!-- prettier-ignore-start -->
 !!! tip "SAELens v6"
-    SAELens 6.0.0 is live with changes to SAE training and loading. Check out the [migration guide →](migrating)
+    SAELens 6.0.0 is live with changes to SAE training and loading. Check out the [migration guide →](migrating.md)
 <!-- prettier-ignore-end -->
 
 <img width="1308" height="532" alt="saes_pic" src="https://github.com/user-attachments/assets/2a5d752f-b261-4ee4-ad5d-ebf282321371" />

@@ -1,17 +1,25 @@
 # SynthSAEBench
 
-Evaluating SAE architectures is difficult. When we train an SAE on an LLM, we don't know the ground-truth features of the LLM, so it's difficult to tell if the SAE is finding the correct features, and we cannot easily debug why things are not working. SynthSAEBench provides tools for large-scale synthetic models with realistic properties with ground-truth features, enabling precise evaluation of SAE quality. SynthSAEBench is not a replacement for LLM SAE benchmarks like [SAEBench](https://github.com/adamkarvonen/SAEBench), but is instead a tool for developing, evaluating, and debugging SAE architectures in ways that LLM SAE benchmarks cannot replicate.
+SynthSAEBench is a benchmark for developing and comparing SAE architectures on synthetic data with known ground-truth features. It consists of **SynthSAEBench-16k**, a standardized synthetic model with 16,384 ground-truth features, and the tools used to build it, which you can also use to create your own custom synthetic models.
 
-We use the name "SynthSAEBench" to refer to the synthetic data generation and evaluation tools, and "SynthSAEBench-16k" to refer to our default standardized benchmark model. You can create your own synthetic data models as well with our tools to test out how your SAE architectures perform with different levels of superposition, hierarchy, correlations, and more.
+When you train an SAE on an LLM, you don't know what the "true" features are, so you have to evaluate with proxies — reconstruction loss, downstream probes, auto-interp. These proxies are noisy enough that it's hard to tell whether a new SAE architecture is actually better, or just different. SynthSAEBench replaces those proxies with direct measurement: because the features are known by construction, you can ask whether the SAE recovered them.
+
+SynthSAEBench is **not** a replacement for LLM-based benchmarks like [SAEBench](https://github.com/adamkarvonen/SAEBench). It's the complementary test: does this architecture actually recover sparse linear features under conditions we control? If it can't do that, there's little reason to expect it to work on a real model.
 
 For a hands-on walkthrough, see the [tutorial notebook](https://github.com/decoderesearch/SAELens/blob/main/tutorials/synth_sae_bench.ipynb)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/synth_sae_bench.ipynb).
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/synth_sae_bench.ipynb). For the full API reference, see [Synthetic Data](synthetic_data.md). For the experiments behind the benchmark, see the [SynthSAEBench paper](https://arxiv.org/abs/2602.14687).
 
-For the full synthetic data API reference, see [Synthetic Data](synthetic_data.md). Also see the [SynthSAEBench paper](https://arxiv.org/abs/2602.14687) for more details on the synthetic data primitives and the benchmark results.
+## SynthSAEBench-16k
 
-## SynthSAEBench-16k Model
+SynthSAEBench-16k is the standardized benchmark model — a pretrained `SyntheticModel` on HuggingFace with a fixed configuration, so results between different SAE architectures are directly comparable.
 
-The SynthSAEBench-16k model is our standardized benchmark model.
+```python
+from sae_lens.synthetic import SyntheticModel
+
+model = SyntheticModel.from_pretrained(
+    "decoderesearch/synth-sae-bench-16k-v1", device="cuda"
+)
+```
 
 **Configuration:**
 
@@ -28,15 +36,7 @@ The SynthSAEBench-16k model is our standardized benchmark model.
 | Mean magnitudes | Linear from 5.0 (frequent) to 4.0 (rare) |
 | Std magnitudes | Folded normal (mean=0.5, std=0.5) |
 
-**Loading from HuggingFace:**
-
-```python
-from sae_lens.synthetic import SyntheticModel
-
-model = SyntheticModel.from_pretrained(
-    "decoderesearch/synth-sae-bench-16k-v1", device="cuda"
-)
-```
+The exact code used to build this model is available at [create_synth_bench_16k_model.py](https://github.com/decoderesearch/synth-sae-bench-experiments/blob/main/experiments/create_synth_bench_16k_model.py), so you can regenerate it (or tweak it) yourself. See [Creating Custom Benchmark Models](#creating-custom-benchmark-models) below for a walkthrough of the configuration options.
 
 ## Quickstart: Training an SAE on SynthSAEBench-16k
 
@@ -108,7 +108,7 @@ Fraction of input variance explained by the SAE reconstruction. Measures reconst
 
 ### MCC (Mean Correlation Coefficient)
 
-Uses the Hungarian algorithm to find the optimal one-to-one matching between SAE decoder columns and ground-truth feature vectors, then computes the mean absolute cosine similarity. Range [0, 1] where 1 = perfect recovery of all features. See the paper [Compute Optimal Inference and Provable Amortisation Gap in Sparse Autoencoders](https://arxiv.org/abs/2411.13117) for more details.
+Uses the Hungarian algorithm to find the optimal one-to-one matching between SAE decoder columns and ground-truth feature vectors, then computes the mean absolute cosine similarity. Range [0, 1] where 1 = perfect recovery of all features. See the paper [Position: Mechanistic Interpretability Should Prioritize Feature Consistency in SAEs](https://arxiv.org/abs/2505.20254) for more details.
 
 ### Feature Uniqueness
 
@@ -134,7 +134,49 @@ Ratio of SAE output norm to input norm. Values below 1.0 indicate the SAE is sys
 
 ## Creating Custom Benchmark Models
 
-You can create custom synthetic models for ablation studies or your own specialized benchmarks:
+You can create custom synthetic models for ablation studies or your own specialized benchmarks. Below is the code to create the synthetic model from scratch. You can customize any part of the configuation to create your own variants.
+
+
+```python
+from sae_lens.synthetic import (
+    SyntheticModel,
+    SyntheticModelConfig,
+    SyntheticSAERunner,
+    SyntheticSAERunnerConfig,
+    ZipfianFiringProbabilityConfig,
+    HierarchyConfig,
+    OrthogonalizationConfig,
+    LowRankCorrelationConfig,
+    LinearMagnitudeConfig,
+    FoldedNormalMagnitudeConfig,
+)
+
+cfg = SyntheticModelConfig(
+    num_features=16_384,
+    hidden_dim=hidden_dim,
+    firing_probability=ZipfianFiringProbabilityConfig(
+        exponent=0.5,
+        max_prob=0.4,
+        min_prob=5e-4,
+    ),
+    hierarchy=HierarchyConfig(
+        total_root_nodes=128,
+        branching_factor=4,
+        max_depth=3,
+        mutually_exclusive_portion=1.0,
+        compensate_probabilities=True,
+        scale_children_by_parent=True,
+    ),
+    orthogonalization=OrthogonalizationConfig(num_steps=100, lr=3e-4),
+    correlation=LowRankCorrelationConfig(rank=25, correlation_scale=0.1),
+    mean_firing_magnitudes=LinearMagnitudeConfig(start=5.0, end=4.0),
+    std_firing_magnitudes=FoldedNormalMagnitudeConfig(mean=0.5, std=0.5),
+    seed=42,
+)
+model = SyntheticModel(cfg, device="cuda")
+```
+
+You can also pass a `SyntheticModelConfig` directly as the `synthetic_model` parameter to `SyntheticSAERunnerConfig` to train an SAE on a custom model. For instance, below we explore the effect of varying the level of superposition on the SAE performance by training an SAE on a model with a different number of hidden dimensions.
 
 ```python
 from sae_lens.synthetic import (
