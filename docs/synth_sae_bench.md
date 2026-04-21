@@ -239,6 +239,33 @@ We have trained and evaluated a series of SAEs on SynthSAEBench-16k. The code fo
 
 ![SynthSAEBench-16k results](assets/vary-l0_combined_2x3.png)
 
+### Raw results for SynthSAEBench-16k at selected L0s
+
+We report the mean and standard deviation of the F1 score, MCC, uniqueness, and explained variance for each SAE architecture at L0=25 and L0=20 from the plots above. The true L0 of the first 4096 latents of SynthSAEBench-16k is ~25, but we find that some architectures perform better at L0=20 (due to feature absorption). In reality, the user of an SAE can pick the L0 where their SAE performs best, so we report results for both L0=25 and L0=20.
+
+*If you have an architecture that you would like to add to this list, please open an issue or pull request!*
+
+**L0 = 25**
+
+| SAE          | F1 score        | MCC             | Uniqueness      | Var. explained  |
+|--------------|-----------------|-----------------|-----------------|-----------------|
+| **BatchTopK**    | 0.7316 <span class="stdev">± 0.0010</span> | 0.7574 <span class="stdev">± 0.0003</span> | 0.9837 <span class="stdev">± 0.0015</span> | 0.7923 <span class="stdev">± 0.0003</span> |
+| **Matryoshka**   | **0.8793** <span class="stdev">± 0.0021</span> | **0.7927** <span class="stdev">± 0.0006</span> | **0.9987** <span class="stdev">± 0.0005</span> | 0.7792 <span class="stdev">± 0.0004</span> |
+| **MatchPursuit** | 0.4464 <span class="stdev">± 0.0044</span> | 0.6930 <span class="stdev">± 0.0030</span> | 0.8281 <span class="stdev">± 0.0069</span> | **0.8351** <span class="stdev">± 0.0003</span> |
+| **Standard L1**  | 0.5562 <span class="stdev">± 0.0020</span> | 0.6039 <span class="stdev">± 0.0012</span> | 0.8976 <span class="stdev">± 0.0021</span> | 0.7654 <span class="stdev">± 0.0001</span> |
+| **JumpReLU**     | 0.7317 <span class="stdev">± 0.0034</span> | 0.7527 <span class="stdev">± 0.0009</span> | 0.9885 <span class="stdev">± 0.0010</span> | 0.7951 <span class="stdev">± 0.0004</span> |
+
+**L0 = 20**
+
+| SAE          | F1 score        | MCC             | Uniqueness      | Var. explained  |
+|--------------|-----------------|-----------------|-----------------|-----------------|
+| **BatchTopK**    | 0.8183 <span class="stdev">± 0.0011</span> | **0.7526** <span class="stdev">± 0.0007</span> | 0.9760 <span class="stdev">± 0.0028</span> | 0.7889 <span class="stdev">± 0.0002</span> |
+| **Matryoshka**   | **0.8601** <span class="stdev">± 0.0016</span> | 0.7455 <span class="stdev">± 0.0021</span> | **0.9874** <span class="stdev">± 0.0020</span> | 0.7699 <span class="stdev">± 0.0002</span> |
+| **MatchPursuit** | 0.4439 <span class="stdev">± 0.0024</span> | 0.6748 <span class="stdev">± 0.0028</span> | 0.7552 <span class="stdev">± 0.0026</span> | **0.8267** <span class="stdev">± 0.0003</span> |
+| **Standard L1**  | 0.5777 <span class="stdev">± 0.0012</span> | 0.5834 <span class="stdev">± 0.0015</span> | 0.8528 <span class="stdev">± 0.0055</span> | 0.7501 <span class="stdev">± 0.0009</span> |
+| **JumpReLU**     | 0.8241 <span class="stdev">± 0.0041</span> | 0.7434 <span class="stdev">± 0.0015</span> | 0.9781 <span class="stdev">± 0.0029</span> | 0.7906 <span class="stdev">± 0.0005</span> |
+
+
 ## Citation
 
 If you use SynthSAEBench in your research, please cite:
