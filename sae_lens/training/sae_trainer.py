@@ -131,14 +131,16 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
                 final_value=coeff_cfg.value,
             )
 
-        # Setup autocast if using
+        # Setup autocast if using. autocast/GradScaler want the device *type*
+        # (e.g. "cuda"), not a fully qualified device string like "cuda:1".
+        device_type = torch.device(self.cfg.device).type
         self.grad_scaler = torch.amp.GradScaler(
-            device=self.cfg.device, enabled=self.cfg.autocast
+            device=device_type, enabled=self.cfg.autocast
         )
 
         if self.cfg.autocast:
             self.autocast_if_enabled = torch.autocast(
-                device_type=self.cfg.device,
+                device_type=device_type,
                 dtype=torch.bfloat16,
                 enabled=self.cfg.autocast,
             )

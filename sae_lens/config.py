@@ -152,7 +152,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
         sequence_separator_token (int | Literal["bos", "eos", "sep"] | None): If not `None`, this token will be placed between sentences in a batch to act as a separator. By default, this is the `<bos>` token.
         activations_mixing_fraction (float): Fraction of the activation buffer to keep for mixing with new activations (default 0.5). Higher values mean more temporal shuffling but slower throughput. If 0, activations are served in order without shuffling (no temporal mixing).
         device (str): The device to use. Usually "cuda".
-        act_store_device (str): The device to use for the activation store. "cpu" is advised in order to save VRAM. Defaults to "with_model" which uses the same device as the main model.
+        act_store_device (str | None): The device to use for the activation store. Setting to "cpu" is advised if VRAM is limited. Defaults to None, which uses the same device as the SAE.
         seed (int): The seed to use.
         dtype (str): The data type to use for the SAE and activations.
         prepend_bos (bool): Whether to prepend the beginning of sequence token. You should use whatever the model was trained with.
@@ -225,8 +225,11 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     activations_mixing_fraction: float = 0.5
 
     # Misc
-    device: str = "cpu"
-    act_store_device: str = "with_model"  # will be set by post init if with_model
+    device: str = "cpu"  # device for the SAE (and default for the LLM)
+    llm_device: str | None = None  # if None, will be set to `device` in post init
+    # If None, will be set to `device` (the SAE device) in post init. The legacy
+    # string "with_model" is accepted to keep the buffer co-located with the LLM.
+    act_store_device: str | None = None
     seed: int = 42
     dtype: str = "float32"  # type: ignore #
     prepend_bos: bool = True
@@ -320,8 +323,13 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
             else:
                 self.model_from_pretrained_kwargs = {}
 
-        if self.act_store_device == "with_model":
+        if self.llm_device is None:
+            self.llm_device = self.device
+
+        if self.act_store_device is None:
             self.act_store_device = self.device
+        elif self.act_store_device == "with_model":
+            self.act_store_device = self.llm_device
 
         if self.lr_end is None:
             self.lr_end = self.lr / 10
@@ -417,6 +425,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
         # Overwrite fields that might not be JSON-serializable
         d["dtype"] = str(self.dtype)
         d["device"] = str(self.device)
+        d["llm_device"] = str(self.llm_device)
         d["act_store_device"] = str(self.act_store_device)
         return d
 

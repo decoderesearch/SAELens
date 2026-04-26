@@ -123,6 +123,7 @@ class ActivationsStore:
                 "You must either pass in a dataset or specify a dataset_path in your configutation."
             )
 
+        assert cfg.act_store_device is not None  # set in cfg.__post_init__
         device = torch.device(cfg.act_store_device)
         exclude_special_tokens = cfg.exclude_special_tokens
         if exclude_special_tokens is False:
