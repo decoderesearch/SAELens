@@ -628,6 +628,10 @@ def get_recons_loss(
         )
     else:
         mask = torch.ones_like(batch_tokens, dtype=torch.bool)
+    # The replacement hook moves activations to sae.device for the SAE forward
+    # pass; mask is consumed alongside those activations in torch.where, so it
+    # must live on the same device.
+    mask = mask.to(sae.device)
 
     metrics = {}
 
