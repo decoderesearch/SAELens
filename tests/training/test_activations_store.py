@@ -351,10 +351,9 @@ def test_get_input_token_device_uses_input_embeddings_for_hf_proxy():
     proxy = load_model(
         model_class_name="AutoModelForCausalLM",
         model_name="gpt2",
-        device="cpu",
+        device="meta",
     )
-    expected = proxy.model.get_input_embeddings().weight.device  # type: ignore
-    assert _get_input_token_device(proxy) == expected
+    assert _get_input_token_device(proxy) == torch.device("meta")
 
 
 def test_get_input_token_device_returns_input_embedding_device_when_sharded():
