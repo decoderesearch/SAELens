@@ -52,7 +52,12 @@ def load_model(
     if model_class_name == "AutoModelForCausalLM":
         hf_model = AutoModelForCausalLM.from_pretrained(
             model_name, **model_from_pretrained_kwargs
-        ).to(device)  # type: ignore
+        )
+        # When the user passes an explicit `device_map`, accelerate has already
+        # placed the weights — calling .to(device) afterwards would either
+        # error or undo the sharding.
+        if "device_map" not in model_from_pretrained_kwargs:
+            hf_model = hf_model.to(device)  # type: ignore
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         return HookedProxyLM(hf_model, tokenizer)
 

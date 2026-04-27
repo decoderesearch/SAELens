@@ -19,6 +19,7 @@ from sae_lens.saes.standard_sae import StandardSAEConfig, StandardTrainingSAECon
 from sae_lens.training.activations_store import (
     ActivationsStore,
     _filter_buffer_acts,
+    _get_input_token_device,
     validate_pretokenized_dataset_tokenizer,
 )
 from tests.helpers import (
@@ -338,6 +339,49 @@ def test_activations_store_moves_with_model(ts_model: HookedTransformer):
     assert activations[0].device == torch.device("cpu")
     assert activations[1] is not None
     assert activations[1].device == torch.device("cpu")
+
+
+def test_get_input_token_device_uses_W_E_for_hooked_transformer(
+    ts_model: HookedTransformer,
+):
+    assert _get_input_token_device(ts_model) == ts_model.W_E.device
+
+
+def test_get_input_token_device_uses_input_embeddings_for_hf_proxy():
+    proxy = load_model(
+        model_class_name="AutoModelForCausalLM",
+        model_name="gpt2",
+        device="cpu",
+    )
+    expected = proxy.model.get_input_embeddings().weight.device  # type: ignore
+    assert _get_input_token_device(proxy) == expected
+
+
+def test_get_input_token_device_returns_input_embedding_device_when_sharded():
+    """When the input embedding lives on a different device than other params,
+    _get_input_token_device must follow the embedding (where tokens need to go),
+    not the first parameter encountered."""
+
+    class FakeShardedHF(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            # `lm_head` registers first, so next(parameters()).device would
+            # return its device. The input embedding lives elsewhere (meta).
+            self.lm_head = torch.nn.Linear(4, 4)
+            self._embed = torch.nn.Embedding(8, 4).to_empty(device="meta")
+
+        def get_input_embeddings(self) -> torch.nn.Module:
+            return self._embed
+
+    class FakeProxy(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.model = FakeShardedHF()
+
+    proxy = FakeProxy()
+    assert _get_input_token_device(proxy) == torch.device("meta")  # type: ignore[arg-type]
+    # Sanity: the first parameter is on cpu, so a naive impl would disagree.
+    assert next(proxy.parameters()).device == torch.device("cpu")
 
 
 def test_activations_store___iterate_tokenized_sequences__yields_concat_and_batched_sequences(
