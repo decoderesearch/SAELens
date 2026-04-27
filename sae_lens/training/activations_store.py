@@ -672,10 +672,8 @@ class ActivationsStore:
         if self.cached_activation_dataset is not None:
             return self._load_raw_llm_batch_from_cached(raise_on_epoch_end)
 
-        # move batch toks to gpu for model
-        batch_tokens = self.get_batch_tokens(raise_at_epoch_end=raise_on_epoch_end).to(
-            _get_input_token_device(self.model)
-        )
+        # get_batch_tokens already returns tokens on the model's input device.
+        batch_tokens = self.get_batch_tokens(raise_at_epoch_end=raise_on_epoch_end)
         activations = self.get_activations(batch_tokens).to(self.device)
 
         # handle seqpos_slice, this is done for activations in get_activations
