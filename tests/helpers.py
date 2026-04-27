@@ -83,7 +83,7 @@ class LanguageModelSAERunnerConfigDict(TypedDict, total=False):
     device: str
     llm_device: str | None
     act_store_device: str | None
-    prefetch_llm_batches: bool | int | None
+    prefetch_llm_batches: bool | int
     seed: int
     dtype: str
     prepend_bos: bool

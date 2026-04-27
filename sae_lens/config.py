@@ -154,7 +154,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
         device (str): The device the SAE lives on, and the default device for everything else. Usually "cuda".
         llm_device (str | None): The device to load the LLM onto. Defaults to None, which uses `device`. Override when the LLM and SAE should live on different GPUs (e.g. `device="cuda:1"`, `llm_device="cuda:0"`).
         act_store_device (str | None): The device to use for the activation store. Setting to "cpu" is advised if VRAM is limited. Defaults to None, which uses the same device as the SAE. The legacy string "with_model" is also accepted and resolves to `llm_device`.
-        prefetch_llm_batches (bool | int | None): If truthy, generate activation batches in a background thread so the LLM forward overlaps with SAE training. Pass True for the simple case (queue size 1) or an int >= 1 to size the prefetch queue. Most useful when the LLM and SAE live on different GPUs. Defaults to None (synchronous, no prefetch).
+        prefetch_llm_batches (bool | int): If truthy, generate activation batches in a background thread so the LLM forward overlaps with SAE training. Pass True for the simple case (queue size 1) or an int >= 1 to size the prefetch queue. Most useful when the LLM and SAE live on different GPUs. Defaults to False (synchronous, no prefetch).
         seed (int): The seed to use.
         dtype (str): The data type to use for the SAE and activations.
         prepend_bos (bool): Whether to prepend the beginning of sequence token. You should use whatever the model was trained with.
@@ -236,7 +236,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     # forward can overlap with SAE training. Pass True for the simple case
     # (queue size 1, enough for basic overlap), or an int >= 1 to size the
     # queue. Most useful when LLM and SAE live on different GPUs.
-    prefetch_llm_batches: bool | int | None = None
+    prefetch_llm_batches: bool | int = False
     seed: int = 42
     dtype: str = "float32"  # type: ignore #
     prepend_bos: bool = True
