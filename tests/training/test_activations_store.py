@@ -358,10 +358,6 @@ def test_get_input_token_device_uses_input_embeddings_for_hf_proxy():
 
 
 def test_get_input_token_device_returns_input_embedding_device_when_sharded():
-    """When the input embedding lives on a different device than other params,
-    _get_input_token_device must follow the embedding (where tokens need to go),
-    not the first parameter encountered."""
-
     class FakeShardedHF(torch.nn.Module):
         def __init__(self):
             super().__init__()

@@ -55,8 +55,9 @@ def load_model(
         )
         # When the user passes an explicit `device_map`, accelerate has already
         # placed the weights — calling .to(device) afterwards would either
-        # error or undo the sharding.
-        if "device_map" not in model_from_pretrained_kwargs:
+        # error or undo the sharding. `device_map=None` means the user opted
+        # out, so treat it the same as not passing the kwarg at all.
+        if model_from_pretrained_kwargs.get("device_map") is None:
             hf_model = hf_model.to(device)  # type: ignore
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         return HookedProxyLM(hf_model, tokenizer)

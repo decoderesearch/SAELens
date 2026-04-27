@@ -61,18 +61,16 @@ def test_load_model_with_generic_huggingface_lm():
     assert isinstance(model, HookedProxyLM)
 
 
-def test_load_model_skips_device_move_when_device_map_is_set(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """When the user passes device_map, the post-load .to(device) must be skipped
-    so we don't undo accelerate's sharding."""
+def _spy_on_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch AutoModelForCausalLM.from_pretrained so the loaded model tracks
+    whether `.to()` was subsequently called via a `_to_called` attribute."""
     real_from_pretrained = AutoModelForCausalLM.from_pretrained
 
     def fake_from_pretrained(*args, **kwargs):  # type: ignore
+        # Strip device_map since we may not have accelerate installed in CI.
         m = real_from_pretrained(
             *args, **{k: v for k, v in kwargs.items() if k != "device_map"}
         )
-        # Track whether .to() is called after loading
         original_to = m.to
 
         def to_spy(*to_args, **to_kwargs):  # type: ignore
@@ -85,6 +83,11 @@ def test_load_model_skips_device_move_when_device_map_is_set(
 
     monkeypatch.setattr(AutoModelForCausalLM, "from_pretrained", fake_from_pretrained)
 
+
+def test_load_model_skips_device_move_when_device_map_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _spy_on_from_pretrained(monkeypatch)
     model = load_model(
         model_class_name="AutoModelForCausalLM",
         model_name="gpt2",
@@ -95,25 +98,25 @@ def test_load_model_skips_device_move_when_device_map_is_set(
     assert model.model._to_called is False  # type: ignore
 
 
+def test_load_model_calls_device_move_when_device_map_is_explicitly_none(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # device_map=None should be treated the same as no device_map kwarg.
+    _spy_on_from_pretrained(monkeypatch)
+    model = load_model(
+        model_class_name="AutoModelForCausalLM",
+        model_name="gpt2",
+        device="cpu",
+        model_from_pretrained_kwargs={"device_map": None},
+    )
+    assert isinstance(model, HookedProxyLM)
+    assert model.model._to_called is True  # type: ignore
+
+
 def test_load_model_calls_device_move_when_device_map_is_not_set(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    real_from_pretrained = AutoModelForCausalLM.from_pretrained
-
-    def fake_from_pretrained(*args, **kwargs):  # type: ignore
-        m = real_from_pretrained(*args, **kwargs)
-        original_to = m.to
-
-        def to_spy(*to_args, **to_kwargs):  # type: ignore
-            m._to_called = True  # type: ignore
-            return original_to(*to_args, **to_kwargs)
-
-        m.to = to_spy  # type: ignore
-        m._to_called = False  # type: ignore
-        return m
-
-    monkeypatch.setattr(AutoModelForCausalLM, "from_pretrained", fake_from_pretrained)
-
+    _spy_on_from_pretrained(monkeypatch)
     model = load_model(
         model_class_name="AutoModelForCausalLM",
         model_name="gpt2",
