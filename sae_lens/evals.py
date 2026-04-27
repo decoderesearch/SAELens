@@ -576,7 +576,9 @@ def get_sparsity_and_variance_metrics(
             total_feature_prompts += (sae_feature_activations_bool.sum(dim=1) > 0).sum(
                 dim=0
             )
-            total_tokens += mask.sum()
+            # total_tokens is divided by total_feature_acts (on sae.device)
+            # below, so accumulate on the SAE device.
+            total_tokens += mask.sum().to(sae.device)
 
     # Aggregate scalar metrics
     metrics: dict[str, float] = {}
