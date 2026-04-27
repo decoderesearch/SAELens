@@ -683,7 +683,9 @@ class ActivationsStore:
 
         # reshape from (batch, context, d_in) to (batch * context, d_in)
         activations = activations.reshape(-1, d_in)
-        token_ids = batch_tokens.reshape(-1)
+        # tokens come from the LLM device; move them alongside activations so
+        # downstream filtering (e.g. exclude_special_tokens) lives on one device.
+        token_ids = batch_tokens.reshape(-1).to(self.device)
 
         return activations, token_ids
 
