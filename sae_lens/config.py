@@ -151,8 +151,9 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
         disable_concat_sequences (bool): Whether to disable concatenating sequences and ignore sequences shorter than the context size. If True, disables concatenating and ignores short sequences.
         sequence_separator_token (int | Literal["bos", "eos", "sep"] | None): If not `None`, this token will be placed between sentences in a batch to act as a separator. By default, this is the `<bos>` token.
         activations_mixing_fraction (float): Fraction of the activation buffer to keep for mixing with new activations (default 0.5). Higher values mean more temporal shuffling but slower throughput. If 0, activations are served in order without shuffling (no temporal mixing).
-        device (str): The device to use. Usually "cuda".
-        act_store_device (str | None): The device to use for the activation store. Setting to "cpu" is advised if VRAM is limited. Defaults to None, which uses the same device as the SAE.
+        device (str): The device the SAE lives on, and the default device for everything else. Usually "cuda".
+        llm_device (str | None): The device to load the LLM onto. Defaults to None, which uses `device`. Override when the LLM and SAE should live on different GPUs (e.g. `device="cuda:1"`, `llm_device="cuda:0"`).
+        act_store_device (str | None): The device to use for the activation store. Setting to "cpu" is advised if VRAM is limited. Defaults to None, which uses the same device as the SAE. The legacy string "with_model" is also accepted and resolves to `llm_device`.
         seed (int): The seed to use.
         dtype (str): The data type to use for the SAE and activations.
         prepend_bos (bool): Whether to prepend the beginning of sequence token. You should use whatever the model was trained with.

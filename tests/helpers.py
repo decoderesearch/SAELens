@@ -82,7 +82,7 @@ class LanguageModelSAERunnerConfigDict(TypedDict, total=False):
     sequence_separator_token: int | Literal["bos", "eos", "sep"] | None
     device: str
     llm_device: str | None
-    act_store_device: str
+    act_store_device: str | None
     seed: int
     dtype: str
     prepend_bos: bool
