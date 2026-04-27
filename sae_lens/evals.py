@@ -488,8 +488,12 @@ def get_sparsity_and_variance_metrics(
         flattened_sae_out = einops.rearrange(sae_out, "b ctx d -> (b ctx) d")
 
         # TODO: Clean this up.
-        # apply mask
-        masked_sae_feature_activations = sae_feature_activations * mask.unsqueeze(-1)
+        # apply mask. mask is built from batch_tokens on the LLM device, but
+        # sae_feature_activations live on the SAE device (post sae.encode), so
+        # mirror the per-use .to() pattern used for flattened_mask below.
+        masked_sae_feature_activations = sae_feature_activations * mask.unsqueeze(
+            -1
+        ).to(sae_feature_activations.device)
         flattened_sae_input = flattened_sae_input[
             flattened_mask.to(flattened_sae_input.device)
         ]
