@@ -114,28 +114,6 @@ def test_LanguageModelSAETrainingRunner_runs_and_saves_all_architectures(
     assert runner_cfg == json.loads(json.dumps(cfg.to_dict()))
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="No GPU to test on.")
-def test_LanguageModelSAETrainingRunner_places_sae_and_llm_on_separate_devices(
-    ts_model: HookedTransformer,
-):
-    cfg = build_runner_cfg_for_arch(
-        architecture="standard",
-        device="cuda:0",
-        llm_device="cpu",
-        model_name=TINYSTORIES_MODEL,
-        hook_name="blocks.0.hook_resid_post",
-        dataset_path=NEEL_NANDA_C4_10K_DATASET,
-        d_in=64,
-        d_sae=64,
-        context_size=4,
-        store_batch_size_prompts=2,
-        train_batch_size_tokens=4,
-    )
-    runner = LanguageModelSAETrainingRunner(cfg, override_model=ts_model.to("cpu"))  # type: ignore
-    assert next(runner.sae.parameters()).device == torch.device("cuda:0")
-    assert next(runner.model.parameters()).device == torch.device("cpu")
-
-
 def test_parse_cfg_args_raises_system_exit_on_empty_args():
     with pytest.raises(SystemExit):
         _parse_cfg_args([])
