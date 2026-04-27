@@ -114,6 +114,32 @@ def test_LanguageModelSAETrainingRunner_runs_and_saves_all_architectures(
     assert runner_cfg == json.loads(json.dumps(cfg.to_dict()))
 
 
+def test_LanguageModelSAETrainingRunner_runs_with_prefetch_llm_batches(
+    tmp_path: Path, ts_model: HookedTransformer
+):
+    cfg = build_runner_cfg_for_arch(
+        d_in=64,
+        d_sae=128,
+        architecture="standard",
+        checkpoint_path=str(tmp_path),
+        training_tokens=64,
+        store_batch_size_prompts=2,
+        train_batch_size_tokens=4,
+        context_size=10,
+        n_batches_in_buffer=2,
+        dataset_path=NEEL_NANDA_C4_10K_DATASET,
+        hook_name="blocks.0.hook_resid_post",
+        model_name=TINYSTORIES_MODEL,
+        n_checkpoints=0,
+        save_final_checkpoint=False,
+        n_batches_for_norm_estimate=10,
+        prefetch_llm_batches=2,
+    )
+    runner = LanguageModelSAETrainingRunner(cfg, override_model=ts_model)
+    sae = runner.run()
+    assert sae.cfg.architecture() == "standard"
+
+
 def test_parse_cfg_args_raises_system_exit_on_empty_args():
     with pytest.raises(SystemExit):
         _parse_cfg_args([])

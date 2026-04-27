@@ -2,6 +2,7 @@ import json
 import signal
 import sys
 from collections.abc import Sequence
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Generic
@@ -30,6 +31,7 @@ from sae_lens.saes.sae import (
 )
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
+from sae_lens.training.prefetch import PrefetchingIterator
 from sae_lens.training.sae_trainer import SAETrainer
 from sae_lens.training.types import DataProvider
 
@@ -72,15 +74,24 @@ class LLMSaeEvaluator(Generic[T_TRAINING_SAE]):
             compute_variance_metrics=True,
         )
 
-        eval_metrics, _ = run_evals(
-            sae=sae,
-            activation_store=self.activations_store,
-            model=self.model,
-            activation_scaler=activation_scaler,
-            eval_config=eval_config,
-            exclude_special_tokens=exclude_special_tokens,
-            model_kwargs=self.model_kwargs,
-        )  # not calculating featurwise metrics here.
+        # Eval calls into self.activations_store directly, which would race the
+        # prefetcher's producer thread on shared generator state. Pause the
+        # prefetcher (if any) for the duration of the eval call.
+        pause_ctx: AbstractContextManager[None] = (
+            data_provider.paused()
+            if isinstance(data_provider, PrefetchingIterator)
+            else nullcontext()
+        )
+        with pause_ctx:
+            eval_metrics, _ = run_evals(
+                sae=sae,
+                activation_store=self.activations_store,
+                model=self.model,
+                activation_scaler=activation_scaler,
+                eval_config=eval_config,
+                exclude_special_tokens=exclude_special_tokens,
+                model_kwargs=self.model_kwargs,
+            )  # not calculating featurwise metrics here.
 
         # Remove eval metrics that are already logged during training
         eval_metrics.pop("metrics/explained_variance", None)
@@ -181,9 +192,21 @@ class LanguageModelSAETrainingRunner:
             model_kwargs=self.cfg.model_kwargs,
         )
 
+        data_provider: DataProvider = self.activations_store
+        if self.cfg.prefetch_llm_batches:
+            # Order matters: bool is a subclass of int, so check bool first.
+            prefetch_size = (
+                1
+                if isinstance(self.cfg.prefetch_llm_batches, bool)
+                else self.cfg.prefetch_llm_batches
+            )
+            data_provider = PrefetchingIterator(
+                iter(self.activations_store), prefetch=prefetch_size
+            )
+
         trainer = SAETrainer(
             sae=self.sae,
-            data_provider=self.activations_store,
+            data_provider=data_provider,
             evaluator=evaluator,
             save_checkpoint_fn=self.save_checkpoint,
             cfg=self.cfg.to_sae_trainer_config(),
