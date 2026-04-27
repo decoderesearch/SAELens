@@ -114,8 +114,11 @@ def test_LanguageModelSAETrainingRunner_runs_and_saves_all_architectures(
     assert runner_cfg == json.loads(json.dumps(cfg.to_dict()))
 
 
+@pytest.mark.parametrize("prefetch_llm_batches", [True, 2])
 def test_LanguageModelSAETrainingRunner_runs_with_prefetch_llm_batches(
-    tmp_path: Path, ts_model: HookedTransformer
+    tmp_path: Path,
+    ts_model: HookedTransformer,
+    prefetch_llm_batches: bool | int,
 ):
     cfg = build_runner_cfg_for_arch(
         d_in=64,
@@ -133,7 +136,7 @@ def test_LanguageModelSAETrainingRunner_runs_with_prefetch_llm_batches(
         n_checkpoints=0,
         save_final_checkpoint=False,
         n_batches_for_norm_estimate=10,
-        prefetch_llm_batches=2,
+        prefetch_llm_batches=prefetch_llm_batches,
     )
     runner = LanguageModelSAETrainingRunner(cfg, override_model=ts_model)
     sae = runner.run()

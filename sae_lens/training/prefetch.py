@@ -21,10 +21,14 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
     bounded by ``prefetch`` so the producer naturally back-pressures when the
     consumer falls behind.
 
-    ``paused()`` is a context manager that blocks the producer thread for the
-    duration of the ``with``-block, so callers can use the underlying source
-    directly (e.g. for eval) without racing the producer thread on shared
-    generator state.
+    ``paused()`` is a context manager that pauses the producer for the duration
+    of the ``with``-block by holding the lock that gates calls to
+    ``next(source)``. Callers can then drive the source themselves (e.g. eval)
+    without racing the producer on shared generator state. Note that the lock
+    is held *across* a ``next(source)`` call, so acquiring it can stall for up
+    to one full source step (e.g. one LLM forward pass) at unlucky moments.
+    Also note the queue may already contain one item produced *before* the
+    pause was requested.
     """
 
     def __init__(self, source: Iterator[T], prefetch: int = 4):
@@ -33,6 +37,7 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
         self._queue: queue.Queue[object] = queue.Queue(maxsize=prefetch)
         self._lock = threading.Lock()
         self._exception: BaseException | None = None
+        self._done = False
         self._thread = threading.Thread(target=self._run, args=(source,), daemon=True)
         self._thread.start()
 
@@ -45,6 +50,8 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
                     except StopIteration:
                         break
                 self._queue.put(item)
+        # BaseException (not Exception) so KeyboardInterrupt etc. don't silently
+        # kill the producer without surfacing to the consumer.
         except BaseException as e:  # noqa: BLE001
             self._exception = e
         finally:
@@ -54,8 +61,14 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
         return self
 
     def __next__(self) -> T:
+        # Iterator protocol: once StopIteration was raised, every subsequent
+        # call must also raise it. Without this guard we'd block forever on
+        # an empty queue with no producer alive.
+        if self._done:
+            raise StopIteration
         item = self._queue.get()
         if item is _SENTINEL:
+            self._done = True
             if self._exception is not None:
                 raise self._exception
             raise StopIteration
@@ -65,9 +78,10 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
     def paused(self) -> Iterator[None]:
         """Block the background thread for the duration of the ``with``-block.
 
-        Acquires an internal lock that the producer holds while calling
-        ``next(source)``. Use this when you need to use the underlying source
-        from another thread (e.g. for eval) without racing the prefetcher.
+        Acquires the lock that the producer holds while calling
+        ``next(source)``, so callers can drive ``source`` from another thread
+        (e.g. for eval) without racing. Acquiring the lock can stall for up to
+        one ``next(source)`` step.
         """
         with self._lock:
             yield

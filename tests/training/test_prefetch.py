@@ -29,6 +29,18 @@ def test_prefetching_iterator_propagates_source_exception():
         next(prefetcher)
 
 
+def test_prefetching_iterator_raises_stop_iteration_repeatedly_after_exhaustion():
+    # Iterator protocol: once StopIteration is raised, every subsequent call
+    # must also raise it (and not deadlock waiting on an empty queue).
+    prefetcher = PrefetchingIterator(iter([1, 2]), prefetch=2)
+    assert next(prefetcher) == 1
+    assert next(prefetcher) == 2
+    with pytest.raises(StopIteration):
+        next(prefetcher)
+    with pytest.raises(StopIteration):
+        next(prefetcher)
+
+
 def test_prefetching_iterator_rejects_invalid_prefetch():
     with pytest.raises(ValueError, match="prefetch must be >= 1"):
         PrefetchingIterator(iter([1, 2]), prefetch=0)
@@ -36,30 +48,29 @@ def test_prefetching_iterator_rejects_invalid_prefetch():
 
 def test_prefetching_iterator_runs_producer_concurrently():
     # Source sleeps before yielding each item; if the prefetcher works the
-    # producer fills the queue while the consumer is "busy", so total wall time
-    # is dominated by the consumer's work, not consumer + source serially.
-    n = 4
-    source_delay = 0.05
-    consumer_delay = 0.05
+    # producer fills the queue while the consumer is "busy", so wall time
+    # should be meaningfully less than the serial sum.
+    n = 5
+    delay = 0.1
 
     def slow_source() -> Iterator[int]:
         for i in range(n):
-            time.sleep(source_delay)
+            time.sleep(delay)
             yield i
 
     prefetcher = PrefetchingIterator(slow_source(), prefetch=n)
     start = time.monotonic()
     out = []
     for item in prefetcher:
-        time.sleep(consumer_delay)
+        time.sleep(delay)
         out.append(item)
     elapsed = time.monotonic() - start
 
     assert out == list(range(n))
-    serial = n * (source_delay + consumer_delay)
-    overlap = n * max(source_delay, consumer_delay) + source_delay + consumer_delay
-    # We should be much closer to overlap-time than serial-time.
-    assert elapsed < (serial + overlap) / 2
+    serial = n * 2 * delay
+    # Generous slack for loaded CI: just verify we're measurably faster than
+    # serial. Perfect overlap would be ~(n + 1) * delay = 0.6s; serial = 1.0s.
+    assert elapsed < serial * 0.85
 
 
 def test_prefetching_iterator_paused_blocks_producer():
@@ -91,20 +102,41 @@ def test_prefetching_iterator_paused_blocks_producer():
     assert next(prefetcher) == 2
 
 
-def test_prefetching_iterator_paused_lets_caller_use_source():
-    # If the caller wants to consume from the source while paused, they can.
-    items = list(range(5))
-    source = iter(items)
-    prefetcher = PrefetchingIterator(source, prefetch=1)
-    # Wait for prefetcher to grab the first item.
-    first = next(prefetcher)
-    assert first == 0
+def test_prefetching_iterator_paused_prevents_concurrent_source_access():
+    # Wrap the source in a guard that explicitly fails on overlapping next()
+    # calls — this is what raises if the producer thread and the caller race
+    # on the same generator (Python's "generator already executing" error).
+    class _GuardedIter(Iterator[int]):
+        def __init__(self) -> None:
+            self._n = 0
+            self._busy = threading.Lock()
 
-    with prefetcher.paused():
-        # Inside the lock the producer can't be in next(source); we may safely
-        # call next(source) ourselves without ValueError("generator already
-        # executing").
-        assert next(source) in items[1:]
+        def __iter__(self) -> "Iterator[int]":
+            return self
+
+        def __next__(self) -> int:
+            if not self._busy.acquire(blocking=False):
+                raise RuntimeError("concurrent next() detected")
+            try:
+                # Sleep so the producer thread spends real wall time inside
+                # next(); if the lock isn't honored, our own next() call
+                # overlaps and trips the guard.
+                time.sleep(0.02)
+                self._n += 1
+                return self._n
+            finally:
+                self._busy.release()
+
+    source = _GuardedIter()
+    prefetcher = PrefetchingIterator(source, prefetch=1)
+    # Let the producer get into a steady-state loop.
+    assert next(prefetcher) == 1
+
+    for _ in range(10):
+        with prefetcher.paused():
+            # Without paused() this would race the producer and the guard
+            # would raise RuntimeError.
+            next(source)
 
 
 def test_prefetching_iterator_thread_is_daemon():

@@ -153,6 +153,14 @@ def test_LanguageModelSAERunnerConfig_act_store_device_with_model_alias_follows_
     assert cfg.act_store_device == "cuda:0"
 
 
+def test_LanguageModelSAERunnerConfig_rejects_negative_prefetch_llm_batches():
+    with pytest.raises(ValueError, match="prefetch_llm_batches must be >= 0"):
+        LanguageModelSAERunnerConfig(
+            sae=StandardTrainingSAEConfig(d_in=5, d_sae=10),
+            prefetch_llm_batches=-1,
+        )
+
+
 def test_LanguageModelSAERunnerConfig_to_dict_and_from_dict():
     cfg = LanguageModelSAERunnerConfig(
         sae=JumpReLUTrainingSAEConfig(

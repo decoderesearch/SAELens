@@ -338,6 +338,14 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
         elif self.act_store_device == "with_model":
             self.act_store_device = self.llm_device
 
+        if (
+            not isinstance(self.prefetch_llm_batches, bool)
+            and self.prefetch_llm_batches < 0
+        ):
+            raise ValueError(
+                f"prefetch_llm_batches must be >= 0, got {self.prefetch_llm_batches}"
+            )
+
         if self.lr_end is None:
             self.lr_end = self.lr / 10
 
