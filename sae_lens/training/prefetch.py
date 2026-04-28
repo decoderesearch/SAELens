@@ -27,8 +27,14 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
     without racing the producer on shared generator state. Note that the lock
     is held *across* a ``next(source)`` call, so acquiring it can stall for up
     to one full source step (e.g. one LLM forward pass) at unlucky moments.
-    Also note the queue may already contain one item produced *before* the
-    pause was requested.
+    Also note the queue may already contain up to ``prefetch`` items that the
+    producer enqueued before ``paused()`` acquired the lock.
+
+    There is no explicit shutdown API. The producer is daemonized so it dies
+    with the process; if the consumer stops pulling early (e.g. exits the
+    training loop without exhausting the iterator), the thread will block on
+    ``queue.put`` until the process exits. Holding the buffered tensors keeps
+    GPU memory pinned, which matters in notebook/multi-run contexts.
     """
 
     def __init__(self, source: Iterator[T], prefetch: int = 4):

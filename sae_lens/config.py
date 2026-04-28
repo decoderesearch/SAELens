@@ -343,7 +343,9 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
             and self.prefetch_llm_batches < 0
         ):
             raise ValueError(
-                f"prefetch_llm_batches must be >= 0, got {self.prefetch_llm_batches}"
+                "prefetch_llm_batches must be a bool or a non-negative int "
+                "(0 / False disables prefetching), "
+                f"got {self.prefetch_llm_batches}"
             )
 
         if self.lr_end is None:

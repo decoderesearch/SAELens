@@ -154,11 +154,21 @@ def test_LanguageModelSAERunnerConfig_act_store_device_with_model_alias_follows_
 
 
 def test_LanguageModelSAERunnerConfig_rejects_negative_prefetch_llm_batches():
-    with pytest.raises(ValueError, match="prefetch_llm_batches must be >= 0"):
+    with pytest.raises(ValueError, match="prefetch_llm_batches must be"):
         LanguageModelSAERunnerConfig(
             sae=StandardTrainingSAEConfig(d_in=5, d_sae=10),
             prefetch_llm_batches=-1,
         )
+
+
+def test_LanguageModelSAERunnerConfig_accepts_zero_prefetch_llm_batches():
+    # 0 is a valid value: it's falsy, so the runner treats it as "no prefetch"
+    # rather than as "queue size 0".
+    cfg = LanguageModelSAERunnerConfig(
+        sae=StandardTrainingSAEConfig(d_in=5, d_sae=10),
+        prefetch_llm_batches=0,
+    )
+    assert cfg.prefetch_llm_batches == 0
 
 
 def test_LanguageModelSAERunnerConfig_to_dict_and_from_dict():
