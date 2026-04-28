@@ -338,6 +338,9 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
         elif self.act_store_device == "with_model":
             self.act_store_device = self.llm_device
 
+        # 0 is accepted (and treated as disabled, since it's falsy in the
+        # runner's `if self.cfg.prefetch_llm_batches:` gate) — only negatives
+        # are rejected.
         if (
             not isinstance(self.prefetch_llm_batches, bool)
             and self.prefetch_llm_batches < 0

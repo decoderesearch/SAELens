@@ -75,11 +75,13 @@ class LLMSaeEvaluator(Generic[T_TRAINING_SAE]):
         )
 
         # Eval calls into self.activations_store directly, which would race the
-        # prefetcher's producer thread on shared generator state. Pause the
-        # prefetcher (if any) for the duration of the eval call.
+        # prefetcher's producer thread on shared generator state. Pause it (if
+        # the data provider exposes a paused() context manager) for the
+        # duration of the eval. Duck-typed so that wrappers around
+        # PrefetchingIterator that forward `paused` still get pause coverage.
         pause_ctx: AbstractContextManager[None] = (
-            data_provider.paused()
-            if isinstance(data_provider, PrefetchingIterator)
+            data_provider.paused()  # pyright: ignore[reportAttributeAccessIssue]
+            if hasattr(data_provider, "paused")
             else nullcontext()
         )
         with pause_ctx:

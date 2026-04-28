@@ -69,7 +69,9 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
     def __next__(self) -> T:
         # Iterator protocol: once StopIteration was raised, every subsequent
         # call must also raise it. Without this guard we'd block forever on
-        # an empty queue with no producer alive.
+        # an empty queue with no producer alive. Source-side exceptions are
+        # raised once on the first SENTINEL, matching Python generator
+        # semantics (subsequent calls then raise StopIteration).
         if self._done:
             raise StopIteration
         item = self._queue.get()
