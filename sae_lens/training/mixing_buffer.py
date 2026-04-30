@@ -4,6 +4,56 @@ import torch
 
 
 @torch.no_grad()
+def multi_hook_concat_split_iter(
+    buffer_size: int,
+    batch_size: int,
+    activations_loader: Iterator[dict[str, torch.Tensor]],
+    hook_names: list[str],
+    mix_fraction: float = 0.5,
+) -> Iterator[dict[str, torch.Tensor]]:
+    """
+    Multi-hook variant of `mixing_buffer`.
+
+    The producer yields `dict[hook_name, (n_tokens, d_in_h)]` per LLM forward
+    pass. Tensors at different hooks may have different feature dimensions
+    (e.g. attn vs resid, or transcoder input vs output).
+
+    To get a single shared shuffle across all hooks (preserving token
+    alignment), we concatenate along the feature dim into a packed
+    `(n_tokens, sum_d_in)` tensor, run it through the unmodified `mixing_buffer`,
+    and split the yielded batches back into a per-hook dict on the way out.
+    The single `torch.randperm(n_tokens)` inside `mixing_buffer` is therefore
+    automatically applied identically to every hook's slice.
+    """
+    iterator = iter(activations_loader)
+    try:
+        first = next(iterator)
+    except StopIteration:
+        return
+
+    missing = [h for h in hook_names if h not in first]
+    if missing:
+        raise ValueError(
+            f"producer did not yield activations for hooks {missing}; got keys {list(first.keys())}"
+        )
+
+    boundaries = [0]
+    for h in hook_names:
+        boundaries.append(boundaries[-1] + first[h].shape[1])
+
+    def packed() -> Iterator[torch.Tensor]:
+        yield torch.cat([first[h] for h in hook_names], dim=1)
+        for d in iterator:
+            yield torch.cat([d[h] for h in hook_names], dim=1)
+
+    for batch in mixing_buffer(buffer_size, batch_size, packed(), mix_fraction):
+        yield {
+            h: batch[:, boundaries[i] : boundaries[i + 1]]
+            for i, h in enumerate(hook_names)
+        }
+
+
+@torch.no_grad()
 def mixing_buffer(
     buffer_size: int,
     batch_size: int,

@@ -359,6 +359,71 @@ cfg = LanguageModelSAERunnerConfig( # Full config would be defined here
 sparse_autoencoder = LanguageModelSAETrainingRunner(cfg).run()
 ```
 
+## Training multiple SAEs in parallel (experimental)
+
+<!-- prettier-ignore-start -->
+!!! warning "Experimental feature"
+    Multi-SAE training is a new feature and the API may change. The V1 release intentionally omits CLI/argparse support, cached activations, `from_pretrained_path` per entry, and `compile_sae=True`. `compile_llm=True` is supported because the model is shared.
+<!-- prettier-ignore-end -->
+
+If you want to train a sweep of SAEs that share the same model — e.g., several `l1_coefficient` values at one hook point, or one SAE per layer for a layer-by-layer study — you can use [MultiSAETrainingRunner][sae_lens.MultiSAETrainingRunner] to run the LLM forward pass once per batch and feed the captured activations to every SAE in parallel. Each SAE keeps its own optimizer, learning-rate schedule, coefficient schedulers, activation scaler, and sparsity tracking, exactly as in single-SAE training; the runner just multiplexes the shared activation stream.
+
+The runner accepts a dict of SAE configs and a hook-name spec. Pass `hook_names` as a single string when all SAEs share one hook, or as a dict when they don't. Different SAEs can use different architectures, but SAEs sharing a hook in V1 must agree on `d_in` and `hook_head_index`.
+
+```python
+from sae_lens import (
+    MultiSAETrainingRunner,
+    MultiSAETrainingRunnerConfig,
+    StandardTrainingSAEConfig,
+    TopKTrainingSAEConfig,
+    LoggingConfig,
+)
+
+cfg = MultiSAETrainingRunnerConfig(
+    saes={
+        "h5_l1_low":  StandardTrainingSAEConfig(d_in=768, d_sae=16 * 1024, l1_coefficient=2.0),
+        "h5_l1_high": StandardTrainingSAEConfig(d_in=768, d_sae=16 * 1024, l1_coefficient=5.0),
+        "h10_topk":   TopKTrainingSAEConfig(d_in=768, d_sae=16 * 1024, k=64),
+    },
+    hook_names={
+        "h5_l1_low":  "blocks.5.hook_resid_pre",
+        "h5_l1_high": "blocks.5.hook_resid_pre",
+        "h10_topk":   "blocks.10.hook_resid_pre",
+    },
+    # OR a single string when every SAE shares one hook:
+    # hook_names="blocks.5.hook_resid_pre",
+
+    model_name="gpt2",
+    dataset_path="apollo-research/Skylion007-openwebtext-tokenizer-gpt2",
+    training_tokens=int(1e8),
+    train_batch_size_tokens=4096,
+    output_path="output/sweep_run_1",
+    logger=LoggingConfig(log_to_wandb=True, wandb_project="multi_sae_sweep"),
+)
+
+trained_saes = MultiSAETrainingRunner(cfg).run()  # dict[name, TrainingSAE]
+```
+
+Wandb metrics are namespaced by SAE name (e.g. `h5_l1_low/losses/overall_loss`) so per-SAE curves can be inspected side-by-side in one run. Built-in evals run sequentially per SAE; eval cost therefore scales linearly with the number of SAEs — if this becomes a bottleneck, raise `eval_every_n_wandb_logs` so evals run less often. You can also pass a custom per-SAE `evaluator` callable; it will be applied to every SAE with that SAE's single-hook view of the data provider.
+
+Checkpointing follows the single-SAE layout but adds a per-SAE subdirectory inside each checkpoint:
+
+```
+checkpoints/<unique_id>/<n_training_samples>/
+├── runner_cfg.json
+├── activations_store.pt
+├── h5_l1_low/
+│   ├── sae_weights.safetensors
+│   ├── cfg.json
+│   ├── sparsity.safetensors
+│   ├── trainer_state.pt
+│   └── activation_scaler.json
+├── h5_l1_high/...
+└── h10_topk/...
+```
+
+Resume by passing `resume_from_checkpoint=<checkpoint_dir>`. The per-SAE keys in `cfg.saes` must exactly match the subdirectories saved in the checkpoint.
+
 ## CLI Runner
 
 The SAE training runner can also be run from the command line via the `sae_lens.sae_training_runner` module. This can be useful for quickly testing different hyperparameters or running training on a remote server. The command line interface is shown below. All options to the CLI are the same as the [LanguageModelSAERunnerConfig][sae_lens.LanguageModelSAERunnerConfig] with a `--` prefix. E.g., `--model_name` is the same as `model_name` in the config.

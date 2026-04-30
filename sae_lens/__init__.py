@@ -60,6 +60,11 @@ from .loading.pretrained_sae_loaders import (
     PretrainedSaeDiskLoader,
     PretrainedSaeHuggingfaceLoader,
 )
+from .multi_sae_training_runner import (
+    MultiSAEEvaluator,
+    MultiSAETrainingRunner,
+    MultiSAETrainingRunnerConfig,
+)
 from .pretokenize_runner import PretokenizeRunner, pretokenize_runner
 from .registry import register_sae_class, register_sae_training_class
 from .training.activations_store import ActivationsStore
@@ -123,6 +128,9 @@ __all__ = [
     "MatchingPursuitTrainingSAE",
     "MatchingPursuitSAEConfig",
     "MatchingPursuitTrainingSAEConfig",
+    "MultiSAEEvaluator",
+    "MultiSAETrainingRunner",
+    "MultiSAETrainingRunnerConfig",
 ]
 
 # Conditional export for SAETransformerBridge (requires transformer-lens v3+)

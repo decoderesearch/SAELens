@@ -3,8 +3,11 @@ from collections.abc import Iterator
 import pytest
 import torch
 
-from sae_lens.training.mixing_buffer import mixing_buffer
-from tests.helpers import assert_not_close
+from sae_lens.training.mixing_buffer import (
+    mixing_buffer,
+    multi_hook_concat_split_iter,
+)
+from tests.helpers import assert_close, assert_not_close
 
 
 def test_mixing_buffer_yields_batches_of_correct_size_despite_loader_size_fluctuations():
@@ -184,6 +187,112 @@ def test_mixing_buffer_mix_fraction_matches_observed_mix_fraction():
 
     mean_mix_fraction = sum(observed_mix_fractions) / len(observed_mix_fractions)
     assert mean_mix_fraction == pytest.approx(target_mix_frac, abs=0.03)
+
+
+def test_multi_hook_concat_split_iter_passthrough_no_shuffle():
+    # mix_fraction=0 → no shuffling; output dict should match input order, per-hook.
+    h_a, h_b = "a", "b"
+    n_per = 16
+    a_in = torch.arange(n_per * 4, dtype=torch.float32).reshape(n_per, 4)
+    b_in = torch.arange(n_per * 7, dtype=torch.float32).reshape(n_per, 7) + 1000
+    inputs = [{h_a: a_in, h_b: b_in}]
+
+    out_batches = list(
+        multi_hook_concat_split_iter(
+            buffer_size=16,
+            batch_size=4,
+            activations_loader=iter(inputs),
+            hook_names=[h_a, h_b],
+            mix_fraction=0.0,
+        )
+    )
+    assert len(out_batches) == 4
+    assert_close(torch.cat([b[h_a] for b in out_batches]), a_in)
+    assert_close(torch.cat([b[h_b] for b in out_batches]), b_in)
+
+
+def test_multi_hook_concat_split_iter_alignment_under_shuffle():
+    # Encode the row index in both tensors so we can recover the permutation.
+    # Row i has hook_a[i] = (i, i, ...) and hook_b[i] = (i, i, i, i).
+    # If the two hooks were shuffled with different permutations, the row index
+    # encoded in hook_a wouldn't match the row index encoded in hook_b.
+    h_a, h_b = "a", "b"
+    n = 32
+    a_in = torch.arange(n, dtype=torch.float32).unsqueeze(1).expand(n, 3).contiguous()
+    b_in = torch.arange(n, dtype=torch.float32).unsqueeze(1).expand(n, 5).contiguous()
+
+    out_batches = list(
+        multi_hook_concat_split_iter(
+            buffer_size=32,
+            batch_size=4,
+            activations_loader=iter([{h_a: a_in, h_b: b_in}]),
+            hook_names=[h_a, h_b],
+            mix_fraction=0.5,
+        )
+    )
+
+    for batch in out_batches:
+        # Every row in hook_a encodes its original row index; same for hook_b.
+        a_rows = batch[h_a][:, 0]
+        b_rows = batch[h_b][:, 0]
+        assert_close(a_rows, b_rows)
+        # And every column within a single hook's row should encode the same index.
+        assert_close(batch[h_a], a_rows.unsqueeze(1).expand_as(batch[h_a]))
+        assert_close(batch[h_b], b_rows.unsqueeze(1).expand_as(batch[h_b]))
+
+
+def test_multi_hook_concat_split_iter_handles_different_d_ins():
+    h_a, h_b, h_c = "a", "b", "c"
+    n = 12
+    a_in = torch.randn(n, 2)
+    b_in = torch.randn(n, 5)
+    c_in = torch.randn(n, 3)
+
+    out_batches = list(
+        multi_hook_concat_split_iter(
+            buffer_size=12,
+            batch_size=4,
+            activations_loader=iter([{h_a: a_in, h_b: b_in, h_c: c_in}]),
+            hook_names=[h_a, h_b, h_c],
+            mix_fraction=0.0,
+        )
+    )
+    assert len(out_batches) == 3
+    for batch in out_batches:
+        assert batch[h_a].shape == (4, 2)
+        assert batch[h_b].shape == (4, 5)
+        assert batch[h_c].shape == (4, 3)
+    assert_close(torch.cat([b[h_a] for b in out_batches]), a_in)
+    assert_close(torch.cat([b[h_b] for b in out_batches]), b_in)
+    assert_close(torch.cat([b[h_c] for b in out_batches]), c_in)
+
+
+def test_multi_hook_concat_split_iter_errors_on_missing_hook():
+    h_a, h_b = "a", "b"
+    inputs = [{h_a: torch.randn(8, 4)}]  # missing h_b
+    with pytest.raises(ValueError, match="hooks"):
+        list(
+            multi_hook_concat_split_iter(
+                buffer_size=8,
+                batch_size=4,
+                activations_loader=iter(inputs),
+                hook_names=[h_a, h_b],
+                mix_fraction=0.0,
+            )
+        )
+
+
+def test_multi_hook_concat_split_iter_empty_loader():
+    out = list(
+        multi_hook_concat_split_iter(
+            buffer_size=8,
+            batch_size=4,
+            activations_loader=iter([]),
+            hook_names=["a", "b"],
+            mix_fraction=0.0,
+        )
+    )
+    assert out == []
 
 
 @pytest.mark.parametrize("mix_fraction", [0.9, 1.0])

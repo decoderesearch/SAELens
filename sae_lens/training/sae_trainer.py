@@ -172,12 +172,11 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
 
         # Train loop
         while self.n_training_samples < self.cfg.total_training_samples:
-            # Do a training step.
-            batch = next(self.data_provider).to(self.sae.device)
-            self.n_training_samples += batch.shape[0]
-            scaled_batch = self.activation_scaler(batch)
+            sparsity_log = self.maybe_reset_sparsity()
+            if sparsity_log and self.cfg.logger.log_to_wandb:
+                wandb.log(sparsity_log, step=self.n_training_steps)
 
-            step_output = self._train_step(sae=self.sae, sae_in=scaled_batch)
+            step_output = self.step(next(self.data_provider))
 
             if self.cfg.logger.log_to_wandb:
                 self._log_train_step(step_output)
@@ -203,11 +202,19 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
     def save_checkpoint(
         self,
         checkpoint_name: str,
+        base_path: Path | str | None = None,
         wandb_aliases: list[str] | None = None,
     ) -> None:
+        """
+        Save a checkpoint named `checkpoint_name` under `base_path` (or
+        `self.cfg.checkpoint_path` if not provided). The explicit `base_path`
+        seam lets external coordinators (e.g. `MultiSAETrainer`) place per-SAE
+        checkpoints in a chosen directory layout.
+        """
+        base = base_path if base_path is not None else self.cfg.checkpoint_path
         checkpoint_path = None
-        if self.cfg.checkpoint_path is not None or self.cfg.logger.log_to_wandb:
-            with path_or_tmp_dir(self.cfg.checkpoint_path) as base_checkpoint_path:
+        if base is not None or self.cfg.logger.log_to_wandb:
+            with path_or_tmp_dir(base) as base_checkpoint_path:
                 checkpoint_path = base_checkpoint_path / checkpoint_name
                 checkpoint_path.mkdir(exist_ok=True, parents=True)
 
@@ -229,6 +236,36 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
 
         if self.save_checkpoint_fn is not None:
             self.save_checkpoint_fn(checkpoint_path=checkpoint_path)
+
+    def step(self, batch: torch.Tensor) -> TrainStepOutput:
+        """
+        Run one training step on a raw (unscaled) activation batch.
+
+        Public seam used by `fit()` and external coordinators (e.g.
+        `MultiSAETrainer`). Moves the batch onto the SAE's device, advances
+        `n_training_samples`, applies the activation scaler, and runs the
+        train step. Does NOT advance `n_training_steps` — callers do that
+        after they're done with this step's logging/checkpointing.
+        """
+        batch = batch.to(self.sae.device)
+        self.n_training_samples += batch.shape[0]
+        scaled_batch = self.activation_scaler(batch)
+        return self._train_step(sae=self.sae, sae_in=scaled_batch)
+
+    def maybe_reset_sparsity(self) -> dict[str, Any]:
+        """
+        If this is a sparsity-window-reset step, return the sparsity log dict
+        and reset running sparsity stats; otherwise return {}.
+
+        Public seam used by `fit()` and external coordinators (e.g.
+        `MultiSAETrainer`). Caller is responsible for emitting the returned
+        dict to wandb if logging is enabled.
+        """
+        if (self.n_training_steps + 1) % self.cfg.feature_sampling_window == 0:
+            log_dict = self._build_sparsity_log_dict()
+            self._reset_running_sparsity_stats()
+            return log_dict
+        return {}
 
     def save_trainer_state(self, checkpoint_path: Path) -> None:
         checkpoint_path.mkdir(exist_ok=True, parents=True)
@@ -274,13 +311,6 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
         sae_in: torch.Tensor,
     ) -> TrainStepOutput:
         sae.train()
-
-        # log and then reset the feature sparsity every feature_sampling_window steps
-        if (self.n_training_steps + 1) % self.cfg.feature_sampling_window == 0:
-            if self.cfg.logger.log_to_wandb:
-                sparsity_log_dict = self._build_sparsity_log_dict()
-                wandb.log(sparsity_log_dict, step=self.n_training_steps)
-            self._reset_running_sparsity_stats()
 
         # for documentation on autocasting see:
         # https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html

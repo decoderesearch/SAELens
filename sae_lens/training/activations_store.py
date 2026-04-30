@@ -31,7 +31,10 @@ from sae_lens.tokenization_and_batching import (
     concat_and_batch_sequences,
     tokenize_with_chat_template,
 )
-from sae_lens.training.mixing_buffer import mixing_buffer
+from sae_lens.training.mixing_buffer import (
+    mixing_buffer,
+    multi_hook_concat_split_iter,
+)
 from sae_lens.util import (
     extract_stop_at_layer_from_tlens_hook_name,
     get_special_token_ids,
@@ -64,6 +67,15 @@ class ActivationsStore:
     _dataloader: Iterator[Any] | None = None
     exclude_special_tokens: torch.Tensor | None = None
     device: torch.device
+
+    # Multi-hook mode: populated by `from_config_multi_hook`. None means
+    # single-hook mode. When set, `get_multi_hook_activations` and
+    # `get_multi_hook_data_loader` are usable; the single-hook surface
+    # (`__iter__`/`__next__`/`get_activations`) still works on the canonical
+    # hook (`hook_names[0]`) but should not be relied on by multi-hook callers.
+    _hook_names: list[str] | None = None
+    _hook_d_ins: dict[str, int] | None = None
+    _hook_head_indices: dict[str, int | None] | None = None
 
     @classmethod
     def from_cache_activations(
@@ -210,6 +222,91 @@ class ActivationsStore:
             disable_concat_sequences=disable_concat_sequences,
             sequence_separator_token=sequence_separator_token,
         )
+
+    @classmethod
+    def from_config_multi_hook(
+        cls,
+        model: HookedRootModule,
+        *,
+        dataset: HfDataset | str,
+        hook_names: list[str],
+        hook_d_ins: dict[str, int],
+        hook_head_indices: dict[str, int | None] | None = None,
+        streaming: bool = True,
+        context_size: int = 128,
+        n_batches_in_buffer: int = 20,
+        total_training_tokens: int = 2_000_000,
+        store_batch_size_prompts: int = 32,
+        train_batch_size_tokens: int = 4096,
+        prepend_bos: bool = True,
+        normalize_activations: str = "none",
+        device: torch.device | str = "cpu",
+        dtype: str = "float32",
+        model_kwargs: dict[str, Any] | None = None,
+        autocast_lm: bool = False,
+        dataset_trust_remote_code: bool | None = None,
+        seqpos_slice: tuple[int | None, ...] = (None,),
+        exclude_special_tokens: torch.Tensor | None = None,
+        disable_concat_sequences: bool = False,
+        sequence_separator_token: int | Literal["bos", "eos", "sep"] | None = "bos",
+        activations_mixing_fraction: float = 0.5,
+        use_chat_formatting: bool = False,
+    ) -> ActivationsStore:
+        """
+        Construct a multi-hook ActivationsStore that captures activations at
+        multiple hook points from a single LLM forward pass.
+
+        `hook_d_ins` maps each unique hook name to the d_in expected at that
+        hook (after head-index slicing, if any). All SAEs sharing a hook in V1
+        must agree on `hook_head_index` and `d_in`.
+
+        Cached activations are not supported in multi-hook mode in V1.
+        """
+        if not hook_names:
+            raise ValueError("hook_names must be non-empty")
+
+        seen: set[str] = set()
+        unique_hook_names = [h for h in hook_names if not (h in seen or seen.add(h))]
+
+        missing = [h for h in unique_hook_names if h not in hook_d_ins]
+        if missing:
+            raise ValueError(f"hook_d_ins missing entries for {missing}")
+
+        head_indices = hook_head_indices or {}
+        canonical = unique_hook_names[0]
+        torch_device = torch.device(device) if isinstance(device, str) else device
+
+        store = cls(
+            model=model,
+            dataset=dataset,
+            streaming=streaming,
+            hook_name=canonical,
+            hook_head_index=head_indices.get(canonical),
+            context_size=context_size,
+            d_in=hook_d_ins[canonical],
+            n_batches_in_buffer=n_batches_in_buffer,
+            total_training_tokens=total_training_tokens,
+            store_batch_size_prompts=store_batch_size_prompts,
+            train_batch_size_tokens=train_batch_size_tokens,
+            prepend_bos=prepend_bos,
+            normalize_activations=normalize_activations,
+            device=torch_device,
+            dtype=dtype,
+            cached_activations_path=None,
+            model_kwargs=model_kwargs,
+            autocast_lm=autocast_lm,
+            dataset_trust_remote_code=dataset_trust_remote_code,
+            seqpos_slice=seqpos_slice,
+            exclude_special_tokens=exclude_special_tokens,
+            disable_concat_sequences=disable_concat_sequences,
+            sequence_separator_token=sequence_separator_token,
+            activations_mixing_fraction=activations_mixing_fraction,
+            use_chat_formatting=use_chat_formatting,
+        )
+        store._hook_names = unique_hook_names
+        store._hook_d_ins = dict(hook_d_ins)
+        store._hook_head_indices = dict(head_indices) if head_indices else None
+        return store
 
     def __init__(
         self,
@@ -742,6 +839,123 @@ class ActivationsStore:
 
     def __iter__(self) -> Iterator[torch.Tensor]:
         return self
+
+    @torch.no_grad()
+    def get_multi_hook_activations(
+        self, batch_tokens: torch.Tensor
+    ) -> dict[str, torch.Tensor]:
+        """
+        Multi-hook variant of `get_activations`.
+
+        Captures activations at every hook in `self._hook_names` from a single
+        LLM forward pass and returns a dict[hook_name, (batch, context, d_in_h)].
+        """
+        if self._hook_names is None or self._hook_d_ins is None:
+            raise RuntimeError(
+                "get_multi_hook_activations requires the store to be constructed "
+                "via from_config_multi_hook"
+            )
+        head_indices = self._hook_head_indices or {}
+        stops = [
+            extract_stop_at_layer_from_tlens_hook_name(h) for h in self._hook_names
+        ]
+        stop_at_layer: int | None = (
+            None
+            if any(s is None for s in stops)
+            else max(s for s in stops if s is not None)
+        )
+
+        with torch.autocast(
+            device_type="cuda",
+            dtype=torch.bfloat16,
+            enabled=self.autocast_lm,
+        ):
+            cache = self.model.run_with_cache(
+                batch_tokens,
+                names_filter=list(self._hook_names),
+                stop_at_layer=stop_at_layer,
+                prepend_bos=False,
+                **self.model_kwargs,
+            )[1]
+
+        out: dict[str, torch.Tensor] = {}
+        for h in self._hook_names:
+            layerwise = cache[h][:, slice(*self.seqpos_slice)]
+            n_batches, n_context = layerwise.shape[:2]
+            d_in_h = self._hook_d_ins[h]
+            stacked = torch.zeros((n_batches, n_context, d_in_h))
+            head_idx = head_indices.get(h)
+            if head_idx is not None:
+                stacked[:, :] = layerwise[:, :, head_idx]
+            elif layerwise.ndim > 3:
+                try:
+                    stacked[:, :] = layerwise.view(n_batches, n_context, -1)
+                except RuntimeError as e:
+                    logger.error(f"Error during view operation: {e}")
+                    stacked[:, :] = layerwise.reshape(n_batches, n_context, -1)
+            else:
+                stacked[:, :] = layerwise
+            out[h] = stacked
+        return out
+
+    def _get_filtered_multi_hook_llm_batch(
+        self, raise_on_epoch_end: bool = False
+    ) -> dict[str, torch.Tensor]:
+        """Multi-hook analog of `get_filtered_llm_batch`. Same special-token mask applied across all hooks."""
+        batch_tokens = self.get_batch_tokens(raise_at_epoch_end=raise_on_epoch_end)
+        activations_dict = self.get_multi_hook_activations(batch_tokens)
+        sliced_tokens = batch_tokens[:, slice(*self.seqpos_slice)]
+
+        flat: dict[str, torch.Tensor] = {
+            h: t.to(self.device).reshape(-1, t.shape[-1])
+            for h, t in activations_dict.items()
+        }
+        token_ids = sliced_tokens.reshape(-1).to(self.device)
+
+        if self.exclude_special_tokens is None:
+            return flat
+        keep_mask = ~torch.isin(token_ids, self.exclude_special_tokens)
+        return {h: t[keep_mask] for h, t in flat.items()}
+
+    def _iterate_filtered_multi_hook_activations(
+        self,
+    ) -> Generator[dict[str, torch.Tensor], None, None]:
+        while True:
+            try:
+                yield self._get_filtered_multi_hook_llm_batch(raise_on_epoch_end=True)
+            except StopIteration:
+                warnings.warn(
+                    "All samples in the training dataset have been exhausted, beginning new epoch."
+                )
+                try:
+                    yield self._get_filtered_multi_hook_llm_batch()
+                except StopIteration:
+                    raise ValueError(
+                        "Unable to fill buffer after starting new epoch. Dataset may be too small."
+                    )
+
+    def get_multi_hook_data_loader(
+        self,
+    ) -> Iterator[dict[str, torch.Tensor]]:
+        """
+        Auto-refilling stream of filtered, mixed multi-hook activations.
+
+        Yields `dict[hook_name, (train_batch_size_tokens, d_in_h)]` per call,
+        with token alignment across hooks preserved by a single shared shuffle
+        permutation in the underlying mixing buffer.
+        """
+        if self._hook_names is None:
+            raise RuntimeError(
+                "get_multi_hook_data_loader requires the store to be constructed "
+                "via from_config_multi_hook"
+            )
+        return multi_hook_concat_split_iter(
+            buffer_size=self.n_batches_in_buffer * self.training_context_size,
+            batch_size=self.train_batch_size_tokens,
+            activations_loader=self._iterate_filtered_multi_hook_activations(),
+            hook_names=list(self._hook_names),
+            mix_fraction=self.activations_mixing_fraction,
+        )
 
     def state_dict(self) -> dict[str, torch.Tensor]:
         return {"n_dataset_processed": torch.tensor(self.n_dataset_processed)}
