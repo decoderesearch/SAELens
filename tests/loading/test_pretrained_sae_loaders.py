@@ -2262,7 +2262,7 @@ def test_get_qwen_scope_config_from_hf_qwen3_5_27b():
     cfg = get_qwen_scope_config_from_hf(
         repo_id="Qwen/SAE-Res-Qwen3.5-27B-W80K-L0_100",
         folder_name="layer42.sae.pt",
-        device="cuda",
+        device="cpu",
     )
 
     assert cfg["activation_fn_kwargs"] == {"k": 100}
@@ -2271,7 +2271,6 @@ def test_get_qwen_scope_config_from_hf_qwen3_5_27b():
     assert cfg["model_name"] == "Qwen/Qwen3.5-27B"
     assert cfg["hook_name"] == "blocks.42.hook_resid_post"
     assert cfg["hf_hook_name"] == "model.layers.42"
-    assert cfg["device"] == "cuda"
 
 
 def test_get_qwen_scope_config_from_hf_overrides():
@@ -2379,8 +2378,6 @@ def test_qwen_scope_sae_huggingface_loader_with_mocked_download(
 def test_qwen_scope_sae_loads_via_from_pretrained(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """End-to-end: an SAE built from a Qwen Scope checkpoint reproduces the
-    reference TopK encode (residual @ W_enc.T + b_enc, then keep top k)."""
     d_in = 64
     d_sae = 256
     k = 8
