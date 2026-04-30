@@ -1134,7 +1134,6 @@ def get_qwen_scope_config_from_hf(
         # Qwen Scope SAEs are trained on Qwen's in-house pretraining data, which
         # is not publicly available; leave the dataset_path unset.
         "dataset_path": None,
-        "dataset_trust_remote_code": True,
         "sae_lens_training_version": None,
         "normalize_activations": "none",
         "device": device,
