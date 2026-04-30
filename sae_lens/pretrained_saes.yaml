@@ -41925,3 +41925,1705 @@ gemma-2b-res-jb:
     l0: 54.0
     path: gemma_2b_blocks.17.hook_resid_post_16384
     variance_explained: -0.85
+qwen-scope-3-1.7b-base-w32k-l50:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3-1.7B-Base
+  repo_id: Qwen/SAE-Res-Qwen3-1.7B-Base-W32K-L0_50
+  saes:
+  - id: layer0
+    l0: 50
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 50
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 50
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 50
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 50
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 50
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 50
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 50
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 50
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 50
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 50
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 50
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 50
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 50
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 50
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 50
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 50
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 50
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 50
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 50
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 50
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 50
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 50
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 50
+    path: layer23.sae.pt
+  - id: layer24
+    l0: 50
+    path: layer24.sae.pt
+  - id: layer25
+    l0: 50
+    path: layer25.sae.pt
+  - id: layer26
+    l0: 50
+    path: layer26.sae.pt
+  - id: layer27
+    l0: 50
+    path: layer27.sae.pt
+qwen-scope-3-1.7b-base-w32k-l100:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3-1.7B-Base
+  repo_id: Qwen/SAE-Res-Qwen3-1.7B-Base-W32K-L0_100
+  saes:
+  - id: layer0
+    l0: 100
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 100
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 100
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 100
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 100
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 100
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 100
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 100
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 100
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 100
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 100
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 100
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 100
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 100
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 100
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 100
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 100
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 100
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 100
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 100
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 100
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 100
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 100
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 100
+    path: layer23.sae.pt
+  - id: layer24
+    l0: 100
+    path: layer24.sae.pt
+  - id: layer25
+    l0: 100
+    path: layer25.sae.pt
+  - id: layer26
+    l0: 100
+    path: layer26.sae.pt
+  - id: layer27
+    l0: 100
+    path: layer27.sae.pt
+qwen-scope-3-8b-base-w64k-l50:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3-8B-Base
+  repo_id: Qwen/SAE-Res-Qwen3-8B-Base-W64K-L0_50
+  saes:
+  - id: layer0
+    l0: 50
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 50
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 50
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 50
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 50
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 50
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 50
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 50
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 50
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 50
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 50
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 50
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 50
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 50
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 50
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 50
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 50
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 50
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 50
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 50
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 50
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 50
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 50
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 50
+    path: layer23.sae.pt
+  - id: layer24
+    l0: 50
+    path: layer24.sae.pt
+  - id: layer25
+    l0: 50
+    path: layer25.sae.pt
+  - id: layer26
+    l0: 50
+    path: layer26.sae.pt
+  - id: layer27
+    l0: 50
+    path: layer27.sae.pt
+  - id: layer28
+    l0: 50
+    path: layer28.sae.pt
+  - id: layer29
+    l0: 50
+    path: layer29.sae.pt
+  - id: layer30
+    l0: 50
+    path: layer30.sae.pt
+  - id: layer31
+    l0: 50
+    path: layer31.sae.pt
+  - id: layer32
+    l0: 50
+    path: layer32.sae.pt
+  - id: layer33
+    l0: 50
+    path: layer33.sae.pt
+  - id: layer34
+    l0: 50
+    path: layer34.sae.pt
+  - id: layer35
+    l0: 50
+    path: layer35.sae.pt
+qwen-scope-3-8b-base-w64k-l100:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3-8B-Base
+  repo_id: Qwen/SAE-Res-Qwen3-8B-Base-W64K-L0_100
+  saes:
+  - id: layer0
+    l0: 100
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 100
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 100
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 100
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 100
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 100
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 100
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 100
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 100
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 100
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 100
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 100
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 100
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 100
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 100
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 100
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 100
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 100
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 100
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 100
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 100
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 100
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 100
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 100
+    path: layer23.sae.pt
+  - id: layer24
+    l0: 100
+    path: layer24.sae.pt
+  - id: layer25
+    l0: 100
+    path: layer25.sae.pt
+  - id: layer26
+    l0: 100
+    path: layer26.sae.pt
+  - id: layer27
+    l0: 100
+    path: layer27.sae.pt
+  - id: layer28
+    l0: 100
+    path: layer28.sae.pt
+  - id: layer29
+    l0: 100
+    path: layer29.sae.pt
+  - id: layer30
+    l0: 100
+    path: layer30.sae.pt
+  - id: layer31
+    l0: 100
+    path: layer31.sae.pt
+  - id: layer32
+    l0: 100
+    path: layer32.sae.pt
+  - id: layer33
+    l0: 100
+    path: layer33.sae.pt
+  - id: layer34
+    l0: 100
+    path: layer34.sae.pt
+  - id: layer35
+    l0: 100
+    path: layer35.sae.pt
+qwen-scope-3-30b-a3b-base-w32k-l50:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3-30B-A3B-Base
+  repo_id: Qwen/SAE-Res-Qwen3-30B-A3B-Base-W32K-L0_50
+  saes:
+  - id: layer0
+    l0: 50
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 50
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 50
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 50
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 50
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 50
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 50
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 50
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 50
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 50
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 50
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 50
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 50
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 50
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 50
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 50
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 50
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 50
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 50
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 50
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 50
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 50
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 50
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 50
+    path: layer23.sae.pt
+  - id: layer24
+    l0: 50
+    path: layer24.sae.pt
+  - id: layer25
+    l0: 50
+    path: layer25.sae.pt
+  - id: layer26
+    l0: 50
+    path: layer26.sae.pt
+  - id: layer27
+    l0: 50
+    path: layer27.sae.pt
+  - id: layer28
+    l0: 50
+    path: layer28.sae.pt
+  - id: layer29
+    l0: 50
+    path: layer29.sae.pt
+  - id: layer30
+    l0: 50
+    path: layer30.sae.pt
+  - id: layer31
+    l0: 50
+    path: layer31.sae.pt
+  - id: layer32
+    l0: 50
+    path: layer32.sae.pt
+  - id: layer33
+    l0: 50
+    path: layer33.sae.pt
+  - id: layer34
+    l0: 50
+    path: layer34.sae.pt
+  - id: layer35
+    l0: 50
+    path: layer35.sae.pt
+  - id: layer36
+    l0: 50
+    path: layer36.sae.pt
+  - id: layer37
+    l0: 50
+    path: layer37.sae.pt
+  - id: layer38
+    l0: 50
+    path: layer38.sae.pt
+  - id: layer39
+    l0: 50
+    path: layer39.sae.pt
+  - id: layer40
+    l0: 50
+    path: layer40.sae.pt
+  - id: layer41
+    l0: 50
+    path: layer41.sae.pt
+  - id: layer42
+    l0: 50
+    path: layer42.sae.pt
+  - id: layer43
+    l0: 50
+    path: layer43.sae.pt
+  - id: layer44
+    l0: 50
+    path: layer44.sae.pt
+  - id: layer45
+    l0: 50
+    path: layer45.sae.pt
+  - id: layer46
+    l0: 50
+    path: layer46.sae.pt
+  - id: layer47
+    l0: 50
+    path: layer47.sae.pt
+qwen-scope-3-30b-a3b-base-w128k-l100:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3-30B-A3B-Base
+  repo_id: Qwen/SAE-Res-Qwen3-30B-A3B-Base-W128K-L0_100
+  saes:
+  - id: layer0
+    l0: 100
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 100
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 100
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 100
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 100
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 100
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 100
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 100
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 100
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 100
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 100
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 100
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 100
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 100
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 100
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 100
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 100
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 100
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 100
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 100
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 100
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 100
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 100
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 100
+    path: layer23.sae.pt
+  - id: layer24
+    l0: 100
+    path: layer24.sae.pt
+  - id: layer25
+    l0: 100
+    path: layer25.sae.pt
+  - id: layer26
+    l0: 100
+    path: layer26.sae.pt
+  - id: layer27
+    l0: 100
+    path: layer27.sae.pt
+  - id: layer28
+    l0: 100
+    path: layer28.sae.pt
+  - id: layer29
+    l0: 100
+    path: layer29.sae.pt
+  - id: layer30
+    l0: 100
+    path: layer30.sae.pt
+  - id: layer31
+    l0: 100
+    path: layer31.sae.pt
+  - id: layer32
+    l0: 100
+    path: layer32.sae.pt
+  - id: layer33
+    l0: 100
+    path: layer33.sae.pt
+  - id: layer34
+    l0: 100
+    path: layer34.sae.pt
+  - id: layer35
+    l0: 100
+    path: layer35.sae.pt
+  - id: layer36
+    l0: 100
+    path: layer36.sae.pt
+  - id: layer37
+    l0: 100
+    path: layer37.sae.pt
+  - id: layer38
+    l0: 100
+    path: layer38.sae.pt
+  - id: layer39
+    l0: 100
+    path: layer39.sae.pt
+  - id: layer40
+    l0: 100
+    path: layer40.sae.pt
+  - id: layer41
+    l0: 100
+    path: layer41.sae.pt
+  - id: layer42
+    l0: 100
+    path: layer42.sae.pt
+  - id: layer43
+    l0: 100
+    path: layer43.sae.pt
+  - id: layer44
+    l0: 100
+    path: layer44.sae.pt
+  - id: layer45
+    l0: 100
+    path: layer45.sae.pt
+  - id: layer46
+    l0: 100
+    path: layer46.sae.pt
+  - id: layer47
+    l0: 100
+    path: layer47.sae.pt
+qwen-scope-3.5-2b-base-w32k-l50:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3.5-2B-Base
+  repo_id: Qwen/SAE-Res-Qwen3.5-2B-Base-W32K-L0_50
+  saes:
+  - id: layer0
+    l0: 50
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 50
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 50
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 50
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 50
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 50
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 50
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 50
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 50
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 50
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 50
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 50
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 50
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 50
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 50
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 50
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 50
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 50
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 50
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 50
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 50
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 50
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 50
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 50
+    path: layer23.sae.pt
+qwen-scope-3.5-2b-base-w32k-l100:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3.5-2B-Base
+  repo_id: Qwen/SAE-Res-Qwen3.5-2B-Base-W32K-L0_100
+  saes:
+  - id: layer0
+    l0: 100
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 100
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 100
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 100
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 100
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 100
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 100
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 100
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 100
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 100
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 100
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 100
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 100
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 100
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 100
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 100
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 100
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 100
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 100
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 100
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 100
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 100
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 100
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 100
+    path: layer23.sae.pt
+qwen-scope-3.5-9b-base-w64k-l50:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3.5-9B-Base
+  repo_id: Qwen/SAE-Res-Qwen3.5-9B-Base-W64K-L0_50
+  saes:
+  - id: layer0
+    l0: 50
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 50
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 50
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 50
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 50
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 50
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 50
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 50
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 50
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 50
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 50
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 50
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 50
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 50
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 50
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 50
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 50
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 50
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 50
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 50
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 50
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 50
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 50
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 50
+    path: layer23.sae.pt
+  - id: layer24
+    l0: 50
+    path: layer24.sae.pt
+  - id: layer25
+    l0: 50
+    path: layer25.sae.pt
+  - id: layer26
+    l0: 50
+    path: layer26.sae.pt
+  - id: layer27
+    l0: 50
+    path: layer27.sae.pt
+  - id: layer28
+    l0: 50
+    path: layer28.sae.pt
+  - id: layer29
+    l0: 50
+    path: layer29.sae.pt
+  - id: layer30
+    l0: 50
+    path: layer30.sae.pt
+  - id: layer31
+    l0: 50
+    path: layer31.sae.pt
+qwen-scope-3.5-9b-base-w64k-l100:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3.5-9B-Base
+  repo_id: Qwen/SAE-Res-Qwen3.5-9B-Base-W64K-L0_100
+  saes:
+  - id: layer0
+    l0: 100
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 100
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 100
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 100
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 100
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 100
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 100
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 100
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 100
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 100
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 100
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 100
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 100
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 100
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 100
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 100
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 100
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 100
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 100
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 100
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 100
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 100
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 100
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 100
+    path: layer23.sae.pt
+  - id: layer24
+    l0: 100
+    path: layer24.sae.pt
+  - id: layer25
+    l0: 100
+    path: layer25.sae.pt
+  - id: layer26
+    l0: 100
+    path: layer26.sae.pt
+  - id: layer27
+    l0: 100
+    path: layer27.sae.pt
+  - id: layer28
+    l0: 100
+    path: layer28.sae.pt
+  - id: layer29
+    l0: 100
+    path: layer29.sae.pt
+  - id: layer30
+    l0: 100
+    path: layer30.sae.pt
+  - id: layer31
+    l0: 100
+    path: layer31.sae.pt
+qwen-scope-3.5-27b-w80k-l50:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3.5-27B
+  repo_id: Qwen/SAE-Res-Qwen3.5-27B-W80K-L0_50
+  saes:
+  - id: layer0
+    l0: 50
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 50
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 50
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 50
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 50
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 50
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 50
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 50
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 50
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 50
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 50
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 50
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 50
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 50
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 50
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 50
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 50
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 50
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 50
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 50
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 50
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 50
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 50
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 50
+    path: layer23.sae.pt
+  - id: layer24
+    l0: 50
+    path: layer24.sae.pt
+  - id: layer25
+    l0: 50
+    path: layer25.sae.pt
+  - id: layer26
+    l0: 50
+    path: layer26.sae.pt
+  - id: layer27
+    l0: 50
+    path: layer27.sae.pt
+  - id: layer28
+    l0: 50
+    path: layer28.sae.pt
+  - id: layer29
+    l0: 50
+    path: layer29.sae.pt
+  - id: layer30
+    l0: 50
+    path: layer30.sae.pt
+  - id: layer31
+    l0: 50
+    path: layer31.sae.pt
+  - id: layer32
+    l0: 50
+    path: layer32.sae.pt
+  - id: layer33
+    l0: 50
+    path: layer33.sae.pt
+  - id: layer34
+    l0: 50
+    path: layer34.sae.pt
+  - id: layer35
+    l0: 50
+    path: layer35.sae.pt
+  - id: layer36
+    l0: 50
+    path: layer36.sae.pt
+  - id: layer37
+    l0: 50
+    path: layer37.sae.pt
+  - id: layer38
+    l0: 50
+    path: layer38.sae.pt
+  - id: layer39
+    l0: 50
+    path: layer39.sae.pt
+  - id: layer40
+    l0: 50
+    path: layer40.sae.pt
+  - id: layer41
+    l0: 50
+    path: layer41.sae.pt
+  - id: layer42
+    l0: 50
+    path: layer42.sae.pt
+  - id: layer43
+    l0: 50
+    path: layer43.sae.pt
+  - id: layer44
+    l0: 50
+    path: layer44.sae.pt
+  - id: layer45
+    l0: 50
+    path: layer45.sae.pt
+  - id: layer46
+    l0: 50
+    path: layer46.sae.pt
+  - id: layer47
+    l0: 50
+    path: layer47.sae.pt
+  - id: layer48
+    l0: 50
+    path: layer48.sae.pt
+  - id: layer49
+    l0: 50
+    path: layer49.sae.pt
+  - id: layer50
+    l0: 50
+    path: layer50.sae.pt
+  - id: layer51
+    l0: 50
+    path: layer51.sae.pt
+  - id: layer52
+    l0: 50
+    path: layer52.sae.pt
+  - id: layer53
+    l0: 50
+    path: layer53.sae.pt
+  - id: layer54
+    l0: 50
+    path: layer54.sae.pt
+  - id: layer55
+    l0: 50
+    path: layer55.sae.pt
+  - id: layer56
+    l0: 50
+    path: layer56.sae.pt
+  - id: layer57
+    l0: 50
+    path: layer57.sae.pt
+  - id: layer58
+    l0: 50
+    path: layer58.sae.pt
+  - id: layer59
+    l0: 50
+    path: layer59.sae.pt
+  - id: layer60
+    l0: 50
+    path: layer60.sae.pt
+  - id: layer61
+    l0: 50
+    path: layer61.sae.pt
+  - id: layer62
+    l0: 50
+    path: layer62.sae.pt
+  - id: layer63
+    l0: 50
+    path: layer63.sae.pt
+qwen-scope-3.5-27b-w80k-l100:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3.5-27B
+  repo_id: Qwen/SAE-Res-Qwen3.5-27B-W80K-L0_100
+  saes:
+  - id: layer0
+    l0: 100
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 100
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 100
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 100
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 100
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 100
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 100
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 100
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 100
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 100
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 100
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 100
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 100
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 100
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 100
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 100
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 100
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 100
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 100
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 100
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 100
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 100
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 100
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 100
+    path: layer23.sae.pt
+  - id: layer24
+    l0: 100
+    path: layer24.sae.pt
+  - id: layer25
+    l0: 100
+    path: layer25.sae.pt
+  - id: layer26
+    l0: 100
+    path: layer26.sae.pt
+  - id: layer27
+    l0: 100
+    path: layer27.sae.pt
+  - id: layer28
+    l0: 100
+    path: layer28.sae.pt
+  - id: layer29
+    l0: 100
+    path: layer29.sae.pt
+  - id: layer30
+    l0: 100
+    path: layer30.sae.pt
+  - id: layer31
+    l0: 100
+    path: layer31.sae.pt
+  - id: layer32
+    l0: 100
+    path: layer32.sae.pt
+  - id: layer33
+    l0: 100
+    path: layer33.sae.pt
+  - id: layer34
+    l0: 100
+    path: layer34.sae.pt
+  - id: layer35
+    l0: 100
+    path: layer35.sae.pt
+  - id: layer36
+    l0: 100
+    path: layer36.sae.pt
+  - id: layer37
+    l0: 100
+    path: layer37.sae.pt
+  - id: layer38
+    l0: 100
+    path: layer38.sae.pt
+  - id: layer39
+    l0: 100
+    path: layer39.sae.pt
+  - id: layer40
+    l0: 100
+    path: layer40.sae.pt
+  - id: layer41
+    l0: 100
+    path: layer41.sae.pt
+  - id: layer42
+    l0: 100
+    path: layer42.sae.pt
+  - id: layer43
+    l0: 100
+    path: layer43.sae.pt
+  - id: layer44
+    l0: 100
+    path: layer44.sae.pt
+  - id: layer45
+    l0: 100
+    path: layer45.sae.pt
+  - id: layer46
+    l0: 100
+    path: layer46.sae.pt
+  - id: layer47
+    l0: 100
+    path: layer47.sae.pt
+  - id: layer48
+    l0: 100
+    path: layer48.sae.pt
+  - id: layer49
+    l0: 100
+    path: layer49.sae.pt
+  - id: layer50
+    l0: 100
+    path: layer50.sae.pt
+  - id: layer51
+    l0: 100
+    path: layer51.sae.pt
+  - id: layer52
+    l0: 100
+    path: layer52.sae.pt
+  - id: layer53
+    l0: 100
+    path: layer53.sae.pt
+  - id: layer54
+    l0: 100
+    path: layer54.sae.pt
+  - id: layer55
+    l0: 100
+    path: layer55.sae.pt
+  - id: layer56
+    l0: 100
+    path: layer56.sae.pt
+  - id: layer57
+    l0: 100
+    path: layer57.sae.pt
+  - id: layer58
+    l0: 100
+    path: layer58.sae.pt
+  - id: layer59
+    l0: 100
+    path: layer59.sae.pt
+  - id: layer60
+    l0: 100
+    path: layer60.sae.pt
+  - id: layer61
+    l0: 100
+    path: layer61.sae.pt
+  - id: layer62
+    l0: 100
+    path: layer62.sae.pt
+  - id: layer63
+    l0: 100
+    path: layer63.sae.pt
+qwen-scope-3.5-35b-a3b-base-w32k-l50:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3.5-35B-A3B-Base
+  repo_id: Qwen/SAE-Res-Qwen3.5-35B-A3B-Base-W32K-L0_50
+  saes:
+  - id: layer0
+    l0: 50
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 50
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 50
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 50
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 50
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 50
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 50
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 50
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 50
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 50
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 50
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 50
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 50
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 50
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 50
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 50
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 50
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 50
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 50
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 50
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 50
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 50
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 50
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 50
+    path: layer23.sae.pt
+  - id: layer24
+    l0: 50
+    path: layer24.sae.pt
+  - id: layer25
+    l0: 50
+    path: layer25.sae.pt
+  - id: layer26
+    l0: 50
+    path: layer26.sae.pt
+  - id: layer27
+    l0: 50
+    path: layer27.sae.pt
+  - id: layer28
+    l0: 50
+    path: layer28.sae.pt
+  - id: layer29
+    l0: 50
+    path: layer29.sae.pt
+  - id: layer30
+    l0: 50
+    path: layer30.sae.pt
+  - id: layer31
+    l0: 50
+    path: layer31.sae.pt
+  - id: layer32
+    l0: 50
+    path: layer32.sae.pt
+  - id: layer33
+    l0: 50
+    path: layer33.sae.pt
+  - id: layer34
+    l0: 50
+    path: layer34.sae.pt
+  - id: layer35
+    l0: 50
+    path: layer35.sae.pt
+  - id: layer36
+    l0: 50
+    path: layer36.sae.pt
+  - id: layer37
+    l0: 50
+    path: layer37.sae.pt
+  - id: layer38
+    l0: 50
+    path: layer38.sae.pt
+  - id: layer39
+    l0: 50
+    path: layer39.sae.pt
+qwen-scope-3.5-35b-a3b-base-w128k-l100:
+  conversion_func: qwen_scope
+  model: Qwen/Qwen3.5-35B-A3B-Base
+  repo_id: Qwen/SAE-Res-Qwen3.5-35B-A3B-Base-W128K-L0_100
+  saes:
+  - id: layer0
+    l0: 100
+    path: layer0.sae.pt
+  - id: layer1
+    l0: 100
+    path: layer1.sae.pt
+  - id: layer2
+    l0: 100
+    path: layer2.sae.pt
+  - id: layer3
+    l0: 100
+    path: layer3.sae.pt
+  - id: layer4
+    l0: 100
+    path: layer4.sae.pt
+  - id: layer5
+    l0: 100
+    path: layer5.sae.pt
+  - id: layer6
+    l0: 100
+    path: layer6.sae.pt
+  - id: layer7
+    l0: 100
+    path: layer7.sae.pt
+  - id: layer8
+    l0: 100
+    path: layer8.sae.pt
+  - id: layer9
+    l0: 100
+    path: layer9.sae.pt
+  - id: layer10
+    l0: 100
+    path: layer10.sae.pt
+  - id: layer11
+    l0: 100
+    path: layer11.sae.pt
+  - id: layer12
+    l0: 100
+    path: layer12.sae.pt
+  - id: layer13
+    l0: 100
+    path: layer13.sae.pt
+  - id: layer14
+    l0: 100
+    path: layer14.sae.pt
+  - id: layer15
+    l0: 100
+    path: layer15.sae.pt
+  - id: layer16
+    l0: 100
+    path: layer16.sae.pt
+  - id: layer17
+    l0: 100
+    path: layer17.sae.pt
+  - id: layer18
+    l0: 100
+    path: layer18.sae.pt
+  - id: layer19
+    l0: 100
+    path: layer19.sae.pt
+  - id: layer20
+    l0: 100
+    path: layer20.sae.pt
+  - id: layer21
+    l0: 100
+    path: layer21.sae.pt
+  - id: layer22
+    l0: 100
+    path: layer22.sae.pt
+  - id: layer23
+    l0: 100
+    path: layer23.sae.pt
+  - id: layer24
+    l0: 100
+    path: layer24.sae.pt
+  - id: layer25
+    l0: 100
+    path: layer25.sae.pt
+  - id: layer26
+    l0: 100
+    path: layer26.sae.pt
+  - id: layer27
+    l0: 100
+    path: layer27.sae.pt
+  - id: layer28
+    l0: 100
+    path: layer28.sae.pt
+  - id: layer29
+    l0: 100
+    path: layer29.sae.pt
+  - id: layer30
+    l0: 100
+    path: layer30.sae.pt
+  - id: layer31
+    l0: 100
+    path: layer31.sae.pt
+  - id: layer32
+    l0: 100
+    path: layer32.sae.pt
+  - id: layer33
+    l0: 100
+    path: layer33.sae.pt
+  - id: layer34
+    l0: 100
+    path: layer34.sae.pt
+  - id: layer35
+    l0: 100
+    path: layer35.sae.pt
+  - id: layer36
+    l0: 100
+    path: layer36.sae.pt
+  - id: layer37
+    l0: 100
+    path: layer37.sae.pt
+  - id: layer38
+    l0: 100
+    path: layer38.sae.pt
+  - id: layer39
+    l0: 100
+    path: layer39.sae.pt
