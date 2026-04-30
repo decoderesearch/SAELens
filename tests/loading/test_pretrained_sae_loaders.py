@@ -2262,7 +2262,7 @@ def test_get_qwen_scope_config_from_hf_qwen3_5_27b():
     cfg = get_qwen_scope_config_from_hf(
         repo_id="Qwen/SAE-Res-Qwen3.5-27B-W80K-L0_100",
         folder_name="layer42.sae.pt",
-        device="cpu",
+        device="meta",
     )
 
     assert cfg["activation_fn_kwargs"] == {"k": 100}
@@ -2271,6 +2271,7 @@ def test_get_qwen_scope_config_from_hf_qwen3_5_27b():
     assert cfg["model_name"] == "Qwen/Qwen3.5-27B"
     assert cfg["hook_name"] == "blocks.42.hook_resid_post"
     assert cfg["hf_hook_name"] == "model.layers.42"
+    assert cfg["device"] == "meta"
 
 
 def test_get_qwen_scope_config_from_hf_overrides():
