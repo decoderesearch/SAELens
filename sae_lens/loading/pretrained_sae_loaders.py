@@ -1652,7 +1652,7 @@ def get_safetensors_tensor_shapes(repo_id: str, filename: str) -> dict[str, list
     hf_headers = build_hf_headers()
 
     # Fetch first 8 bytes to get metadata size
-    headers = {**hf_headers, "Range": "bytes=0-7"}
+    headers: dict[str, str | bytes] = {**hf_headers, "Range": "bytes=0-7"}
     response = requests.get(url, headers=headers, timeout=10)
     response.raise_for_status()
 
