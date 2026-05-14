@@ -205,7 +205,7 @@ def test_build_train_step_log_dict(
     # we're relying on the trainer only for some of the metrics here
     # we should more / less try to break this and push
     # everything through the train step output if we can.
-    log_dict = trainer._build_train_step_log_dict(
+    log_dict = trainer.build_train_step_log_dict(
         output=train_output, n_training_samples=123
     )
     expected = {
@@ -244,7 +244,7 @@ def test_build_train_step_log_dict_callable_metrics(
         },
     )
 
-    log_dict = trainer._build_train_step_log_dict(
+    log_dict = trainer.build_train_step_log_dict(
         output=train_output, n_training_samples=100
     )
 

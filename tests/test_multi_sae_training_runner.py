@@ -2,6 +2,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
+import torch
 from datasets import Dataset
 from transformer_lens import HookedTransformer
 
@@ -13,6 +14,7 @@ from sae_lens import (
 )
 from sae_lens.config import LoggingConfig
 from sae_lens.saes.sae import TrainingSAEConfig
+from sae_lens.training.activations_store import ActivationsStore
 from tests.helpers import TINYSTORIES_MODEL, load_model_cached
 
 
@@ -60,7 +62,6 @@ def _build_cfg(
         checkpoint_path=checkpoint_path,
         save_final_checkpoint=save_final_checkpoint,
         output_path=output_path,
-        verbose=False,
     )
 
 
@@ -266,15 +267,30 @@ def test_multi_sae_runner_smoke_loss_decreases(
     runner = MultiSAETrainingRunner(
         cfg, override_model=ts_model, override_dataset=dataset
     )
-
-    # Get initial losses by running a single step manually via the trainer's helper
-    # — easier path: train for the full run and check final outputs are reasonable.
     saes = runner.run()
-    # After ~50 steps the SAEs should be reconstructing better than pure decode of zeros.
-    multi_store = runner.activations_store
-    multi_store._dataloader = None  # reset cursor for a fresh batch
-    batch_dict = next(multi_store.get_multi_hook_data_loader())
-    batch = batch_dict["blocks.0.hook_mlp_out"]
+
+    # Build a fresh store for a post-training reconstruction check (the
+    # runner's store has already been exhausted by fit()).
+    hook = "blocks.0.hook_mlp_out"
+    eval_store = ActivationsStore.from_config_multi_hook(
+        model=ts_model,
+        dataset=dataset,
+        hook_names=[hook],
+        hook_d_ins={hook: d_in},
+        streaming=False,
+        context_size=cfg.context_size,
+        n_batches_in_buffer=2,
+        total_training_tokens=cfg.training_tokens,
+        store_batch_size_prompts=cfg.store_batch_size_prompts,
+        train_batch_size_tokens=cfg.train_batch_size_tokens,
+        prepend_bos=cfg.prepend_bos,
+        normalize_activations="none",
+        device=torch.device(cfg.device),
+        dtype=cfg.dtype,
+        seqpos_slice=cfg.seqpos_slice,
+        activations_mixing_fraction=0.0,
+    )
+    batch = next(eval_store.get_multi_hook_data_loader())[hook]
     for sae in saes.values():
         recon = sae(batch)
         per_sample_mse = (recon - batch).pow(2).sum(-1).mean()

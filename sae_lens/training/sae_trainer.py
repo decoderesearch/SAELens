@@ -365,7 +365,7 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
     def _log_train_step(self, step_output: TrainStepOutput):
         if self._is_logging_step():
             wandb.log(
-                self._build_train_step_log_dict(
+                self.build_train_step_log_dict(
                     output=step_output,
                     n_training_samples=self.n_training_samples,
                 ),
@@ -380,7 +380,7 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
         }
 
     @torch.no_grad()
-    def _build_train_step_log_dict(
+    def build_train_step_log_dict(
         self,
         output: TrainStepOutput,
         n_training_samples: int,

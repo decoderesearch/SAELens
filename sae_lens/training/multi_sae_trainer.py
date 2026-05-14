@@ -204,7 +204,7 @@ class MultiSAETrainer:
             "details/n_training_samples": self.n_training_samples
         }
         for name, trainer in self.trainers.items():
-            log_dict = trainer._build_train_step_log_dict(  # type: ignore[reportPrivateUsage]
+            log_dict = trainer.build_train_step_log_dict(
                 output=step_outputs[name],
                 n_training_samples=self.n_training_samples,
             )
@@ -221,25 +221,27 @@ class MultiSAETrainer:
             return
         for sae in self.saes.values():
             sae.eval()
-        if self.evaluator is not None:
-            metrics = self.evaluator(
-                saes=self.saes,
-                data_provider=self.data_provider,
-                activation_scalers={
-                    name: t.activation_scaler for name, t in self.trainers.items()
-                },
-                hook_names=self.hook_names,
-            )
-            wandb.log(metrics, step=self.n_training_steps)
-        # Per-SAE histograms (as in single-SAE _run_and_log_evals).
-        hist_metrics: dict[str, Any] = {}
-        for name, sae in self.saes.items():
-            for k, v in sae.log_histograms().items():
-                hist_metrics[f"{name}/{k}"] = wandb.Histogram(v)  # type: ignore
-        if hist_metrics:
-            wandb.log(hist_metrics, step=self.n_training_steps)
-        for sae in self.saes.values():
-            sae.train()
+        try:
+            if self.evaluator is not None:
+                metrics = self.evaluator(
+                    saes=self.saes,
+                    data_provider=self.data_provider,
+                    activation_scalers={
+                        name: t.activation_scaler for name, t in self.trainers.items()
+                    },
+                    hook_names=self.hook_names,
+                )
+                wandb.log(metrics, step=self.n_training_steps)
+            # Per-SAE histograms (as in single-SAE _run_and_log_evals).
+            hist_metrics: dict[str, Any] = {}
+            for name, sae in self.saes.items():
+                for k, v in sae.log_histograms().items():
+                    hist_metrics[f"{name}/{k}"] = wandb.Histogram(v)  # type: ignore
+            if hist_metrics:
+                wandb.log(hist_metrics, step=self.n_training_steps)
+        finally:
+            for sae in self.saes.values():
+                sae.train()
 
     def _checkpoint_if_needed(self) -> None:
         if (

@@ -12,7 +12,12 @@ from sae_lens.saes.standard_sae import StandardTrainingSAE, StandardTrainingSAEC
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.multi_sae_trainer import MultiSAETrainer
 from sae_lens.training.sae_trainer import SAETrainer
-from tests.helpers import TINYSTORIES_MODEL, assert_close, load_model_cached
+from tests.helpers import (
+    TINYSTORIES_MODEL,
+    assert_close,
+    load_model_cached,
+    random_params,
+)
 
 
 @pytest.fixture
@@ -55,7 +60,9 @@ def _make_sae(d_in: int) -> StandardTrainingSAE:
         dtype="float32",
         device="cpu",
     )
-    return StandardTrainingSAE(cfg)
+    sae = StandardTrainingSAE(cfg)
+    random_params(sae)
+    return sae
 
 
 def _trainer_cfg(total_samples: int) -> SAETrainerConfig:
@@ -159,10 +166,6 @@ def test_multi_sae_trainer_two_saes_at_same_hook_train_independently(
 
     sae_a = _make_sae(d_in)
     sae_b = _make_sae(d_in)
-    # Force them to have different init weights (otherwise zero-grad init coincidence).
-    with torch.no_grad():
-        for p_b in sae_b.parameters():
-            p_b.add_(torch.ones_like(p_b))
 
     multi_store = ActivationsStore.from_config_multi_hook(
         model=ts_model,

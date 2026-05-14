@@ -9,7 +9,7 @@ coefficient schedulers, activation scaler, and sparsity tracking — exactly as
 in single-SAE training. The runner just orchestrates the shared model and
 multi-hook activations.
 
-V1 limitations (see plan: out-of-scope):
+V1 limitations:
 
 - Argparse/CLI not supported (programmatic config only).
 - `from_pretrained_path` per entry not supported (resume from a multi-SAE
@@ -25,7 +25,7 @@ import json
 import signal
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -143,7 +143,6 @@ class MultiSAETrainingRunnerConfig:
     resume_from_checkpoint: str | None = None
 
     # Misc
-    verbose: bool = True
     model_kwargs: dict[str, Any] = field(default_factory=dict)
     model_from_pretrained_kwargs: dict[str, Any] | None = None
     sae_lens_version: str = field(default_factory=lambda: __version__)
@@ -290,12 +289,13 @@ class MultiSAETrainingRunnerConfig:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        from dataclasses import asdict
-
         d = asdict(self)
         d["logger"] = asdict(self.logger)
         d["saes"] = {name: cfg.to_dict() for name, cfg in self.saes.items()}
         d.pop("evaluator", None)  # not serializable
+        # internal derived fields — redundant with hook_names / hook_head_indices
+        d.pop("_hook_names_per_sae", None)
+        d.pop("_hook_head_indices_per_sae", None)
         return d
 
 
@@ -433,7 +433,8 @@ class MultiSAETrainingRunner:
             )
 
         llm_device = cfg.llm_device
-        assert llm_device is not None  # set in __post_init__
+        if llm_device is None:  # set in __post_init__
+            raise RuntimeError("cfg.llm_device must be set after __post_init__")
 
         self.model = (
             override_model

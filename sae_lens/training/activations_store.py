@@ -265,8 +265,7 @@ class ActivationsStore:
         if not hook_names:
             raise ValueError("hook_names must be non-empty")
 
-        seen: set[str] = set()
-        unique_hook_names = [h for h in hook_names if not (h in seen or seen.add(h))]
+        unique_hook_names = list(dict.fromkeys(hook_names))
 
         missing = [h for h in unique_hook_names if h not in hook_d_ins]
         if missing:
@@ -883,16 +882,14 @@ class ActivationsStore:
             layerwise = cache[h][:, slice(*self.seqpos_slice)]
             n_batches, n_context = layerwise.shape[:2]
             d_in_h = self._hook_d_ins[h]
-            stacked = torch.zeros((n_batches, n_context, d_in_h))
+            stacked = torch.zeros(
+                (n_batches, n_context, d_in_h), device=layerwise.device
+            )
             head_idx = head_indices.get(h)
             if head_idx is not None:
                 stacked[:, :] = layerwise[:, :, head_idx]
             elif layerwise.ndim > 3:
-                try:
-                    stacked[:, :] = layerwise.view(n_batches, n_context, -1)
-                except RuntimeError as e:
-                    logger.error(f"Error during view operation: {e}")
-                    stacked[:, :] = layerwise.reshape(n_batches, n_context, -1)
+                stacked[:, :] = layerwise.reshape(n_batches, n_context, -1)
             else:
                 stacked[:, :] = layerwise
             out[h] = stacked
