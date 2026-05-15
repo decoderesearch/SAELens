@@ -559,7 +559,7 @@ class MultiSAETrainingRunner:
         saes = self._run_with_interruption_handling(trainer)
 
         if self.cfg.output_path is not None:
-            self._save_final_outputs(saes)
+            self._save_final_outputs(saes, trainer)
 
         if self.cfg.logger.log_to_wandb:
             wandb.finish()
@@ -609,7 +609,9 @@ class MultiSAETrainingRunner:
         with open(checkpoint_path / RUNNER_CFG_FILENAME, "w") as f:
             json.dump(self.cfg.to_dict(), f)
 
-    def _save_final_outputs(self, saes: dict[str, TrainingSAE[Any]]) -> None:
+    def _save_final_outputs(
+        self, saes: dict[str, TrainingSAE[Any]], trainer: MultiSAETrainer
+    ) -> None:
         assert self.cfg.output_path is not None
         base = Path(self.cfg.output_path)
         base.mkdir(exist_ok=True, parents=True)
@@ -619,13 +621,11 @@ class MultiSAETrainingRunner:
             per_sae.mkdir(exist_ok=True, parents=True)
             weights_path, cfg_path = sae.save_inference_model(str(per_sae))
 
-            sparsity_path = None
-            # Try to find this SAE's log_feature_sparsity from the trainer if alive,
-            # else skip (caller can save them via final-checkpoint).
-            sparsity_tensor = self._maybe_get_log_feature_sparsity(name)
-            if sparsity_tensor is not None:
-                sparsity_path = per_sae / SPARSITY_FILENAME
-                save_file({"sparsity": sparsity_tensor}, sparsity_path)
+            sparsity_path = per_sae / SPARSITY_FILENAME
+            save_file(
+                {"sparsity": trainer.trainers[name].log_feature_sparsity},
+                sparsity_path,
+            )
 
             if self.cfg.logger.log_to_wandb:
                 # Trainer's logger.log expects a `trainer` object with `sae` and `cfg` —
@@ -641,11 +641,6 @@ class MultiSAETrainingRunner:
 
         with open(base / RUNNER_CFG_FILENAME, "w") as f:
             json.dump(self.cfg.to_dict(), f)
-
-    def _maybe_get_log_feature_sparsity(self, name: str) -> torch.Tensor | None:  # noqa: ARG002
-        # Sparsity is owned by the trainer; the runner isn't holding a ref after fit().
-        # Returning None is fine — the per-checkpoint dirs already contain sparsity.
-        return None
 
 
 @dataclass

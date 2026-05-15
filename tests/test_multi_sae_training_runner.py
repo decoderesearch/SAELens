@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 import torch
 from datasets import Dataset
+from safetensors.torch import load_file
 from transformer_lens import HookedTransformer
 
 from sae_lens import (
@@ -100,10 +101,16 @@ def test_multi_sae_runner_trains_two_saes_at_same_hook(
     saes = runner.run()
 
     assert set(saes.keys()) == {"low_l1", "high_l1"}
-    # Output dirs exist with weights/cfg files per SAE
+    # Output dirs exist with weights/cfg/sparsity files per SAE
     assert (tmp_path / "out" / "low_l1" / "sae_weights.safetensors").exists()
     assert (tmp_path / "out" / "high_l1" / "sae_weights.safetensors").exists()
     assert (tmp_path / "out" / "runner_cfg.json").exists()
+    # Each SAE gets its own log-feature-sparsity tensor of shape (d_sae,).
+    for name in ("low_l1", "high_l1"):
+        sparsity = load_file(tmp_path / "out" / name / "sparsity.safetensors")[
+            "sparsity"
+        ]
+        assert sparsity.shape == (saes[name].cfg.d_sae,)
     # Both SAEs should have non-zero W_dec (training did something)
     for sae in saes.values():
         assert sae.W_dec.abs().sum().item() > 0
