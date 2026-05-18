@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 import torch
 from datasets import Dataset
+from tqdm.auto import tqdm
 from transformer_lens import HookedTransformer
 
 from sae_lens.config import LoggingConfig, SAETrainerConfig
@@ -282,6 +283,56 @@ def test_multi_sae_trainer_save_and_load_round_trip(
     assert_close(fresh_a.W_enc, saved_a_w_enc)
     assert_close(fresh_b.W_enc, saved_b_w_enc)
     assert fresh_trainer.n_training_samples == saved_n_samples
+
+
+def test_multi_sae_trainer_load_checkpoint_errors_on_missing_sae_subdir(
+    ts_model: HookedTransformer, dataset: Dataset, tmp_path: Path
+):
+    hook = "blocks.0.hook_mlp_out"
+    d_in = ts_model.cfg.d_model
+    multi_store = ActivationsStore.from_config_multi_hook(
+        model=ts_model,
+        hook_names=[hook],
+        hook_d_ins={hook: d_in},
+        **_common_store_kwargs(dataset),
+    )
+    trainer = MultiSAETrainer(
+        cfg=_trainer_cfg(total_samples=4),
+        saes={"a": _make_sae(d_in), "b": _make_sae(d_in)},
+        hook_names={"a": hook, "b": hook},
+        data_provider=multi_store.get_multi_hook_data_loader(),
+    )
+    # the directory exists but has no per-SAE subdirectories
+    (tmp_path / "empty_ckpt").mkdir()
+    with pytest.raises(FileNotFoundError, match="missing per-SAE subdirectories"):
+        trainer.load_checkpoint(tmp_path / "empty_ckpt")
+
+
+def test_multi_sae_trainer_update_pbar_refreshes_on_interval(
+    ts_model: HookedTransformer, dataset: Dataset
+):
+    hook = "blocks.0.hook_mlp_out"
+    d_in = ts_model.cfg.d_model
+    multi_store = ActivationsStore.from_config_multi_hook(
+        model=ts_model,
+        hook_names=[hook],
+        hook_d_ins={hook: d_in},
+        **_common_store_kwargs(dataset),
+    )
+    trainer = MultiSAETrainer(
+        cfg=_trainer_cfg(total_samples=4),
+        saes={"a": _make_sae(d_in)},
+        hook_names={"a": hook},
+        data_provider=multi_store.get_multi_hook_data_loader(),
+    )
+    multi_batch = next(trainer.data_provider)
+    step_outputs = {"a": trainer.trainers["a"].step(multi_batch[hook])}
+
+    pbar = tqdm(total=1000)
+    trainer.n_training_steps = 100  # a multiple of the 100-step refresh interval
+    trainer._update_pbar(step_outputs, pbar)  # type: ignore[reportPrivateUsage]
+    assert pbar.desc.startswith("100|")
+    pbar.close()
 
 
 def test_multi_sae_trainer_validates_hook_keys(ts_model: HookedTransformer):
