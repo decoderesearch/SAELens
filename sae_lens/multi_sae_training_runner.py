@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import signal
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -57,8 +57,11 @@ def _interrupt_callback(sig_num: Any, stack_frame: Any) -> None:  # noqa: ARG001
 
 # A user-supplied custom evaluator. Mirrors the single-SAE Evaluator signature
 # but applied per SAE: `(sae, single_hook_data_provider_view, sae's scaler)`.
+# The data-provider view yields one hook's activation tensors per step.
 # Returns a flat dict that the runner prefixes with `{sae_name}/` when merging.
-PerSAEEvaluator = Callable[[TrainingSAE[Any], Any, ActivationScaler], dict[str, Any]]
+PerSAEEvaluator = Callable[
+    [TrainingSAE[Any], Iterator[torch.Tensor], ActivationScaler], dict[str, Any]
+]
 
 
 @dataclass
@@ -148,6 +151,8 @@ class MultiSAETrainingRunnerConfig:
     sae_lens_version: str = field(default_factory=lambda: __version__)
     sae_lens_training_version: str = field(default_factory=lambda: __version__)
     exclude_special_tokens: bool | list[int] = False
+    # Norm estimation caches this many multi-hook batches in memory at once;
+    # peak memory scales with n_hooks * d_in, not just d_in as in single-SAE.
     n_batches_for_norm_estimate: int = 1000
 
     # Internal: populated by __post_init__
@@ -289,13 +294,16 @@ class MultiSAETrainingRunnerConfig:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        d = asdict(self)
+        # `evaluator` is not serializable; `_hook_*_per_sae` are internal
+        # derived fields, redundant with hook_names / hook_head_indices.
+        excluded = {
+            "evaluator",
+            "_hook_names_per_sae",
+            "_hook_head_indices_per_sae",
+        }
+        d = {k: v for k, v in asdict(self).items() if k not in excluded}
         d["logger"] = asdict(self.logger)
         d["saes"] = {name: cfg.to_dict() for name, cfg in self.saes.items()}
-        d.pop("evaluator", None)  # not serializable
-        # internal derived fields — redundant with hook_names / hook_head_indices
-        d.pop("_hook_names_per_sae", None)
-        d.pop("_hook_head_indices_per_sae", None)
         return d
 
 

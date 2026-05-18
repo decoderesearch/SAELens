@@ -865,7 +865,7 @@ class ActivationsStore:
         )
 
         with torch.autocast(
-            device_type="cuda",
+            device_type=_get_input_token_device(self.model).type,
             dtype=torch.bfloat16,
             enabled=self.autocast_lm,
         ):

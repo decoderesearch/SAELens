@@ -310,17 +310,7 @@ class MultiSAETrainer:
     ) -> None:
         if self.n_training_steps % update_interval == 0:
             losses = " | ".join(
-                f"{name}: {_loss_value(out):.4f}" for name, out in step_outputs.items()
+                f"{name}: {out.loss.item():.4f}" for name, out in step_outputs.items()
             )
             pbar.set_description(f"{self.n_training_steps}| {losses}")
             pbar.update(update_interval * self.cfg.train_batch_size_samples)
-
-
-def _loss_value(out: TrainStepOutput) -> float:
-    loss = out.loss
-    if isinstance(loss, torch.Tensor):
-        return loss.item()
-    if callable(loss):
-        result: Any = loss()
-        return result.item() if isinstance(result, torch.Tensor) else float(result)
-    return float(loss)
