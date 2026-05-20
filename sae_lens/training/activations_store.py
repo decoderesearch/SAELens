@@ -75,7 +75,7 @@ class ActivationsStore:
     # hook (`hook_names[0]`) but should not be relied on by multi-hook callers.
     _hook_names: list[str] | None = None
     _hook_d_ins: dict[str, int] | None = None
-    _hook_head_indices: dict[str, int | None] | None = None
+    _hook_head_indices: dict[str, int | None]
 
     @classmethod
     def from_cache_activations(
@@ -304,7 +304,7 @@ class ActivationsStore:
         )
         store._hook_names = unique_hook_names
         store._hook_d_ins = dict(hook_d_ins)
-        store._hook_head_indices = dict(head_indices) if head_indices else None
+        store._hook_head_indices = dict(head_indices)
         return store
 
     def __init__(
@@ -382,6 +382,7 @@ class ActivationsStore:
         )
         self.activations_mixing_fraction = activations_mixing_fraction
         self.use_chat_formatting = use_chat_formatting
+        self._hook_head_indices = {}
 
         self.n_dataset_processed = 0
 
@@ -854,7 +855,6 @@ class ActivationsStore:
                 "get_multi_hook_activations requires the store to be constructed "
                 "via from_config_multi_hook"
             )
-        head_indices = self._hook_head_indices or {}
         stops = [
             extract_stop_at_layer_from_tlens_hook_name(h) for h in self._hook_names
         ]
@@ -881,17 +881,13 @@ class ActivationsStore:
         for h in self._hook_names:
             layerwise = cache[h][:, slice(*self.seqpos_slice)]
             n_batches, n_context = layerwise.shape[:2]
-            d_in_h = self._hook_d_ins[h]
-            stacked = torch.zeros(
-                (n_batches, n_context, d_in_h), device=layerwise.device
-            )
-            head_idx = head_indices.get(h)
+            head_idx = self._hook_head_indices.get(h)
             if head_idx is not None:
-                stacked[:, :] = layerwise[:, :, head_idx]
+                stacked = layerwise[:, :, head_idx]
             elif layerwise.ndim > 3:
-                stacked[:, :] = layerwise.reshape(n_batches, n_context, -1)
+                stacked = layerwise.reshape(n_batches, n_context, -1)
             else:
-                stacked[:, :] = layerwise
+                stacked = layerwise
             out[h] = stacked
         return out
 

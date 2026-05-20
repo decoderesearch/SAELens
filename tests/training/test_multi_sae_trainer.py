@@ -83,11 +83,6 @@ def _trainer_cfg(total_samples: int) -> SAETrainerConfig:
 def test_multi_sae_trainer_matches_two_independent_single_trainers(
     ts_model: HookedTransformer, dataset: Dataset
 ):
-    """
-    Equivalence test: running 2 SAEs through a MultiSAETrainer must produce
-    bit-for-bit the same final weights as running 2 SAETrainers independently
-    on the same model + dataset, with shuffling disabled.
-    """
     hook_a = "blocks.0.hook_resid_pre"
     hook_b = "blocks.0.hook_mlp_out"
     d_in = ts_model.cfg.d_model
@@ -156,10 +151,6 @@ def test_multi_sae_trainer_matches_two_independent_single_trainers(
 def test_multi_sae_trainer_two_saes_at_same_hook_train_independently(
     ts_model: HookedTransformer, dataset: Dataset
 ):
-    """
-    Two SAEs at the same hook with different initial weights must remain
-    distinct after training (independent optimizers; no cross-contamination).
-    """
     hook = "blocks.0.hook_mlp_out"
     d_in = ts_model.cfg.d_model
     n_steps = 4
@@ -195,7 +186,6 @@ def test_multi_sae_trainer_two_saes_at_same_hook_train_independently(
 def test_multi_sae_trainer_runs_with_normalize_activations(
     ts_model: HookedTransformer, dataset: Dataset
 ):
-    """Smoke: scaling-factor estimation runs once across SAEs and folds into weights at end."""
     hook = "blocks.0.hook_mlp_out"
     d_in = ts_model.cfg.d_model
     common = _common_store_kwargs(dataset)
@@ -350,7 +340,6 @@ def test_multi_sae_trainer_validates_hook_keys(ts_model: HookedTransformer):
 def test_multi_sae_trainer_per_sae_loss_decreases_over_training(
     ts_model: HookedTransformer, dataset: Dataset
 ):
-    """Functional: per-SAE losses fall when training on the same activations repeatedly."""
     hook = "blocks.0.hook_mlp_out"
     d_in = ts_model.cfg.d_model
     common = _common_store_kwargs(dataset)

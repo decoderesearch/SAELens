@@ -4,7 +4,6 @@ from typing import Any
 
 import pytest
 import torch
-import wandb
 from datasets import Dataset
 from safetensors.torch import load_file
 from transformer_lens import HookedTransformer
@@ -18,6 +17,7 @@ from sae_lens import (
 from sae_lens.config import LoggingConfig
 from sae_lens.multi_sae_training_runner import InterruptedException, PerSAEEvaluator
 from sae_lens.saes.sae import TrainingSAE, TrainingSAEConfig
+from sae_lens.saes.standard_sae import StandardTrainingSAE
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.multi_sae_trainer import MultiSAETrainer
 from tests.helpers import TINYSTORIES_MODEL, load_model_cached
@@ -33,30 +33,6 @@ def dataset() -> Dataset:
     return Dataset.from_list(
         [{"text": f"the quick brown fox {i} jumps over"} for i in range(200)]
     )
-
-
-class _FakeArtifact:
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
-    def add_file(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
-
-@pytest.fixture
-def captured_wandb_logs(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
-    """Patch wandb so runner/trainer logging runs without a real session.
-
-    Returns the list of dicts passed to `wandb.log`.
-    """
-    logged: list[dict[str, Any]] = []
-    monkeypatch.setattr(wandb, "init", lambda *_a, **_k: None)
-    monkeypatch.setattr(wandb, "finish", lambda *_a, **_k: None)
-    monkeypatch.setattr(wandb, "log", lambda d, **_k: logged.append(d))
-    monkeypatch.setattr(wandb, "log_artifact", lambda *_a, **_k: None)
-    monkeypatch.setattr(wandb, "Histogram", lambda *_a, **_k: None)
-    monkeypatch.setattr(wandb, "Artifact", _FakeArtifact)
-    return logged
 
 
 def _build_cfg(
@@ -203,11 +179,6 @@ def test_multi_sae_runner_trains_two_saes_at_different_hooks(
 def test_multi_sae_runner_resume_from_checkpoint(
     ts_model: HookedTransformer, dataset: Dataset, tmp_path: Path
 ):
-    """
-    Resuming from a final checkpoint must restore trainer state: a resumed
-    run already at its token budget does no further training, so the SAE
-    weights must come back bit-identical to the checkpointed ones.
-    """
     d_in = ts_model.cfg.d_model
 
     cfg = _build_cfg(
@@ -308,7 +279,6 @@ def test_multi_sae_runner_config_rejects_unknown_hook_head_index_keys(
 def test_multi_sae_runner_smoke_loss_decreases(
     ts_model: HookedTransformer, dataset: Dataset
 ):
-    """Functional smoke: training reduces reconstruction loss for both SAEs."""
     d_in = ts_model.cfg.d_model
     cfg = _build_cfg(
         saes={
@@ -390,10 +360,6 @@ def test_multi_sae_runner_logs_per_sae_metrics_to_wandb(
     tmp_path: Path,
     captured_wandb_logs: list[dict[str, Any]],
 ):
-    """
-    With wandb logging on, train-step / eval / sparsity metrics and the
-    user evaluator's output must all be logged under per-SAE `{name}/` keys.
-    """
     d_in = ts_model.cfg.d_model
 
     def user_evaluator(
@@ -448,7 +414,7 @@ def test_multi_sae_runner_rejects_mismatched_override_saes(
         hook_names="blocks.0.hook_mlp_out",
     )
     # override_saes has an unknown key "c" and is missing "b"
-    bad_override = {"a": TrainingSAE.from_dict(_std_sae_cfg(d_in).to_dict())}
+    bad_override = {"a": StandardTrainingSAE(_std_sae_cfg(d_in))}
     with pytest.raises(ValueError, match="override_saes keys must match"):
         MultiSAETrainingRunner(
             cfg,
@@ -464,8 +430,6 @@ def test_multi_sae_runner_saves_checkpoint_on_interruption(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """An interrupt during fit() must trigger a progress checkpoint, then re-raise."""
-
     def _interrupt(_self: MultiSAETrainer) -> dict[str, Any]:
         raise InterruptedException()
 

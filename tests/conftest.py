@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 import pytest
 import torch
+import wandb
 
 from sae_lens.saes.sae import SAE
 from sae_lens.saes.standard_sae import StandardSAEConfig
@@ -122,3 +123,23 @@ def gpt2_res_jb_l4_sae() -> SAE[StandardSAEConfig]:
         sae_id="blocks.4.hook_resid_pre",
         device="cpu",
     )
+
+
+class _FakeWandbArtifact:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def add_file(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+
+@pytest.fixture
+def captured_wandb_logs(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    logged: list[dict[str, Any]] = []
+    monkeypatch.setattr(wandb, "init", lambda *_a, **_k: None)
+    monkeypatch.setattr(wandb, "finish", lambda *_a, **_k: None)
+    monkeypatch.setattr(wandb, "log", lambda d, **_k: logged.append(d))
+    monkeypatch.setattr(wandb, "log_artifact", lambda *_a, **_k: None)
+    monkeypatch.setattr(wandb, "Histogram", lambda *_a, **_k: None)
+    monkeypatch.setattr(wandb, "Artifact", _FakeWandbArtifact)
+    return logged

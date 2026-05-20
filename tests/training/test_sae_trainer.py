@@ -4,7 +4,6 @@ from typing import Any, Callable
 
 import pytest
 import torch
-import wandb
 from datasets import Dataset
 from transformer_lens import HookedTransformer
 
@@ -625,35 +624,10 @@ def test_SAETrainer_save_and_load_from_checkpoint(
             assert old_state[key] == new_state[key]
 
 
-class _FakeArtifact:
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
-    def add_file(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
-
-@pytest.fixture
-def captured_wandb_logs(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
-    """Patch wandb so trainer logging runs without a real session.
-
-    Returns the list of dicts passed to `wandb.log`.
-    """
-    logged: list[dict[str, Any]] = []
-    monkeypatch.setattr(wandb, "init", lambda *_a, **_k: None)
-    monkeypatch.setattr(wandb, "finish", lambda *_a, **_k: None)
-    monkeypatch.setattr(wandb, "log", lambda d, **_k: logged.append(d))
-    monkeypatch.setattr(wandb, "log_artifact", lambda *_a, **_k: None)
-    monkeypatch.setattr(wandb, "Histogram", lambda *_a, **_k: None)
-    monkeypatch.setattr(wandb, "Artifact", _FakeArtifact)
-    return logged
-
-
 def test_sae_trainer_fit_logs_train_eval_and_sparsity_metrics_to_wandb(
     model: HookedTransformer,
     captured_wandb_logs: list[dict[str, Any]],
 ) -> None:
-    """fit() with wandb on must emit train-step, eval, and sparsity-reset logs."""
     cfg = build_runner_cfg(
         d_in=64,
         d_sae=128,

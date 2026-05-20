@@ -39,21 +39,14 @@ from sae_lens.config import HfDataset, LoggingConfig, SAETrainerConfig
 from sae_lens.constants import RUNNER_CFG_FILENAME, SPARSITY_FILENAME
 from sae_lens.evals import EvalConfig, run_evals
 from sae_lens.load_model import load_model
+from sae_lens.registry import get_sae_training_class
 from sae_lens.saes.sae import TrainingSAE, TrainingSAEConfig
+from sae_lens.training._interruption import InterruptedException, interrupt_callback
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.multi_sae_trainer import MultiSAETrainer
 from sae_lens.training.prefetch import PrefetchingIterator
 from sae_lens.training.types import MultiHookDataProvider
-
-
-class InterruptedException(Exception):
-    pass
-
-
-def _interrupt_callback(sig_num: Any, stack_frame: Any) -> None:  # noqa: ARG001
-    raise InterruptedException()
-
 
 # A user-supplied custom evaluator. Mirrors the single-SAE Evaluator signature
 # but applied per SAE: `(sae, single_hook_data_provider_view, sae's scaler)`.
@@ -363,8 +356,8 @@ class MultiSAEEvaluator:
         # Pause the prefetcher (if any) for the whole eval cycle; both built-in
         # and user evaluators may pull from the underlying generator state.
         pause_ctx: AbstractContextManager[None] = (
-            data_provider.paused()  # type: ignore[attr-defined]
-            if hasattr(data_provider, "paused")
+            data_provider.paused()
+            if isinstance(data_provider, PrefetchingIterator)
             else nullcontext()
         )
         out: dict[str, Any] = {}
@@ -500,10 +493,11 @@ class MultiSAETrainingRunner:
         )
 
         if override_saes is None:
-            self.saes = {
-                name: TrainingSAE.from_dict(sae_cfg.to_dict())
-                for name, sae_cfg in cfg.saes.items()
-            }
+            saes: dict[str, TrainingSAE[Any]] = {}
+            for name, sae_cfg in cfg.saes.items():
+                sae_class, _ = get_sae_training_class(sae_cfg.architecture())
+                saes[name] = sae_class(sae_cfg)
+            self.saes = saes
         else:
             extra = set(override_saes) - set(cfg.saes)
             missing = set(cfg.saes) - set(override_saes)
@@ -578,8 +572,8 @@ class MultiSAETrainingRunner:
         self, trainer: MultiSAETrainer
     ) -> dict[str, TrainingSAE[Any]]:
         try:
-            signal.signal(signal.SIGINT, _interrupt_callback)
-            signal.signal(signal.SIGTERM, _interrupt_callback)
+            signal.signal(signal.SIGINT, interrupt_callback)
+            signal.signal(signal.SIGTERM, interrupt_callback)
             return trainer.fit()
         except (KeyboardInterrupt, InterruptedException):
             if self.cfg.checkpoint_path is not None:

@@ -29,19 +29,12 @@ from sae_lens.saes.sae import (
     TrainingSAE,
     TrainingSAEConfig,
 )
+from sae_lens.training._interruption import InterruptedException, interrupt_callback
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.prefetch import PrefetchingIterator
 from sae_lens.training.sae_trainer import SAETrainer
 from sae_lens.training.types import DataProvider
-
-
-class InterruptedException(Exception):
-    pass
-
-
-def interrupt_callback(sig_num: Any, stack_frame: Any):  # noqa: ARG001
-    raise InterruptedException()
 
 
 @dataclass
@@ -75,13 +68,11 @@ class LLMSaeEvaluator(Generic[T_TRAINING_SAE]):
         )
 
         # Eval calls into self.activations_store directly, which would race the
-        # prefetcher's producer thread on shared generator state. Pause it (if
-        # the data provider exposes a paused() context manager) for the
-        # duration of the eval. Duck-typed so that wrappers around
-        # PrefetchingIterator that forward `paused` still get pause coverage.
+        # prefetcher's producer thread on shared generator state. Pause it for
+        # the duration of the eval.
         pause_ctx: AbstractContextManager[None] = (
-            data_provider.paused()  # pyright: ignore[reportAttributeAccessIssue]
-            if hasattr(data_provider, "paused")
+            data_provider.paused()
+            if isinstance(data_provider, PrefetchingIterator)
             else nullcontext()
         )
         with pause_ctx:
