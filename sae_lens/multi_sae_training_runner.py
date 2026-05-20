@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import signal
+import uuid
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import asdict, dataclass, field
@@ -47,6 +48,7 @@ from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.multi_sae_trainer import MultiSAETrainer
 from sae_lens.training.prefetch import PrefetchingIterator
 from sae_lens.training.types import MultiHookDataProvider
+from sae_lens.util import get_special_token_ids
 
 # A user-supplied custom evaluator. Mirrors the single-SAE Evaluator signature
 # but applied per SAE: `(sae, single_hook_data_provider_view, sae's scaler)`.
@@ -236,10 +238,8 @@ class MultiSAETrainingRunnerConfig:
         if self.lr_end is None:
             self.lr_end = self.lr / 10
 
-        unique_id = self.logger.wandb_id
-        if unique_id is None:
-            unique_id = wandb.util.generate_id()  # type: ignore[attr-defined]
         if self.checkpoint_path is not None:
+            unique_id = self.logger.wandb_id or uuid.uuid4().hex[:8]
             self.checkpoint_path = f"{self.checkpoint_path}/{unique_id}"
 
         if isinstance(self.exclude_special_tokens, list) and not all(
@@ -295,7 +295,6 @@ class MultiSAETrainingRunnerConfig:
             "_hook_head_indices_per_sae",
         }
         d = {k: v for k, v in asdict(self).items() if k not in excluded}
-        d["logger"] = asdict(self.logger)
         d["saes"] = {name: cfg.to_dict() for name, cfg in self.saes.items()}
         return d
 
@@ -434,8 +433,7 @@ class MultiSAETrainingRunner:
             )
 
         llm_device = cfg.llm_device
-        if llm_device is None:  # set in __post_init__
-            raise RuntimeError("cfg.llm_device must be set after __post_init__")
+        assert llm_device is not None  # set in __post_init__
 
         self.model = (
             override_model
@@ -658,10 +656,9 @@ def _resolve_exclude_special_tokens(
 ) -> torch.Tensor | None:
     if raw is False:
         return None
-    if raw is True:
-        from sae_lens.util import get_special_token_ids
-
-        ids = list(get_special_token_ids(model.tokenizer))  # type: ignore[arg-type]
-    else:
-        ids = list(raw)
+    ids = (
+        list(get_special_token_ids(model.tokenizer))  # type: ignore[arg-type]
+        if raw is True
+        else list(raw)
+    )
     return torch.tensor(ids, dtype=torch.long, device=device)

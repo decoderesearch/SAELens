@@ -220,7 +220,7 @@ def test_multi_sae_trainer_runs_with_normalize_activations(
 
 
 def test_multi_sae_trainer_save_and_load_round_trip(
-    ts_model: HookedTransformer, dataset: Dataset, tmp_path: Any
+    ts_model: HookedTransformer, dataset: Dataset, tmp_path: Path
 ):
     hook_a = "blocks.0.hook_resid_pre"
     hook_b = "blocks.0.hook_mlp_out"
@@ -375,7 +375,7 @@ def test_multi_sae_trainer_per_sae_loss_decreases_over_training(
 
 
 def test_multi_sae_trainer_writes_n_checkpoints_during_fit(
-    ts_model: HookedTransformer, dataset: Dataset, tmp_path: Any
+    ts_model: HookedTransformer, dataset: Dataset, tmp_path: Path
 ):
     hook = "blocks.0.hook_mlp_out"
     d_in = ts_model.cfg.d_model

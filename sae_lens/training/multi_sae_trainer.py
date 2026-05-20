@@ -155,6 +155,7 @@ class MultiSAETrainer:
         pbar.close()
         return self.saes
 
+    @torch.no_grad()
     def _estimate_scaling_factors(self) -> None:
         """Estimate per-SAE activation scaling from a shared set of multi-hook batches."""
         needs = [
