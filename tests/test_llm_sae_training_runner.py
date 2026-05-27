@@ -143,6 +143,81 @@ def test_LanguageModelSAETrainingRunner_runs_with_prefetch_llm_batches(
     assert sae.cfg.architecture() == "standard"
 
 
+class _CompiledMarker(torch.nn.Module):
+    """Test stand-in for `torch._dynamo.eval_frame.OptimizedModule`."""
+
+    def __init__(self, orig: torch.nn.Module):
+        super().__init__()
+        self._orig_mod = orig
+
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
+        return self._orig_mod(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self._orig_mod, name)
+
+
+def test_LanguageModelSAETrainingRunner_compile_llm_propagates_to_store_and_evaluator(
+    monkeypatch: pytest.MonkeyPatch, ts_model: HookedTransformer
+):
+    # Regression: if compile_llm runs after the ActivationsStore and evaluator
+    # are constructed, both keep pointing at the uncompiled module and the
+    # compile is a no-op. They must receive the compiled wrapper.
+    monkeypatch.setattr(torch, "compile", lambda m, **_: _CompiledMarker(m))
+
+    cfg = build_runner_cfg_for_arch(
+        d_in=64,
+        d_sae=128,
+        architecture="standard",
+        training_tokens=4,
+        store_batch_size_prompts=2,
+        train_batch_size_tokens=4,
+        context_size=10,
+        n_batches_in_buffer=2,
+        dataset_path=NEEL_NANDA_C4_10K_DATASET,
+        hook_name="blocks.0.hook_resid_post",
+        model_name=TINYSTORIES_MODEL,
+        compile_llm=True,
+    )
+    runner = LanguageModelSAETrainingRunner(cfg, override_model=ts_model)
+
+    assert isinstance(runner.model, _CompiledMarker)
+    assert runner.activations_store.model is runner.model
+    assert runner.evaluator.model is runner.model
+
+
+def test_LanguageModelSAETrainingRunner_no_compile_when_compile_llm_false(
+    monkeypatch: pytest.MonkeyPatch, ts_model: HookedTransformer
+):
+    compile_calls: list[Any] = []
+    monkeypatch.setattr(torch, "compile", lambda m, **_: compile_calls.append(m) or m)
+
+    cfg = build_runner_cfg_for_arch(
+        d_in=64,
+        d_sae=128,
+        architecture="standard",
+        training_tokens=4,
+        store_batch_size_prompts=2,
+        train_batch_size_tokens=4,
+        context_size=10,
+        n_batches_in_buffer=2,
+        dataset_path=NEEL_NANDA_C4_10K_DATASET,
+        hook_name="blocks.0.hook_resid_post",
+        model_name=TINYSTORIES_MODEL,
+        compile_llm=False,
+        compile_sae=False,
+    )
+    runner = LanguageModelSAETrainingRunner(cfg, override_model=ts_model)
+
+    assert compile_calls == []
+    assert runner.model is ts_model
+    assert runner.activations_store.model is ts_model
+    assert runner.evaluator.model is ts_model
+
+
 def test_parse_cfg_args_raises_system_exit_on_empty_args():
     with pytest.raises(SystemExit):
         _parse_cfg_args([])

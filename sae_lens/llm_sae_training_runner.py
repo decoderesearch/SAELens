@@ -108,6 +108,7 @@ class LanguageModelSAETrainingRunner:
     model: HookedRootModule
     sae: TrainingSAE[Any]
     activations_store: ActivationsStore
+    evaluator: "LLMSaeEvaluator[Any]"
 
     def __init__(
         self,
@@ -141,6 +142,12 @@ class LanguageModelSAETrainingRunner:
         else:
             self.model = override_model
 
+        # Compile the LLM before constructing anything that captures a model
+        # reference (activations store, evaluator). Otherwise compile_llm is a
+        # no-op because the store / evaluator keep pointing at the uncompiled
+        # module after `self.model` is rebound.
+        self._compile_llm_if_needed()
+
         self.activations_store = ActivationsStore.from_config(
             self.model,
             self.cfg,
@@ -163,6 +170,14 @@ class LanguageModelSAETrainingRunner:
 
         self.sae.to(self.cfg.device)
 
+        self.evaluator = LLMSaeEvaluator(
+            model=self.model,
+            activations_store=self.activations_store,
+            eval_batch_size_prompts=self.cfg.eval_batch_size_prompts,
+            n_eval_batches=self.cfg.n_eval_batches,
+            model_kwargs=self.cfg.model_kwargs,
+        )
+
     def run(self):
         """
         Run the training of the SAE.
@@ -176,14 +191,6 @@ class LanguageModelSAETrainingRunner:
                 name=self.cfg.logger.run_name,
                 id=self.cfg.logger.wandb_id,
             )
-
-        evaluator = LLMSaeEvaluator(
-            model=self.model,
-            activations_store=self.activations_store,
-            eval_batch_size_prompts=self.cfg.eval_batch_size_prompts,
-            n_eval_batches=self.cfg.n_eval_batches,
-            model_kwargs=self.cfg.model_kwargs,
-        )
 
         data_provider: DataProvider = self.activations_store
         if self.cfg.prefetch_llm_batches:
@@ -200,7 +207,7 @@ class LanguageModelSAETrainingRunner:
         trainer = SAETrainer(
             sae=self.sae,
             data_provider=data_provider,
-            evaluator=evaluator,
+            evaluator=self.evaluator,
             save_checkpoint_fn=self.save_checkpoint,
             cfg=self.cfg.to_sae_trainer_config(),
         )
@@ -211,7 +218,7 @@ class LanguageModelSAETrainingRunner:
             self.sae.load_weights_from_checkpoint(self.cfg.resume_from_checkpoint)
             self.activations_store.load_from_checkpoint(self.cfg.resume_from_checkpoint)
 
-        self._compile_if_needed()
+        self._compile_sae_if_needed()
         sae = self.run_trainer_with_interruption_handling(trainer)
 
         if self.cfg.output_path is not None:
@@ -275,22 +282,20 @@ class LanguageModelSAETrainingRunner:
             self.cfg.disable_concat_sequences
         )
 
-    def _compile_if_needed(self):
-        # Compile model and SAE
-        #  torch.compile can provide significant speedups (10-20% in testing)
-        # using max-autotune gives the best speedups but:
+    def _compile_llm_if_needed(self):
+        # torch.compile can provide significant speedups (10-20% in testing).
+        # Using max-autotune gives the best speedups but:
         # (a) increases VRAM usage,
         # (b) can't be used on both SAE and LM (some issue with cudagraphs), and
-        # (c) takes some time to compile
-        # optimal settings seem to be:
-        # use max-autotune on SAE and max-autotune-no-cudagraphs on LM
-        # (also pylance seems to really hate this)
+        # (c) takes some time to compile.
+        # Optimal settings: max-autotune on SAE, max-autotune-no-cudagraphs on LM.
         if self.cfg.compile_llm:
             self.model = torch.compile(
                 self.model,
                 mode=self.cfg.llm_compilation_mode,
             )  # type: ignore
 
+    def _compile_sae_if_needed(self):
         if self.cfg.compile_sae:
             backend = "aot_eager" if self.cfg.device == "mps" else "inductor"
 

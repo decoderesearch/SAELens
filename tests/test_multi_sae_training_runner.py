@@ -450,3 +450,64 @@ def test_multi_sae_runner_saves_checkpoint_on_interruption(
     assert cfg.checkpoint_path is not None
     saved = list(Path(cfg.checkpoint_path).glob("*/a/sae_weights.safetensors"))
     assert saved, "expected an interrupt checkpoint with the SAE's weights"
+
+
+class _CompiledMarker(torch.nn.Module):
+    """Test stand-in for `torch._dynamo.eval_frame.OptimizedModule`."""
+
+    def __init__(self, orig: torch.nn.Module):
+        super().__init__()
+        self._orig_mod = orig
+
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
+        return self._orig_mod(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self._orig_mod, name)
+
+
+def test_multi_sae_runner_compile_llm_propagates_to_store_and_evaluator(
+    monkeypatch: pytest.MonkeyPatch, ts_model: HookedTransformer, dataset: Dataset
+):
+    # Regression: if compile_llm runs after the ActivationsStore and evaluator
+    # are constructed, both keep pointing at the uncompiled module and the
+    # compile is a no-op. They must receive the compiled wrapper.
+    monkeypatch.setattr(torch, "compile", lambda m, **_: _CompiledMarker(m))
+
+    d_in = ts_model.cfg.d_model
+    cfg = _build_cfg(
+        saes={"a": _std_sae_cfg(d_in)},
+        hook_names="blocks.0.hook_mlp_out",
+    )
+    cfg.compile_llm = True
+    runner = MultiSAETrainingRunner(
+        cfg, override_model=ts_model, override_dataset=dataset
+    )
+
+    assert isinstance(runner.model, _CompiledMarker)
+    assert runner.activations_store.model is runner.model
+    assert runner.evaluator.model is runner.model
+
+
+def test_multi_sae_runner_no_compile_when_compile_llm_false(
+    monkeypatch: pytest.MonkeyPatch, ts_model: HookedTransformer, dataset: Dataset
+):
+    compile_calls: list[Any] = []
+    monkeypatch.setattr(torch, "compile", lambda m, **_: compile_calls.append(m) or m)
+
+    d_in = ts_model.cfg.d_model
+    cfg = _build_cfg(
+        saes={"a": _std_sae_cfg(d_in)},
+        hook_names="blocks.0.hook_mlp_out",
+    )
+    runner = MultiSAETrainingRunner(
+        cfg, override_model=ts_model, override_dataset=dataset
+    )
+
+    assert compile_calls == []
+    assert runner.model is ts_model
+    assert runner.activations_store.model is ts_model
+    assert runner.evaluator.model is ts_model

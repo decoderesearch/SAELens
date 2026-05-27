@@ -411,6 +411,7 @@ class MultiSAETrainingRunner:
     model: HookedRootModule
     saes: dict[str, TrainingSAE[Any]]
     activations_store: ActivationsStore
+    evaluator: MultiSAEEvaluator
 
     def __init__(
         self,
@@ -445,6 +446,13 @@ class MultiSAETrainingRunner:
                 model_from_pretrained_kwargs=cfg.model_from_pretrained_kwargs,
             )
         )
+
+        # Compile the LLM before constructing anything that captures a model
+        # reference (activations store, evaluator). Otherwise compile_llm is a
+        # no-op because the store / evaluator keep pointing at the uncompiled
+        # module after `self.model` is rebound.
+        if cfg.compile_llm:
+            self.model = torch.compile(self.model, mode=cfg.llm_compilation_mode)  # type: ignore[assignment]
 
         unique_hooks = list(dict.fromkeys(cfg.hook_names_per_sae.values()))
         hook_d_ins: dict[str, int] = {}
@@ -508,6 +516,15 @@ class MultiSAETrainingRunner:
         for sae in self.saes.values():
             sae.to(cfg.device)
 
+        self.evaluator = MultiSAEEvaluator(
+            model=self.model,
+            activations_store=self.activations_store,
+            eval_batch_size_prompts=cfg.eval_batch_size_prompts,
+            n_eval_batches=cfg.n_eval_batches,
+            model_kwargs=cfg.model_kwargs,
+            user_evaluator=cfg.evaluator,
+        )
+
     def run(self) -> dict[str, TrainingSAE[Any]]:
         self._set_sae_metadata()
         if self.cfg.logger.log_to_wandb:
@@ -518,15 +535,6 @@ class MultiSAETrainingRunner:
                 name=self.cfg.logger.run_name,
                 id=self.cfg.logger.wandb_id,
             )
-
-        evaluator = MultiSAEEvaluator(
-            model=self.model,
-            activations_store=self.activations_store,
-            eval_batch_size_prompts=self.cfg.eval_batch_size_prompts,
-            n_eval_batches=self.cfg.n_eval_batches,
-            model_kwargs=self.cfg.model_kwargs,
-            user_evaluator=self.cfg.evaluator,
-        )
 
         data_provider: MultiHookDataProvider = (
             self.activations_store.get_multi_hook_data_loader()
@@ -539,15 +547,12 @@ class MultiSAETrainingRunner:
             )
             data_provider = PrefetchingIterator(data_provider, prefetch=prefetch_size)
 
-        if self.cfg.compile_llm:
-            self.model = torch.compile(self.model, mode=self.cfg.llm_compilation_mode)  # type: ignore[assignment]
-
         trainer = MultiSAETrainer(
             cfg=self.cfg.to_sae_trainer_config(),
             saes=self.saes,
             hook_names=self.cfg.hook_names_per_sae,
             data_provider=data_provider,
-            evaluator=evaluator,
+            evaluator=self.evaluator,
             save_checkpoint_fn=self._save_runner_checkpoint_files,
         )
 
