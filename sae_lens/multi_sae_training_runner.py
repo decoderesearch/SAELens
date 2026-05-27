@@ -444,15 +444,19 @@ class MultiSAETrainingRunner:
                 cfg.model_name,
                 device=llm_device,
                 model_from_pretrained_kwargs=cfg.model_from_pretrained_kwargs,
+                hook_names=list(dict.fromkeys(cfg.hook_names_per_sae.values())),
             )
         )
 
-        # Compile the LLM before constructing anything that captures a model
-        # reference (activations store, evaluator). Otherwise compile_llm is a
-        # no-op because the store / evaluator keep pointing at the uncompiled
-        # module after `self.model` is rebound.
+        # We compile `run_with_cache` rather than the module itself.
+        # ActivationsStore and the evaluator call `model.run_with_cache(...)`,
+        # not `model(...)`. `torch.compile` only intercepts `__call__`/forward,
+        # so wrapping the module leaves the cache path entirely uncompiled.
         if cfg.compile_llm:
-            self.model = torch.compile(self.model, mode=cfg.llm_compilation_mode)  # type: ignore[assignment]
+            self.model.run_with_cache = torch.compile(  # type: ignore[method-assign]
+                self.model.run_with_cache,
+                mode=cfg.llm_compilation_mode,
+            )
 
         unique_hooks = list(dict.fromkeys(cfg.hook_names_per_sae.values()))
         hook_d_ins: dict[str, int] = {}

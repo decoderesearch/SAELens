@@ -353,3 +353,52 @@ def test_extract_logits_from_output_returns_none_when_object_logits_is_none():
 
     result = _extract_logits_from_output(FakeModelOutput())
     assert result is None
+
+
+def test_HookedProxyLM_hook_names_filters_registered_hooks():
+    # Only the requested submodules should be in hook_dict and have a forward
+    # hook registered. This keeps `torch.compile` from inserting a graph break
+    # at every submodule of a large HF model.
+    hf_model = AutoModelForCausalLM.from_pretrained("gpt2")
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    requested = ["transformer.h.0", "transformer.h.5"]
+
+    hooked = HookedProxyLM(hf_model, tokenizer, hook_names=requested)
+
+    assert set(hooked.hook_dict) == set(requested)
+    # The requested modules have one extra forward hook; non-requested ones don't.
+    for name in requested:
+        assert len(hf_model.get_submodule(name)._forward_hooks) == 1
+    for unrequested in ["transformer.h.1", "transformer.h.11", "transformer.wte"]:
+        assert len(hf_model.get_submodule(unrequested)._forward_hooks) == 0
+
+
+def test_HookedProxyLM_hook_names_raises_on_unknown_name():
+    hf_model = AutoModelForCausalLM.from_pretrained("gpt2")
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+    with pytest.raises(ValueError, match="hook_names not found as submodules"):
+        HookedProxyLM(hf_model, tokenizer, hook_names=["transformer.h.0", "nope"])
+
+
+def test_HookedProxyLM_no_hook_names_hooks_everything():
+    # Default behavior (hook_names=None): every named submodule is hooked.
+    hf_model = AutoModelForCausalLM.from_pretrained("gpt2")
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    expected_count = sum(1 for name, _ in hf_model.named_modules() if name != "")
+
+    hooked = HookedProxyLM(hf_model, tokenizer)
+
+    assert len(hooked.hook_dict) == expected_count
+
+
+def test_load_model_passes_hook_names_to_HookedProxyLM():
+    requested = ["transformer.h.3"]
+    model = load_model(
+        model_class_name="AutoModelForCausalLM",
+        model_name="gpt2",
+        device="cpu",
+        hook_names=requested,
+    )
+    assert isinstance(model, HookedProxyLM)
+    assert set(model.hook_dict) == set(requested)

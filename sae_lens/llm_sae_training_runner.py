@@ -138,6 +138,7 @@ class LanguageModelSAETrainingRunner:
                 self.cfg.model_name,
                 device=llm_device,
                 model_from_pretrained_kwargs=self.cfg.model_from_pretrained_kwargs,
+                hook_names=[self.cfg.hook_name],
             )
         else:
             self.model = override_model
@@ -289,11 +290,16 @@ class LanguageModelSAETrainingRunner:
         # (b) can't be used on both SAE and LM (some issue with cudagraphs), and
         # (c) takes some time to compile.
         # Optimal settings: max-autotune on SAE, max-autotune-no-cudagraphs on LM.
+        #
+        # We compile `run_with_cache` rather than the module itself.
+        # ActivationsStore and the evaluator call `model.run_with_cache(...)`,
+        # not `model(...)`. `torch.compile` only intercepts `__call__`/forward,
+        # so wrapping the module leaves the cache path entirely uncompiled.
         if self.cfg.compile_llm:
-            self.model = torch.compile(
-                self.model,
+            self.model.run_with_cache = torch.compile(  # type: ignore[method-assign]
+                self.model.run_with_cache,
                 mode=self.cfg.llm_compilation_mode,
-            )  # type: ignore
+            )
 
     def _compile_sae_if_needed(self):
         if self.cfg.compile_sae:

@@ -452,30 +452,24 @@ def test_multi_sae_runner_saves_checkpoint_on_interruption(
     assert saved, "expected an interrupt checkpoint with the SAE's weights"
 
 
-class _CompiledMarker(torch.nn.Module):
-    """Test stand-in for `torch._dynamo.eval_frame.OptimizedModule`."""
+class _CompiledCallable:
+    """Test stand-in for the callable that `torch.compile` returns for a function/method."""
 
-    def __init__(self, orig: torch.nn.Module):
-        super().__init__()
-        self._orig_mod = orig
+    def __init__(self, fn: Any):
+        self._sael_orig_fn = fn
 
-    def forward(self, *args: Any, **kwargs: Any) -> Any:
-        return self._orig_mod(*args, **kwargs)
-
-    def __getattr__(self, name: str) -> Any:
-        try:
-            return super().__getattr__(name)
-        except AttributeError:
-            return getattr(self._orig_mod, name)
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sael_orig_fn(*args, **kwargs)
 
 
-def test_multi_sae_runner_compile_llm_propagates_to_store_and_evaluator(
+def test_multi_sae_runner_compile_llm_compiles_run_with_cache(
     monkeypatch: pytest.MonkeyPatch, ts_model: HookedTransformer, dataset: Dataset
 ):
-    # Regression: if compile_llm runs after the ActivationsStore and evaluator
-    # are constructed, both keep pointing at the uncompiled module and the
-    # compile is a no-op. They must receive the compiled wrapper.
-    monkeypatch.setattr(torch, "compile", lambda m, **_: _CompiledMarker(m))
+    # `torch.compile` only intercepts __call__; ActivationsStore and the
+    # evaluator call `model.run_with_cache(...)`, so compile_llm replaces that
+    # bound method (not the whole module). The store and evaluator share the
+    # same model object, so they see the same compiled callable.
+    monkeypatch.setattr(torch, "compile", lambda fn, **_: _CompiledCallable(fn))
 
     d_in = ts_model.cfg.d_model
     cfg = _build_cfg(
@@ -487,16 +481,19 @@ def test_multi_sae_runner_compile_llm_propagates_to_store_and_evaluator(
         cfg, override_model=ts_model, override_dataset=dataset
     )
 
-    assert isinstance(runner.model, _CompiledMarker)
+    assert isinstance(runner.model.run_with_cache, _CompiledCallable)
     assert runner.activations_store.model is runner.model
     assert runner.evaluator.model is runner.model
+    assert runner.activations_store.model.run_with_cache is runner.model.run_with_cache
 
 
 def test_multi_sae_runner_no_compile_when_compile_llm_false(
     monkeypatch: pytest.MonkeyPatch, ts_model: HookedTransformer, dataset: Dataset
 ):
     compile_calls: list[Any] = []
-    monkeypatch.setattr(torch, "compile", lambda m, **_: compile_calls.append(m) or m)
+    monkeypatch.setattr(
+        torch, "compile", lambda fn, **_: compile_calls.append(fn) or fn
+    )
 
     d_in = ts_model.cfg.d_model
     cfg = _build_cfg(

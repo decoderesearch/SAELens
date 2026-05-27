@@ -19,7 +19,21 @@ def load_model(
     model_name: str,
     device: str | torch.device | None = None,
     model_from_pretrained_kwargs: dict[str, Any] | None = None,
+    hook_names: list[str] | None = None,
 ) -> HookedRootModule:
+    """
+    Load a model and wrap it in the appropriate HookedRootModule.
+
+    `hook_names` restricts which submodules `HookedProxyLM` instruments with
+    forward hooks. Hooking every submodule is the default but inserts a graph
+    break at each hook under `torch.compile`, so for a large HF model that's
+    hundreds of fragments. Pass the hook names you actually need (typically
+    the SAE's `hook_name`) to keep compile fragments large.
+
+    The param is a no-op for `HookedTransformer` and `HookedMamba`, whose
+    hook points are part of the architecture rather than `register_forward_hook`
+    calls.
+    """
     model_from_pretrained_kwargs = model_from_pretrained_kwargs or {}
 
     if "n_devices" in model_from_pretrained_kwargs:
@@ -60,7 +74,7 @@ def load_model(
         if model_from_pretrained_kwargs.get("device_map") is None:
             hf_model = hf_model.to(device)  # type: ignore
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        return HookedProxyLM(hf_model, tokenizer)
+        return HookedProxyLM(hf_model, tokenizer, hook_names=hook_names)
 
     # pragma: no cover
     raise ValueError(f"Unknown model class: {model_class_name}")
@@ -69,15 +83,27 @@ def load_model(
 class HookedProxyLM(HookedRootModule):
     """
     A HookedRootModule that wraps a Huggingface AutoModelForCausalLM.
+
+    If `hook_names` is provided, only those submodules get a forward hook.
+    Otherwise every submodule is hooked (default; matches historical
+    behaviour). Restricting hooks is important for `torch.compile`: each
+    forward hook becomes a graph break, so hooking every submodule of a
+    large model fragments compilation into hundreds of tiny graphs.
     """
 
     tokenizer: PreTrainedTokenizerBase
     model: torch.nn.Module
 
-    def __init__(self, model: torch.nn.Module, tokenizer: PreTrainedTokenizerBase):
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        tokenizer: PreTrainedTokenizerBase,
+        hook_names: list[str] | None = None,
+    ):
         super().__init__()
         self.model = model
         self.tokenizer = tokenizer
+        self._allowed_hook_names = None if hook_names is None else set(hook_names)
         self.setup()
 
     # copied and modified from base HookedRootModule
@@ -85,8 +111,11 @@ class HookedProxyLM(HookedRootModule):
         self.mod_dict = {}
         self.named_modules_dict = {}
         self.hook_dict: dict[str, HookPoint] = {}
+        allowed = self._allowed_hook_names
         for name, module in self.model.named_modules():
             if name == "":
+                continue
+            if allowed is not None and name not in allowed:
                 continue
 
             hook_point = HookPoint()
@@ -97,6 +126,13 @@ class HookedProxyLM(HookedRootModule):
             self.hook_dict[name] = hook_point
             self.mod_dict[name] = hook_point
             self.named_modules_dict[name] = module
+
+        if allowed is not None:
+            missing = allowed - set(self.hook_dict)
+            if missing:
+                raise ValueError(
+                    f"hook_names not found as submodules of the model: {sorted(missing)}"
+                )
 
     def run_with_cache(self, *args: Any, **kwargs: Any):  # type: ignore
         if "names_filter" in kwargs:
