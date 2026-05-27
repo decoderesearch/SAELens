@@ -20,10 +20,15 @@ from sae_lens.util import (
 @pytest.mark.parametrize(
     "hook_name,expected_layer",
     [
+        # TransformerLens hook names: layer index is followed by another `.`
         ("blocks.0.attn.hook_q", 1),
         ("blocks.12.attn.hook_k", 13),
         ("blocks.999.attn.hook_v", 1000),
         ("blocks.42.mlp.hook_pre", 43),
+        # HF-style named-module paths: layer index is the final segment
+        ("model.layers.30", 31),
+        ("model.language_model.layers.0", 1),
+        ("transformer.h.11", 12),
     ],
 )
 def test_extract_stop_at_layer_from_tlens_hook_name_valid(

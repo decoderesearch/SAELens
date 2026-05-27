@@ -47,11 +47,16 @@ def extract_stop_at_layer_from_tlens_hook_name(hook_name: str) -> int | None:
 
 
 def extract_layer_from_tlens_hook_name(hook_name: str) -> int | None:
-    """Extract the layer from a HookedTransformer hook name.
+    """Extract the layer from a HookedTransformer or HF-style hook name.
 
-    Returns None if the hook name is not a valid HookedTransformer hook name.
+    Matches the first `.<int>` segment that is followed by either another `.`
+    or the end of the string, so both TransformerLens names like
+    `blocks.30.hook_resid_post` and HF named-module paths like
+    `model.language_model.layers.30` are recognised.
+
+    Returns None if the hook name has no layer segment.
     """
-    hook_match = re.search(r"\.(\d+)\.", hook_name)
+    hook_match = re.search(r"\.(\d+)(?:\.|$)", hook_name)
     return None if hook_match is None else int(hook_match.group(1))
 
 
