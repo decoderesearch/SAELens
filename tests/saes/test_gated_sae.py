@@ -326,3 +326,25 @@ def test_GatedTrainingSAE_save_and_load_inference_sae(tmp_path: Path) -> None:
     training_full_out = training_sae(sae_in)
     inference_full_out = inference_sae(sae_in)
     assert_close(training_full_out, inference_full_out)
+
+
+def test_GatedTrainingSAE_auxiliary_reconstruction_loss_does_not_apply_gradient_to_decoder_weights():
+    cfg = build_gated_sae_training_cfg()
+    sae = GatedTrainingSAE.from_dict(cfg.to_dict())
+
+    aux_losses = sae.calculate_aux_loss(
+        step_input=TrainStepInput(
+            sae_in=torch.randn(10, cfg.d_in),
+            coefficients={"l1": 1.0},
+            dead_neuron_mask=None,
+        ),
+        feature_acts=torch.randn(10, cfg.d_sae),
+        hidden_pre=torch.randn(10, cfg.d_sae),
+        sae_out=torch.randn(10, cfg.d_in),
+    )
+    aux_losses["auxiliary_reconstruction_loss"].backward()
+
+    assert sae.W_dec.grad is None or sae.W_dec.grad.sum() == 0.0
+    assert sae.b_dec.grad is None or sae.b_dec.grad.sum() == 0.0
+    assert sae.W_enc.grad is not None and sae.W_enc.grad.sum() != 0.0
+    assert sae.b_gate.grad is not None and sae.b_gate.grad.sum() != 0.0

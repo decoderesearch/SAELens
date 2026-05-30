@@ -183,13 +183,12 @@ class GatedTrainingSAE(TrainingSAE[GatedTrainingSAEConfig]):
         pi_gate_act = torch.relu(pi_gate)
 
         # L1-like penalty scaled by W_dec norms
-        l1_loss = (
-            step_input.coefficients["l1"]
-            * torch.sum(pi_gate_act * self.W_dec.norm(dim=1), dim=-1).mean()
-        )
+        l1_loss = step_input.coefficients["l1"] * torch.sum(pi_gate_act, dim=-1).mean()
 
         # Aux reconstruction: reconstruct x purely from gating path
-        via_gate_reconstruction = pi_gate_act @ self.W_dec + self.b_dec
+        via_gate_reconstruction = (
+            pi_gate_act @ self.W_dec.detach() + self.b_dec.detach()
+        )
         aux_recon_loss = (
             (via_gate_reconstruction - step_input.sae_in).pow(2).sum(dim=-1).mean()
         )

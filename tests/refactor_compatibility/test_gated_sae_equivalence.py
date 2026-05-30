@@ -395,9 +395,4 @@ def test_gated_training_equivalence():  # type: ignore
         atol=1e-5,
         msg="Output differs between old and new Gated implementation",
     )
-    assert_close(
-        old_out.loss,
-        new_out.loss,
-        atol=1e-5,
-        msg="Loss differs between old and new Gated implementation",
-    )
+    # the losses should no longer be equivalent, since we fixed a bug with the auxiliary reconstruction loss
