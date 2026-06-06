@@ -714,17 +714,17 @@ def test_activations_next_batch_excludes_special_tokens(
     hook_name = "blocks.0.hook_resid_post"
     base_cfg = build_runner_cfg(
         exclude_special_tokens=False,
-        context_size=5,
+        context_size=4,
         store_batch_size_prompts=2,
         hook_name=hook_name,
-        train_batch_size_tokens=5,
+        train_batch_size_tokens=10,
     )
     cfg = build_runner_cfg(
         exclude_special_tokens=True,
-        context_size=5,
+        context_size=4,
         store_batch_size_prompts=2,
         hook_name=hook_name,
-        train_batch_size_tokens=5,
+        train_batch_size_tokens=10,
     )
     dataset = Dataset.from_list([{"text": "hello world"}] * 100)
     _, cache = ts_model.run_with_cache(dataset[0]["text"])
@@ -737,8 +737,8 @@ def test_activations_next_batch_excludes_special_tokens(
     )
     batch_base = store_base.next_batch()
     batch_exclude_special_tokens = store_exclude_special_tokens.next_batch()
-    assert batch_base.shape[0] == 5
-    assert batch_exclude_special_tokens.shape[0] == 5
+    assert batch_base.shape[0] == 10
+    assert batch_exclude_special_tokens.shape[0] == 10
 
     # bos act should be in the base batch, but not in the exclude special tokens batch
     assert (batch_base.squeeze() - bos_act).abs().sum(
