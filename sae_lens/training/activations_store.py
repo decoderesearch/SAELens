@@ -374,7 +374,6 @@ class ActivationsStore:
         self.cached_activations_path = cached_activations_path
         self.autocast_lm = autocast_lm
         self.seqpos_slice = seqpos_slice
-        self.training_context_size = len(range(context_size)[slice(*seqpos_slice)])
         self.exclude_special_tokens = exclude_special_tokens
         self.disable_concat_sequences = disable_concat_sequences
         self.sequence_separator_token: int | Literal["bos", "eos", "sep"] | None = (
