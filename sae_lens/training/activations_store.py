@@ -821,7 +821,7 @@ class ActivationsStore:
         Return an auto-refilling stream of filtered and mixed activations.
         """
         return mixing_buffer(
-            buffer_size=self.n_batches_in_buffer * self.training_context_size,
+            buffer_size=self.n_batches_in_buffer * self.train_batch_size_tokens,
             batch_size=self.train_batch_size_tokens,
             activations_loader=self._iterate_filtered_activations(),
             mix_fraction=self.activations_mixing_fraction,
@@ -943,7 +943,7 @@ class ActivationsStore:
                 "via from_config_multi_hook"
             )
         return multi_hook_concat_split_iter(
-            buffer_size=self.n_batches_in_buffer * self.training_context_size,
+            buffer_size=self.n_batches_in_buffer * self.train_batch_size_tokens,
             batch_size=self.train_batch_size_tokens,
             activations_loader=self._iterate_filtered_multi_hook_activations(),
             hook_names=list(self._hook_names),
