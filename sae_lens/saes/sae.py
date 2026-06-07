@@ -349,7 +349,10 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
                 x: torch.Tensor,
                 eps: float = 1e-5,  # noqa: ARG001
             ) -> torch.Tensor:
-                return x * self.ln_std + self.ln_mu  # type: ignore
+                x = x * self.ln_std + self.ln_mu  # type: ignore
+                del self.ln_mu
+                del self.ln_std
+                return x
 
             self.run_time_activation_norm_fn_in = run_time_activation_ln_in
             self.run_time_activation_norm_fn_out = run_time_activation_ln_out
