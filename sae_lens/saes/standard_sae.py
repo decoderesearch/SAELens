@@ -39,7 +39,7 @@ class StandardSAE(SAE[StandardSAEConfig]):
       - encode: computes the feature activations from an input.
       - decode: reconstructs the input from the feature activations.
 
-    The BaseSAE.forward() method automatically calls encode and decode,
+    SAE.forward() automatically calls encode and decode,
     including any error-term processing if configured.
     """
 

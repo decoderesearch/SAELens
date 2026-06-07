@@ -260,7 +260,7 @@ class TopKSAE(SAE[TopKSAEConfig]):
         hidden_pre = self.hook_sae_acts_pre(sae_in @ self.W_enc + self.b_enc)
         if self.cfg.rescale_acts_by_decoder_norm:
             hidden_pre = hidden_pre * self.W_dec.norm(dim=-1)
-        # The BaseSAE already sets self.activation_fn to TopK(...) if config requests topk.
+        # The base SAE already sets self.activation_fn to TopK(...) if config requests topk.
         return self.hook_sae_acts_post(self.activation_fn(hidden_pre))
 
     def decode(

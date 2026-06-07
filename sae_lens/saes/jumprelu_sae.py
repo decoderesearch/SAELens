@@ -110,7 +110,7 @@ class JumpReLUSAE(SAE[JumpReLUSAEConfig]):
       - encode: computes the feature activations using JumpReLU.
       - decode: reconstructs the input from the feature activations.
 
-    The BaseSAE.forward() method automatically calls encode and decode,
+    SAE.forward() automatically calls encode and decode,
     including any error-term processing if configured.
     """
 
