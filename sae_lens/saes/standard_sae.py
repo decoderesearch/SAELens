@@ -33,7 +33,7 @@ class StandardSAE(SAE[StandardSAEConfig]):
     StandardSAE is an inference-only implementation of a Sparse Autoencoder (SAE)
     using a simple linear encoder and decoder.
 
-    It implements the required abstract methods from BaseSAE:
+    It implements:
 
       - initialize_weights: sets up simple parameter initializations for W_enc, b_enc, W_dec, and b_dec.
       - encode: computes the feature activations from an input.
