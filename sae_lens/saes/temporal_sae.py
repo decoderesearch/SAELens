@@ -331,7 +331,6 @@ class TemporalSAE(SAE[TemporalSAEConfig]):
         # Apply output activation normalization (reverses input normalization)
         sae_out = self.run_time_activation_norm_fn_out(sae_out)
 
-        # Add bias (already removed in process_sae_in)
         logger.warning(
             "NOTE this only decodes x_novel. The x_pred is missing, so we're not reconstructing the full x."
         )
