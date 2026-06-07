@@ -54,6 +54,7 @@ class StandardSAE(SAE[StandardSAEConfig]):
         super().initialize_weights()
         _init_weights_standard(self)
 
+    @override
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Encode the input tensor into the feature space.
@@ -65,6 +66,7 @@ class StandardSAE(SAE[StandardSAEConfig]):
         # Apply the activation function (e.g., ReLU, depending on config)
         return self.hook_sae_acts_post(self.activation_fn(hidden_pre))
 
+    @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """
         Decode the feature activations back to the input space.
@@ -110,6 +112,7 @@ class StandardTrainingSAE(TrainingSAE[StandardTrainingSAEConfig]):
 
     b_enc: nn.Parameter
 
+    @override
     def initialize_weights(self) -> None:
         super().initialize_weights()
         _init_weights_standard(self)
@@ -123,6 +126,7 @@ class StandardTrainingSAE(TrainingSAE[StandardTrainingSAEConfig]):
             ),
         }
 
+    @override
     def encode_with_hidden_pre(
         self, x: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -134,6 +138,7 @@ class StandardTrainingSAE(TrainingSAE[StandardTrainingSAEConfig]):
         feature_acts = self.hook_sae_acts_post(self.activation_fn(hidden_pre))
         return feature_acts, hidden_pre
 
+    @override
     def calculate_aux_loss(
         self,
         step_input: TrainStepInput,

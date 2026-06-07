@@ -312,9 +312,11 @@ class TemporalSAE(SAE[TemporalSAEConfig]):
         # Return only novel codes (these are the interpretable features)
         return z_novel, z_pred
 
+    @override
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         return self.encode_with_predictions(x)[0]
 
+    @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """Decode novel codes to reconstruction.
 

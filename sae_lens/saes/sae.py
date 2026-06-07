@@ -914,6 +914,7 @@ class TrainingSAE(SAE[T_TRAINING_SAE_CONFIG], ABC):
         """Encode with access to pre-activation values for training."""
         ...
 
+    @override
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         For inference, just encode without returning hidden_pre.
@@ -922,6 +923,7 @@ class TrainingSAE(SAE[T_TRAINING_SAE_CONFIG], ABC):
         feature_acts, _ = self.encode_with_hidden_pre(x)
         return feature_acts
 
+    @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """
         Decodes feature activations back into input space,

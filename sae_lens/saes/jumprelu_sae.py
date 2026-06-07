@@ -130,6 +130,7 @@ class JumpReLUSAE(SAE[JumpReLUSAEConfig]):
             torch.zeros(self.cfg.d_sae, dtype=self.dtype, device=self.device)
         )
 
+    @override
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Encode the input tensor into the feature space using JumpReLU.
@@ -148,6 +149,7 @@ class JumpReLUSAE(SAE[JumpReLUSAEConfig]):
         # 3) Multiply the normally activated units by that mask.
         return self.hook_sae_acts_post(base_acts * jump_relu_mask)
 
+    @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """
         Decode the feature activations back to the input space.
@@ -158,6 +160,7 @@ class JumpReLUSAE(SAE[JumpReLUSAEConfig]):
         sae_out_pre = self.run_time_activation_norm_fn_out(sae_out_pre)
         return self.reshape_fn_out(sae_out_pre, self.d_head)
 
+    @override
     @torch.no_grad()
     def fold_W_dec_norm(self):
         """
@@ -262,6 +265,7 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
         """
         return torch.exp(self.log_threshold)
 
+    @override
     def encode_with_hidden_pre(
         self, x: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -320,6 +324,7 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
             ),
         }
 
+    @override
     @torch.no_grad()
     def fold_W_dec_norm(self):
         """
@@ -337,6 +342,7 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
         # Fix: Use squeeze() instead of squeeze(-1) to match old behavior
         self.log_threshold.data = torch.log(current_thresh * W_dec_norms.squeeze())
 
+    @override
     def process_state_dict_for_saving(self, state_dict: dict[str, Any]) -> None:
         """Convert log_threshold to threshold for saving"""
         if "log_threshold" in state_dict:
@@ -344,6 +350,7 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
             del state_dict["log_threshold"]
             state_dict["threshold"] = threshold
 
+    @override
     def process_state_dict_for_loading(self, state_dict: dict[str, Any]) -> None:
         """Convert threshold to log_threshold for loading"""
         if "threshold" in state_dict:

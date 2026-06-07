@@ -3,6 +3,7 @@ from typing import Any
 
 import torch
 from torch import nn
+from typing_extensions import override
 
 from sae_lens.saes.sae import (
     SAE,
@@ -22,6 +23,7 @@ class TranscoderConfig(SAEConfig):
     # hook_layer_out: int = 0
     # hook_head_index_out: int | None = None
 
+    @override
     @classmethod
     def architecture(cls) -> str:
         """Return the architecture name for this config."""
@@ -75,6 +77,7 @@ class Transcoder(SAE[TranscoderConfig]):
         super().__init__(cfg)
         self.cfg = cfg
 
+    @override
     def initialize_weights(self):
         """Initialize transcoder weights with proper dimensions."""
         # Initialize b_dec with output dimension
@@ -101,6 +104,7 @@ class Transcoder(SAE[TranscoderConfig]):
             torch.zeros(self.cfg.d_sae, dtype=self.dtype, device=self.device)
         )
 
+    @override
     def process_sae_in(self, sae_in: torch.Tensor) -> torch.Tensor:
         """
         Process input without applying decoder bias (which has wrong dimension
@@ -115,6 +119,7 @@ class Transcoder(SAE[TranscoderConfig]):
         sae_in = self.hook_sae_input(sae_in)
         return self.run_time_activation_norm_fn_in(sae_in)
 
+    @override
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Encode the input tensor into the feature space.
@@ -126,6 +131,7 @@ class Transcoder(SAE[TranscoderConfig]):
         # Apply the activation function (e.g., ReLU)
         return self.hook_sae_acts_post(self.activation_fn(hidden_pre))
 
+    @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """Decode to output dimension."""
         # W_dec has shape [d_sae, d_out], feature_acts has shape
@@ -136,6 +142,7 @@ class Transcoder(SAE[TranscoderConfig]):
         # output dimension is different from the input dimension
         return self.hook_sae_recons(sae_out)
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass for transcoder.
@@ -182,6 +189,7 @@ class Transcoder(SAE[TranscoderConfig]):
 
 @dataclass
 class SkipTranscoderConfig(TranscoderConfig):
+    @override
     @classmethod
     def architecture(cls) -> str:
         """Return the architecture name for this config."""
@@ -222,6 +230,7 @@ class SkipTranscoder(Transcoder):
         # Shape: [d_out, d_in] to map from input to output dimension
         self.W_skip = nn.Parameter(torch.zeros(self.cfg.d_out, self.cfg.d_in))
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass for skip transcoder.
@@ -241,6 +250,7 @@ class SkipTranscoder(Transcoder):
         skip_out = x @ self.W_skip.T.to(x.device)
         return sae_out + skip_out
 
+    @override
     def forward_with_activations(
         self,
         x: torch.Tensor,
@@ -277,6 +287,7 @@ class SkipTranscoder(Transcoder):
 class JumpReLUTranscoderConfig(TranscoderConfig):
     """Configuration for JumpReLU transcoder."""
 
+    @override
     @classmethod
     def architecture(cls) -> str:
         """Return the architecture name for this config."""
@@ -314,6 +325,7 @@ class JumpReLUTranscoder(Transcoder):
         super().__init__(cfg)
         self.cfg = cfg
 
+    @override
     def initialize_weights(self):
         """Initialize transcoder weights including threshold parameter."""
         super().initialize_weights()
@@ -323,6 +335,7 @@ class JumpReLUTranscoder(Transcoder):
             torch.zeros(self.cfg.d_sae, dtype=self.dtype, device=self.device)
         )
 
+    @override
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Encode using JumpReLU activation.
@@ -346,6 +359,7 @@ class JumpReLUTranscoder(Transcoder):
         # Apply mask and hook
         return self.hook_sae_acts_post(feature_acts * jump_relu_mask)
 
+    @override
     def fold_W_dec_norm(self) -> None:
         """
         Fold the decoder weight norm into the threshold parameter.
@@ -374,6 +388,7 @@ class JumpReLUTranscoder(Transcoder):
 class JumpReLUSkipTranscoderConfig(JumpReLUTranscoderConfig):
     """Configuration for JumpReLU transcoder."""
 
+    @override
     @classmethod
     def architecture(cls) -> str:
         """Return the architecture name for this config."""

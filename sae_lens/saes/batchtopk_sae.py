@@ -102,6 +102,7 @@ class BatchTopKTrainingSAE(TopKTrainingSAE):
             torch.tensor(0.0, dtype=torch.double, device=self.W_dec.device),
         )
 
+    @override
     def get_activation_fn(self) -> Callable[[torch.Tensor], torch.Tensor]:
         return BatchTopK(self.cfg.k)
 

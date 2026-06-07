@@ -251,6 +251,7 @@ class TopKSAE(SAE[TopKSAEConfig]):
         super().initialize_weights()
         _init_weights_topk(self)
 
+    @override
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Converts input x into feature activations.
@@ -263,6 +264,7 @@ class TopKSAE(SAE[TopKSAEConfig]):
         # The BaseSAE already sets self.activation_fn to TopK(...) if config requests topk.
         return self.hook_sae_acts_post(self.activation_fn(hidden_pre))
 
+    @override
     def decode(
         self,
         feature_acts: torch.Tensor,
@@ -366,6 +368,7 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
         super().initialize_weights()
         _init_weights_topk(self)
 
+    @override
     def encode_with_hidden_pre(
         self, x: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
