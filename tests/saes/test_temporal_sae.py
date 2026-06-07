@@ -153,6 +153,43 @@ def test_TemporalSAE_forward_applies_b_dec_only_when_appropriate(
     assert_close(sae.forward(x), expected)
 
 
+def test_TemporalSAE_decode_reverses_hook_z_reshaping():
+    n_heads = 4
+    d_head = 8
+    cfg = build_temporal_sae_cfg(d_in=n_heads * d_head, reshape_activations="hook_z")
+    sae = TemporalSAE.from_dict(cfg.to_dict())
+    assert sae.hook_z_reshaping_mode
+
+    batch_size = 2
+    seq_len = 6
+    x = torch.randn(
+        batch_size, seq_len, n_heads, d_head, dtype=DTYPE_MAP[sae.cfg.dtype]
+    )
+
+    novel_codes = sae.encode(x)
+    reconstruction = sae.decode(novel_codes)
+
+    assert reconstruction.shape == x.shape
+
+
+def test_TemporalSAE_forward_reverses_hook_z_reshaping():
+    n_heads = 4
+    d_head = 8
+    cfg = build_temporal_sae_cfg(d_in=n_heads * d_head, reshape_activations="hook_z")
+    sae = TemporalSAE.from_dict(cfg.to_dict())
+    assert sae.hook_z_reshaping_mode
+
+    batch_size = 2
+    seq_len = 6
+    x = torch.randn(
+        batch_size, seq_len, n_heads, d_head, dtype=DTYPE_MAP[sae.cfg.dtype]
+    )
+
+    reconstruction = sae(x)
+
+    assert reconstruction.shape == x.shape
+
+
 @pytest.mark.parametrize("sae_diff_type", ["relu", "topk"])
 def test_TemporalSAE_sae_diff_type(sae_diff_type: str):
     cfg = build_temporal_sae_cfg(
