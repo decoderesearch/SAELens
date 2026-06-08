@@ -5,14 +5,15 @@ import sys
 from argparse import Namespace
 from collections.abc import Sequence
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, make_dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any, Generic
 
 import torch
 import wandb
 from safetensors.torch import save_file
-from simple_parsing import ArgumentParser
+from simple_parsing import ArgumentParser, subgroups
 from transformer_lens.hook_points import HookedRootModule
 from typing_extensions import deprecated, override
 
@@ -356,9 +357,10 @@ def _parse_cfg_args(
     """
     Parse command line arguments into a LanguageModelSAERunnerConfig.
 
-    This function first parses the architecture argument to determine which
-    concrete SAE config class to use, then parses the full configuration
-    with that concrete type.
+    ``--architecture`` selects which concrete ``TrainingSAEConfig`` subclass the
+    config is built around (and therefore which SAE-specific flags exist), via
+    ``simple_parsing`` subgroups. The choices are taken from the training-SAE
+    registry.
     """
 
     # Generate help strings only from docstrings, not from comments.
@@ -388,87 +390,27 @@ def _parse_cfg_args(
     if len(args) == 0:
         args = ["--help"]
 
-    # First, parse only the architecture to determine which concrete class to use
-    architecture_parser = CustomParser(
-        description="Parse architecture to determine SAE config class",
-        exit_on_error=False,
-        add_help=False,  # Don't add help to avoid conflicts
-    )
-    architecture_parser.add_argument(
-        "--architecture",
-        type=str,
-        choices=SAE_TRAINING_CLASS_REGISTRY.keys(),
-        default="standard",
-        help="SAE architecture to use",
-    )
-
-    # Parse known args to extract architecture, ignore unknown args for now
-    arch_args, remaining_args = architecture_parser.parse_known_args(args)
-    architecture = arch_args.architecture
-
-    # Remove architecture from remaining args if it exists
-    filtered_args = []
-    skip_next = False
-    for arg in remaining_args:
-        if skip_next:
-            skip_next = False
-            continue
-        if arg == "--architecture":
-            skip_next = True  # Skip the next argument (the architecture value)
-            continue
-        filtered_args.append(arg)
-
-    # Create a custom wrapper class that simple_parsing can handle
-    def create_config_class(
-        sae_config_type: type[TrainingSAEConfig],
-    ) -> type[LanguageModelSAERunnerConfig[TrainingSAEConfig]]:
-        """Create a concrete config class for the given SAE config type."""
-
-        # Create the base config without the sae field
-        from dataclasses import field as dataclass_field
-        from dataclasses import fields, make_dataclass
-
-        # Get all fields from LanguageModelSAERunnerConfig except the generic sae field
-        base_fields = []
-        for field_obj in fields(LanguageModelSAERunnerConfig):
-            if field_obj.name != "sae":
-                base_fields.append((field_obj.name, field_obj.type, field_obj))
-
-        # Add the concrete sae field
-        base_fields.append(
+    sae_subgroups: dict[
+        str, TrainingSAEConfig | type[TrainingSAEConfig] | partial[TrainingSAEConfig]
+    ] = {
+        name: partial(config_class, d_in=512, d_sae=1024)
+        for name, (_, config_class) in SAE_TRAINING_CLASS_REGISTRY.items()
+    }
+    cli_config_class = make_dataclass(
+        "CommandLineRunnerConfig",
+        [
             (
                 "sae",
-                sae_config_type,
-                dataclass_field(
-                    default_factory=lambda: sae_config_type(d_in=512, d_sae=1024)
-                ),
+                TrainingSAEConfig,
+                subgroups(sae_subgroups, default="standard", alias="--architecture"),
             )
-        )
+        ],
+        bases=(LanguageModelSAERunnerConfig,),
+    )
 
-        # Create the concrete class
-        return make_dataclass(
-            f"{sae_config_type.__name__}RunnerConfig",
-            base_fields,
-            bases=(LanguageModelSAERunnerConfig,),
-        )
-
-    # Map architecture to concrete config class
-    sae_config_map: dict[str, type[TrainingSAEConfig]] = {
-        name: cfg for name, (_, cfg) in SAE_TRAINING_CLASS_REGISTRY.items()
-    }
-
-    sae_config_type = sae_config_map[architecture]
-    concrete_config_class = create_config_class(sae_config_type)
-
-    # Now parse the full configuration with the concrete type
     parser = CustomParser(exit_on_error=False)
-    parser.add_arguments(concrete_config_class, dest="cfg")
-
-    # Parse the filtered arguments (without --architecture)
-    parsed_args = parser.parse_args(filtered_args)
-
-    # Return the parsed configuration
-    return parsed_args.cfg
+    parser.add_arguments(cli_config_class, dest="cfg")
+    return parser.parse_args(args).cfg
 
 
 # moved into its own function to make it easier to test
