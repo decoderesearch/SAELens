@@ -220,6 +220,15 @@ def test_parse_cfg_args_raises_system_exit_on_empty_args():
         _parse_cfg_args([])
 
 
+def test_parse_cfg_args_shows_architecture_in_help(capfd: pytest.CaptureFixture[str]):
+    with pytest.raises(SystemExit):
+        _parse_cfg_args(["--help"])
+    out = capfd.readouterr().out
+    assert "--architecture" in out
+    for architecture in ALL_TRAINING_ARCHITECTURES:
+        assert architecture in out
+
+
 def test_parse_cfg_args_raises_exception_on_invalid_args():
     with pytest.raises((SystemExit, Exception)):
         _parse_cfg_args(["--invalid-argument", "value"])
