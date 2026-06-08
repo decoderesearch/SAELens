@@ -7,6 +7,7 @@ import torch
 from transformer_lens import HookedTransformer
 
 from sae_lens.config import LanguageModelSAERunnerConfig, LoggingConfig
+from sae_lens.registry import SAE_TRAINING_CLASS_REGISTRY
 from sae_lens.saes.batchtopk_sae import BatchTopKTrainingSAEConfig
 from sae_lens.saes.gated_sae import GatedSAEConfig, GatedTrainingSAEConfig
 from sae_lens.saes.jumprelu_sae import JumpReLUSAEConfig, JumpReLUTrainingSAEConfig
@@ -36,15 +37,7 @@ ALL_FOLDABLE_ARCHITECTURES = [
     "gated",
     "jumprelu",
 ]  # Architectures with fold W_dec to unit norm implementation
-ALL_TRAINING_ARCHITECTURES = [
-    "standard",
-    "gated",
-    "jumprelu",
-    "topk",
-    "batchtopk",
-    "matryoshka_batchtopk",
-    "matching_pursuit",
-]
+ALL_TRAINING_ARCHITECTURES = list(SAE_TRAINING_CLASS_REGISTRY.keys())
 
 
 def to_sparse(tensor: torch.Tensor) -> torch.Tensor:
