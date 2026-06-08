@@ -1,6 +1,8 @@
+import dataclasses
 import json
 import signal
 import sys
+from argparse import Namespace
 from collections.abc import Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
@@ -12,7 +14,7 @@ import wandb
 from safetensors.torch import save_file
 from simple_parsing import ArgumentParser
 from transformer_lens.hook_points import HookedRootModule
-from typing_extensions import deprecated
+from typing_extensions import deprecated, override
 
 from sae_lens import logger
 from sae_lens.config import HfDataset, LanguageModelSAERunnerConfig
@@ -358,11 +360,36 @@ def _parse_cfg_args(
     concrete SAE config class to use, then parses the full configuration
     with that concrete type.
     """
+
+    # Generate help strings only from docstrings, not from comments.
+    # From https://github.com/lebrice/SimpleParsing/issues/352#issuecomment-4654285752
+    class CustomParser(ArgumentParser):
+        @override
+        def _resolve_subgroups(
+            self,
+            wrappers: list[Any],
+            args: list[str],
+            namespace: Namespace | None = None,
+        ) -> tuple[list[Any], dict[str, str]]:
+            resolved_wrappers, chosen_subgroups = super()._resolve_subgroups(
+                wrappers, args, namespace
+            )
+            for root_wrapper in resolved_wrappers:
+                for dc_wrapper in [root_wrapper, *root_wrapper.descendants]:
+                    for field_wrapper in dc_wrapper.fields:
+                        field_wrapper._docstring = dataclasses.replace(
+                            field_wrapper._docstring,
+                            comment_above="",
+                            comment_inline="",
+                            docstring_below="",
+                        )
+            return resolved_wrappers, chosen_subgroups
+
     if len(args) == 0:
         args = ["--help"]
 
     # First, parse only the architecture to determine which concrete class to use
-    architecture_parser = ArgumentParser(
+    architecture_parser = CustomParser(
         description="Parse architecture to determine SAE config class",
         exit_on_error=False,
         add_help=False,  # Don't add help to avoid conflicts
@@ -434,7 +461,7 @@ def _parse_cfg_args(
     concrete_config_class = create_config_class(sae_config_type)
 
     # Now parse the full configuration with the concrete type
-    parser = ArgumentParser(exit_on_error=False)
+    parser = CustomParser(exit_on_error=False)
     parser.add_arguments(concrete_config_class, dest="cfg")
 
     # Parse the filtered arguments (without --architecture)
