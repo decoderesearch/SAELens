@@ -140,6 +140,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
         dataset_trust_remote_code (bool): Whether to trust remote code when loading datasets from Huggingface.
         streaming (bool): Whether to stream the dataset. Streaming large datasets is usually practical.
         is_dataset_tokenized (bool): Whether the dataset is already tokenized.
+        use_chat_formatting (bool): Tokenize using a chat template.
         context_size (int): The context size to use when generating activations on which to train the SAE.
         use_cached_activations (bool): Whether to use cached activations. This is useful when doing sweeps over the same activations.
         cached_activations_path (str, optional): The path to the cached activations. Defaults to "activations/{dataset_path}/{model_name}/{hook_name}_{hook_head_index}".
