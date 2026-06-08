@@ -370,7 +370,7 @@ def _parse_cfg_args(
     architecture_parser.add_argument(
         "--architecture",
         type=str,
-        choices=["standard", "gated", "jumprelu", "topk", "batchtopk"],
+        choices=SAE_TRAINING_CLASS_REGISTRY.keys(),
         default="standard",
         help="SAE architecture to use",
     )
