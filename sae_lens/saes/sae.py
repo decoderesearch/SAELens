@@ -815,8 +815,13 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
 @dataclass(kw_only=True)
 class TrainingSAEConfig(SAEConfig, ABC):
-    # https://transformer-circuits.pub/2024/april-update/index.html#training-saes
-    # 0.1 corresponds to the "heuristic" initialization, use None to disable
+    """
+    Configuration base class for training all SAE architectures.
+
+    Args:
+        decoder_init_norm (float | None): "heuristic" initialization, see Anthropic 2024 Circuits Update. None to disable
+    """
+
     decoder_init_norm: float | None = 0.1
 
     @classmethod
