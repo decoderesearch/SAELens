@@ -825,9 +825,12 @@ class TestResumeFromCheckpoint:
         activations_store_path = checkpoint_dirs[0] / ACTIVATIONS_STORE_STATE_FILENAME
         assert activations_store_path.exists(), "Activations store state wasn't saved"
 
-    def test_cli_args_parsing_with_resume(self):
+    @pytest.mark.parametrize("architecture", ALL_TRAINING_ARCHITECTURES)
+    def test_cli_args_parsing_with_resume(self, architecture: str):
         """Test that CLI args parsing works with --resume_from_checkpoint."""
         args = [
+            "--architecture",
+            architecture,
             "--model_name",
             "test-model",
             "--dataset_path",
