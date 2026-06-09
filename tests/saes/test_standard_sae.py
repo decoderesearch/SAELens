@@ -795,6 +795,7 @@ def test_StandardSAE_constant_norm_rescale():
     cfg = build_sae_cfg(d_in=2, d_sae=3, normalize_activations="constant_norm_rescale")
 
     sae = StandardSAE(cfg)
+    pre_activation_vars = list(vars(sae).keys())
 
     test_input = torch.randn(10, 2, device=cfg.device)
 
@@ -803,12 +804,15 @@ def test_StandardSAE_constant_norm_rescale():
     assert_close(scaled_input, test_input * expected_scaler, atol=1e-6)
     scaled_output = sae.run_time_activation_norm_fn_out(scaled_input)
     assert_close(scaled_output, test_input)
+    # Basic verification of temporary extra state cleanup
+    assert list(vars(sae).keys()) == pre_activation_vars
 
 
 def test_StandardSAE_layer_norm():
     cfg = build_sae_cfg(d_in=2, d_sae=3, normalize_activations="layer_norm")
 
     sae = StandardSAE(cfg)
+    pre_activation_vars = list(vars(sae).keys())
 
     test_input = torch.randn(10, 2, device=cfg.device)
 
@@ -822,6 +826,8 @@ def test_StandardSAE_layer_norm():
     )
     scaled_output = sae.run_time_activation_norm_fn_out(scaled_input)
     assert_close(scaled_output, test_input, atol=1e-4)
+    # Basic verification of temporary extra state cleanup
+    assert list(vars(sae).keys()) == pre_activation_vars
 
 
 def test_StandardSAE_none():
