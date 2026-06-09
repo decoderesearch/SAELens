@@ -183,6 +183,7 @@ class TrainStepInput:
     coefficients: dict[str, float]
     dead_neuron_mask: torch.Tensor | None
     n_training_steps: int
+    is_logging_step: bool
 ```
 
 This method should return a `TrainStepOutput` object, which contains the output of the training step. It's signature is below:
@@ -198,10 +199,12 @@ class TrainStepOutput:
     hidden_pre: torch.Tensor
     loss: torch.Tensor
     losses: dict[str, torch.Tensor]
-    metrics: dict[str, torch.Tensor | float | int]
+    metrics: dict[
+        str, torch.Tensor | float | int | Callable[[], torch.Tensor | float | int]
+    ]
 ```
 
-Of particular interest, the `loss` field is the total loss for the training step, and is what `.backwards()` is called on. The `losses` field is a dictionary of all the losses for the training step, and will be logged to wandb. The `metrics` field is a dictionary of any extra metrics to log during training to wandb.
+Of particular interest, the `loss` field is the total loss for the training step, and is what `.backwards()` is called on. The `losses` field is a dictionary of all the losses for the training step, and will be logged to wandb. The `metrics` field is a dictionary of any extra metrics to log during training to wandb (recorded when `is_logging_step` is True).
 
 Often, it's a good idea to call `super().training_forward_pass(step_input)` to get the base output from the parent class, which includes the default MSE loss and any aux reconstruction losses and then modify that output.
 
