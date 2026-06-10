@@ -840,6 +840,7 @@ class TestResumeFromCheckpoint:
         ]
         cfg = _parse_cfg_args(args)
 
+        assert cfg.sae.architecture() == architecture
         assert cfg.model_name == "test-model"
         assert cfg.dataset_path == "test-dataset"
         assert cfg.resume_from_checkpoint == "/path/to/checkpoint"
