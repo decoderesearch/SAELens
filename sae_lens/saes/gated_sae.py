@@ -67,8 +67,13 @@ class GatedSAE(SAE[GatedSAEConfig]):
         )
         feature_magnitudes = self.activation_fn(magnitude_pre_activation)
 
+        feature_acts = active_features * feature_magnitudes
+
+        if self.cfg.normalize_decoder:
+            feature_acts = feature_acts * self.W_dec.norm(dim=-1)
+
         # Combine gating and magnitudes
-        return self.hook_sae_acts_post(active_features * feature_magnitudes)
+        return self.hook_sae_acts_post(feature_acts)
 
     @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
@@ -79,9 +84,14 @@ class GatedSAE(SAE[GatedSAEConfig]):
           3) Run any reconstruction hooks and out-normalization if configured.
           4) If the SAE was reshaping hook_z activations, reshape back.
         """
+        if self.cfg.normalize_decoder:
+            feature_acts = feature_acts * self.W_dec.norm(dim=-1)
         # 1) optional finetuning scaling
         # 2) linear transform
-        sae_out_pre = feature_acts @ self.W_dec + self.b_dec
+        W_dec_for_sae_out = self.W_dec
+        if self.cfg.normalize_decoder:
+            W_dec_for_sae_out = W_dec_for_sae_out / ( W_dec_for_sae_out.norm(dim=-1, keepdim=True) + 1e-8 )
+        sae_out_pre = feature_acts @ W_dec_for_sae_out + self.b_dec
         # 3) hooking and normalization
         sae_out_pre = self.hook_sae_recons(sae_out_pre)
         sae_out_pre = self.run_time_activation_norm_fn_out(sae_out_pre)
@@ -168,6 +178,9 @@ class GatedTrainingSAE(TrainingSAE[GatedTrainingSAEConfig]):
         # Combine gating path and magnitude path
         feature_acts = self.hook_sae_acts_post(active_features * feature_magnitudes)
 
+        if self.cfg.normalize_decoder:
+            feature_acts = feature_acts * self.W_dec.norm(dim=-1)
+
         # Return both the final feature activations and the pre-activation (for logging or penalty)
         return feature_acts, magnitude_pre_activation
 
@@ -189,13 +202,15 @@ class GatedTrainingSAE(TrainingSAE[GatedTrainingSAEConfig]):
         pi_gate_act = torch.relu(pi_gate)
 
         # L1-like penalty scaled by W_dec norms
-        l1_loss = (
-            step_input.coefficients["l1"]
-            * torch.sum(pi_gate_act * self.W_dec.norm(dim=1), dim=-1).mean()
-        )
+        l1_loss = step_input.coefficients["l1"] * torch.sum(pi_gate_act, dim=-1).mean()
 
         # Aux reconstruction: reconstruct x purely from gating path
-        via_gate_reconstruction = pi_gate_act @ self.W_dec + self.b_dec
+        W_dec_for_aux = self.W_dec.detach()
+        if self.cfg.normalize_decoder:
+            W_dec_for_aux = W_dec_for_aux / ( W_dec_for_aux.norm(dim=-1, keepdim=True) + 1e-8 )
+        via_gate_reconstruction = (
+            pi_gate_act @ W_dec_for_aux + self.b_dec.detach()
+        )
         aux_recon_loss = (
             (via_gate_reconstruction - step_input.sae_in).pow(2).sum(dim=-1).mean()
         )

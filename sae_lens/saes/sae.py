@@ -161,6 +161,7 @@ class SAEConfig(ABC):
     ] = "none"
     reshape_activations: Literal["none", "hook_z"] = "none"
     metadata: SAEMetadata = field(default_factory=SAEMetadata)
+    normalize_decoder: bool = False
 
     @classmethod
     @abstractmethod
