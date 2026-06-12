@@ -11,7 +11,7 @@ from safetensors import safe_open
 from transformer_lens.hook_points import HookPoint
 
 from sae_lens.config import LanguageModelSAERunnerConfig
-from sae_lens.saes.sae import SAE, TrainingSAE, _disable_hooks
+from sae_lens.saes.sae import SAE, TrainingSAE, TrainStepInput, _disable_hooks
 from sae_lens.saes.standard_sae import (
     StandardSAE,
     StandardTrainingSAE,
@@ -29,6 +29,7 @@ from tests.helpers import (
     build_sae_cfg_for_arch,
     build_sae_training_cfg,
     build_sae_training_cfg_for_arch,
+    run_training_forward_pass_with_cache,
 )
 
 
@@ -890,3 +891,44 @@ def test_StandardTrainingSAE_save_and_load_inference_sae(tmp_path: Path) -> None
     training_full_out = training_sae(sae_in)
     inference_full_out = inference_sae(sae_in)
     assert_close(training_full_out, inference_full_out)
+
+
+def test_StandardTrainingSAE_training_forward_pass_hooks():
+    sae = StandardTrainingSAE(build_sae_training_cfg())
+    x = torch.randn(32, sae.cfg.d_in)
+    step_input = TrainStepInput(
+        sae_in=x,
+        coefficients={"l1": sae.cfg.l1_coefficient},
+        dead_neuron_mask=None,
+        n_training_steps=0,
+        is_logging_step=False,
+    )
+
+    train_step_output, train_cache = run_training_forward_pass_with_cache(
+        sae, step_input
+    )
+    assert train_cache["hook_sae_input"].equal(x)
+    assert train_cache["hook_sae_acts_pre"].equal(train_step_output.hidden_pre)
+    assert train_cache["hook_sae_acts_post"].equal(train_step_output.feature_acts)
+    assert train_cache["hook_sae_recons"].equal(train_step_output.sae_out)
+
+    # Verify training output matches a regular run_with_cache forward pass
+    _, cache = sae.run_with_cache(x)
+    assert train_cache["hook_sae_input"].equal(cache["hook_sae_input"])
+    assert train_cache["hook_sae_acts_pre"].equal(cache["hook_sae_acts_pre"])
+    assert train_cache["hook_sae_acts_post"].equal(cache["hook_sae_acts_post"])
+    assert train_cache["hook_sae_recons"].equal(cache["hook_sae_recons"])
+    assert train_cache["hook_sae_recons"].equal(cache["hook_sae_output"])
+
+
+def test_StandardSAE_forward_hooks():
+    sae = StandardSAE(build_sae_cfg())
+    x = torch.randn(32, sae.cfg.d_in)
+    out, cache = sae.run_with_cache(x)
+    assert cache["hook_sae_input"].equal(x)
+    assert cache["hook_sae_acts_pre"].equal(
+        sae.process_sae_in(x) @ sae.W_enc + sae.b_enc
+    )
+    assert cache["hook_sae_acts_post"].equal(sae.encode(x))
+    assert cache["hook_sae_recons"].equal(out)
+    assert cache["hook_sae_output"].equal(out)

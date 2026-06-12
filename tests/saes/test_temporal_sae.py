@@ -6,7 +6,7 @@ import torch
 from sae_lens.constants import DTYPE_MAP
 from sae_lens.saes.sae import SAE
 from sae_lens.saes.temporal_sae import ManualAttention, TemporalSAE
-from tests.helpers import build_temporal_sae_cfg
+from tests.helpers import assert_close, build_temporal_sae_cfg
 
 
 def test_TemporalSAE_initialization():
@@ -40,6 +40,16 @@ def test_TemporalSAE_forward(tied_weights: bool):
     reconstruction = sae.forward(x)
 
     assert reconstruction.shape == x.shape
+
+
+def test_TemporalSAE_forward_pass_calls_hooks():
+    sae = TemporalSAE(build_temporal_sae_cfg(dtype="float32"))
+    x = torch.randn(4, 16, sae.cfg.d_in)
+    out, cache = sae.run_with_cache(x)
+    assert_close(cache["hook_sae_input"], x)
+    assert "hook_sae_acts_pre" in cache
+    assert_close(cache["hook_sae_acts_post"], sae.encode(x))
+    assert_close(cache["hook_sae_output"], out)
 
 
 @pytest.mark.parametrize("tied_weights", [True, False])

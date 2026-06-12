@@ -12,6 +12,7 @@ from tests.helpers import (
     assert_not_close,
     build_gated_sae_cfg,
     build_gated_sae_training_cfg,
+    run_training_forward_pass_with_cache,
 )
 
 
@@ -326,3 +327,31 @@ def test_GatedTrainingSAE_save_and_load_inference_sae(tmp_path: Path) -> None:
     training_full_out = training_sae(sae_in)
     inference_full_out = inference_sae(sae_in)
     assert_close(training_full_out, inference_full_out)
+
+
+def test_GatedTrainingSAE_training_forward_pass_hooks():
+    sae = GatedTrainingSAE(build_gated_sae_training_cfg())
+    x = torch.randn(32, sae.cfg.d_in)
+    step_input = TrainStepInput(
+        sae_in=x,
+        coefficients={"l1": sae.cfg.l1_coefficient},
+        dead_neuron_mask=None,
+        n_training_steps=0,
+        is_logging_step=False,
+    )
+
+    train_step_output, train_cache = run_training_forward_pass_with_cache(
+        sae, step_input
+    )
+    assert train_cache["hook_sae_input"].equal(x)
+    assert train_cache["hook_sae_acts_pre"].equal(train_step_output.hidden_pre)
+    assert train_cache["hook_sae_acts_post"].equal(train_step_output.feature_acts)
+    assert train_cache["hook_sae_recons"].equal(train_step_output.sae_out)
+
+    # Verify training output matches a regular run_with_cache forward pass
+    _, cache = sae.run_with_cache(x)
+    assert train_cache["hook_sae_input"].equal(cache["hook_sae_input"])
+    assert train_cache["hook_sae_acts_pre"].equal(cache["hook_sae_acts_pre"])
+    assert train_cache["hook_sae_acts_post"].equal(cache["hook_sae_acts_post"])
+    assert train_cache["hook_sae_recons"].equal(cache["hook_sae_recons"])
+    assert train_cache["hook_sae_recons"].equal(cache["hook_sae_output"])

@@ -17,6 +17,7 @@ from tests.helpers import (
     assert_not_close,
     build_batchtopk_sae_training_cfg,
     random_params,
+    run_training_forward_pass_with_cache,
 )
 
 
@@ -516,3 +517,34 @@ def test_BatchTopKTrainingSAE_gives_same_output_despite_rescale_acts_by_decoder_
 
     assert_not_close(enhanced_acts, topk_acts, rtol=1e-2)
     assert_close(enhanced_output, topk_output, rtol=1e-2)
+
+
+def test_BatchTopKTrainingSAE_training_forward_pass_hooks():
+    sae = BatchTopKTrainingSAE(build_batchtopk_sae_training_cfg())
+    x = torch.randn(32, sae.cfg.d_in)
+    step_input = TrainStepInput(
+        sae_in=x,
+        coefficients={},
+        dead_neuron_mask=None,
+        n_training_steps=0,
+        is_logging_step=False,
+    )
+    # topk rescales hidden_pre by the decoder norm after hook_sae_acts_pre fires,
+    # so the hook captures the raw pre-activation, not train_step_output.hidden_pre
+    raw_hidden_pre = sae.process_sae_in(x) @ sae.W_enc + sae.b_enc
+
+    train_step_output, train_cache = run_training_forward_pass_with_cache(
+        sae, step_input
+    )
+    assert train_cache["hook_sae_input"].equal(x)
+    assert train_cache["hook_sae_acts_pre"].equal(raw_hidden_pre)
+    assert train_cache["hook_sae_acts_post"].equal(train_step_output.feature_acts)
+    assert train_cache["hook_sae_recons"].equal(train_step_output.sae_out)
+
+    # Verify training output matches a regular run_with_cache forward pass
+    _, cache = sae.run_with_cache(x)
+    assert train_cache["hook_sae_input"].equal(cache["hook_sae_input"])
+    assert train_cache["hook_sae_acts_pre"].equal(cache["hook_sae_acts_pre"])
+    assert train_cache["hook_sae_acts_post"].equal(cache["hook_sae_acts_post"])
+    assert train_cache["hook_sae_recons"].equal(cache["hook_sae_recons"])
+    assert train_cache["hook_sae_recons"].equal(cache["hook_sae_output"])
