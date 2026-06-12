@@ -271,8 +271,10 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         sae_in = self.process_sae_in(x)
 
-        hidden_pre = sae_in @ self.W_enc + self.b_enc
-        feature_acts = JumpReLU.apply(hidden_pre, self.threshold, self.bandwidth)
+        hidden_pre = self.hook_sae_acts_pre(sae_in @ self.W_enc + self.b_enc)
+        feature_acts = self.hook_sae_acts_post(
+            JumpReLU.apply(hidden_pre, self.threshold, self.bandwidth)
+        )
 
         return feature_acts, hidden_pre  # type: ignore
 
