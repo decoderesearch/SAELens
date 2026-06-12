@@ -145,7 +145,6 @@ class TemporalSAEConfig(SAEConfig):
     activation_normalization_factor: float = 1.0
 
     def __post_init__(self):
-        # Call parent's __post_init__ first, but allow constant_scalar_rescale
         if self.normalize_activations not in [
             "none",
             "expected_average_only_in",
