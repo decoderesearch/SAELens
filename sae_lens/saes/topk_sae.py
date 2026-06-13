@@ -121,26 +121,22 @@ class TopKSAEConfig(SAEConfig):
 
     Args:
         k (int): Number of top features to keep active during inference. Only the top k
-            features with the highest pre-activations will be non-zero. Defaults to 100.
+            features with the highest pre-activations will be non-zero.
         rescale_acts_by_decoder_norm (bool): Whether to treat the decoder as if it was
             already normalized. This affects the topk selection by rescaling pre-activations
-            by decoder norms. Requires that the SAE was trained this way. Defaults to False.
+            by decoder norms. Requires that the SAE was trained this way.
         d_in (int): Input dimension (dimensionality of the activations being encoded).
             Inherited from SAEConfig.
         d_sae (int): SAE latent dimension (number of features in the SAE).
             Inherited from SAEConfig.
         dtype (str): Data type for the SAE parameters. Inherited from SAEConfig.
-            Defaults to "float32".
         device (str): Device to place the SAE on. Inherited from SAEConfig.
-            Defaults to "cpu".
         apply_b_dec_to_input (bool): Whether to apply decoder bias to the input
-            before encoding. Inherited from SAEConfig. Defaults to True.
+            before encoding. Inherited from SAEConfig.
         normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm"]):
             Normalization strategy for input activations. Inherited from SAEConfig.
-            Defaults to "none".
         reshape_activations (Literal["none", "hook_z"]): How to reshape activations
             (useful for attention head outputs). Inherited from SAEConfig.
-            Defaults to "none".
         metadata (SAEMetadata): Metadata about the SAE (model name, hook name, etc.).
             Inherited from SAEConfig.
     """
@@ -305,37 +301,33 @@ class TopKTrainingSAEConfig(TrainingSAEConfig):
 
     Args:
         k (int): Number of top features to keep active. Only the top k features
-            with the highest pre-activations will be non-zero. Defaults to 100.
+            with the highest pre-activations will be non-zero.
         use_sparse_activations (bool): Whether to use sparse tensor representations
             for activations during training. This can reduce memory usage and improve
             performance when k is small relative to d_sae, but is only worthwhile if
-            using float32 and not using autocast. Defaults to False.
+            using float32 and not using autocast.
         aux_loss_coefficient (float): Coefficient for the auxiliary loss that encourages
             dead neurons to learn useful features. This loss helps prevent neuron death
             in TopK SAEs by having dead neurons reconstruct the residual error from
-            live neurons. Defaults to 1.0.
+            live neurons.
         rescale_acts_by_decoder_norm (bool): Treat the decoder as if it was already normalized.
             This is a good idea since decoder norm can randomly drift during training, and this
-            affects what the topk activations will be. Defaults to True.
+            affects what the topk activations will be.
         decoder_init_norm (float | None): Norm to initialize decoder weights to.
             0.1 corresponds to the "heuristic" initialization from Anthropic's April update.
-            Use None to disable. Inherited from TrainingSAEConfig. Defaults to 0.1.
+            Use None to disable. Inherited from TrainingSAEConfig.
         d_in (int): Input dimension (dimensionality of the activations being encoded).
             Inherited from SAEConfig.
         d_sae (int): SAE latent dimension (number of features in the SAE).
             Inherited from SAEConfig.
         dtype (str): Data type for the SAE parameters. Inherited from SAEConfig.
-            Defaults to "float32".
         device (str): Device to place the SAE on. Inherited from SAEConfig.
-            Defaults to "cpu".
         apply_b_dec_to_input (bool): Whether to apply decoder bias to the input
-            before encoding. Inherited from SAEConfig. Defaults to True.
+            before encoding. Inherited from SAEConfig.
         normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm"]):
             Normalization strategy for input activations. Inherited from SAEConfig.
-            Defaults to "none".
         reshape_activations (Literal["none", "hook_z"]): How to reshape activations
             (useful for attention head outputs). Inherited from SAEConfig.
-            Defaults to "none".
         metadata (SAEMetadata): Metadata about the SAE training (model name, hook name, etc.).
             Inherited from SAEConfig.
     """

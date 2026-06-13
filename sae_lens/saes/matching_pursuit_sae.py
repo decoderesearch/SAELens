@@ -26,26 +26,21 @@ class MatchingPursuitSAEConfig(SAEConfig):
     Configuration class for MatchingPursuitSAE inference.
 
     Args:
-        residual_threshold (float): residual error at which to stop selecting latents. Default 1e-2.
+        residual_threshold (float): residual error at which to stop selecting latents.
         max_iterations (int | None): Maximum iterations (default: d_in if set to None).
-            Defaults to None.
-        stop_on_duplicate_support (bool): Whether to stop selecting latents if the support set has not changed from the previous iteration. Defaults to True.
+        stop_on_duplicate_support (bool): Whether to stop selecting latents if the support set has not changed from the previous iteration.
         d_in (int): Input dimension (dimensionality of the activations being encoded).
             Inherited from SAEConfig.
         d_sae (int): SAE latent dimension (number of features in the SAE).
             Inherited from SAEConfig.
         dtype (str): Data type for the SAE parameters. Inherited from SAEConfig.
-            Defaults to "float32".
         device (str): Device to place the SAE on. Inherited from SAEConfig.
-            Defaults to "cpu".
         apply_b_dec_to_input (bool): Whether to apply decoder bias to the input
-            before encoding. Inherited from SAEConfig. Defaults to True.
+            before encoding. Inherited from SAEConfig.
         normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm"]):
             Normalization strategy for input activations. Inherited from SAEConfig.
-            Defaults to "none".
         reshape_activations (Literal["none", "hook_z"]): How to reshape activations
             (useful for attention head outputs). Inherited from SAEConfig.
-            Defaults to "none".
         metadata (SAEMetadata): Metadata about the SAE (model name, hook name, etc.).
             Inherited from SAEConfig.
     """
@@ -123,29 +118,24 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
     Configuration class for training a MatchingPursuitTrainingSAE.
 
     Args:
-        residual_threshold (float): residual error at which to stop selecting latents. Default 1e-2.
+        residual_threshold (float): residual error at which to stop selecting latents.
         max_iterations (int | None): Maximum iterations (default: d_in if set to None).
-            Defaults to None.
-        stop_on_duplicate_support (bool): Whether to stop selecting latents if the support set has not changed from the previous iteration. Defaults to True.
+        stop_on_duplicate_support (bool): Whether to stop selecting latents if the support set has not changed from the previous iteration.
         decoder_init_norm (float | None): Norm to initialize decoder weights to.
             0.1 corresponds to the "heuristic" initialization from Anthropic's April update.
-            Use None to disable. Inherited from TrainingSAEConfig. Defaults to 0.1.
+            Use None to disable. Inherited from TrainingSAEConfig.
         d_in (int): Input dimension (dimensionality of the activations being encoded).
             Inherited from SAEConfig.
         d_sae (int): SAE latent dimension (number of features in the SAE).
             Inherited from SAEConfig.
         dtype (str): Data type for the SAE parameters. Inherited from SAEConfig.
-            Defaults to "float32".
         device (str): Device to place the SAE on. Inherited from SAEConfig.
-            Defaults to "cpu".
         apply_b_dec_to_input (bool): Whether to apply decoder bias to the input
-            before encoding. Inherited from SAEConfig. Defaults to True.
+            before encoding. Inherited from SAEConfig.
         normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm"]):
             Normalization strategy for input activations. Inherited from SAEConfig.
-            Defaults to "none".
         reshape_activations (Literal["none", "hook_z"]): How to reshape activations
             (useful for attention head outputs). Inherited from SAEConfig.
-            Defaults to "none".
         metadata (SAEMetadata): Metadata about the SAE training (model name, hook name, etc.).
             Inherited from SAEConfig.
     """
