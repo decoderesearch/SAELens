@@ -111,6 +111,84 @@ sparse_autoencoder.save_inference_model("path/to/save/dir")
 
 As you can see, the training setup provides a large number of options to explore. The full list of options can be found by inspecting the `LanguageModelSAERunnerConfig` class and the specific SAE configuration class you intend to use (e.g., `StandardTrainingSAEConfig`, `TopKTrainingSAEConfig`, etc.).
 
+## Fine tuning an existing SAE
+
+SAELens supports two different ways to load prior training outputs, depending on
+whether you want a new fine-tuning run or an exact continuation of an existing
+run.
+
+Use `from_pretrained_path` when you want to initialize a new training run from a
+saved training SAE. The path should point to a directory that can be loaded by
+`TrainingSAE.load_from_disk`, such as a directory containing `cfg.json` and
+`sae_weights.safetensors`. The runner loads the SAE weights and SAE config from
+disk, then creates a fresh activation store, optimizer, scheduler, and trainer
+state from the current `LanguageModelSAERunnerConfig`. The nested `sae` field is
+still required when you build `LanguageModelSAERunnerConfig`, so keep it
+consistent with the saved SAE.
+
+```python
+from sae_lens import (
+    LanguageModelSAERunnerConfig,
+    LanguageModelSAETrainingRunner,
+    LoggingConfig,
+    StandardTrainingSAEConfig,
+)
+
+cfg = LanguageModelSAERunnerConfig(
+    model_name="tiny-stories-1L-21M",
+    hook_name="blocks.0.hook_mlp_out",
+    dataset_path="apollo-research/roneneldan-TinyStories-tokenizer-gpt2",
+    is_dataset_tokenized=True,
+    streaming=True,
+    sae=StandardTrainingSAEConfig(
+        d_in=1024,
+        d_sae=16 * 1024,
+        apply_b_dec_to_input=True,
+        normalize_activations="expected_average_only_in",
+        l1_coefficient=5,
+    ),
+    from_pretrained_path="path/to/existing/training_sae",
+    training_tokens=50_000_000,
+    train_batch_size_tokens=4096,
+    logger=LoggingConfig(log_to_wandb=False),
+    device=device,
+)
+
+fine_tuned_sae = LanguageModelSAETrainingRunner(cfg).run()
+fine_tuned_sae.save_inference_model("path/to/fine_tuned_sae")
+```
+
+Use `resume_from_checkpoint` when you want to continue the same training run.
+The checkpoint directory should contain `sae_weights.safetensors`,
+`trainer_state.pt`, and `activations_store_state.safetensors`. This restores the
+SAE weights, optimizer state, scheduler state, activation store progress, and
+training counters.
+
+```python
+cfg = LanguageModelSAERunnerConfig(
+    model_name="tiny-stories-1L-21M",
+    hook_name="blocks.0.hook_mlp_out",
+    dataset_path="apollo-research/roneneldan-TinyStories-tokenizer-gpt2",
+    is_dataset_tokenized=True,
+    streaming=True,
+    sae=StandardTrainingSAEConfig(
+        d_in=1024,
+        d_sae=16 * 1024,
+        apply_b_dec_to_input=True,
+        normalize_activations="expected_average_only_in",
+        l1_coefficient=5,
+    ),
+    checkpoint_path="checkpoints",
+    resume_from_checkpoint="checkpoints/run_id/final_100000000",
+    training_tokens=150_000_000,
+    train_batch_size_tokens=4096,
+    logger=LoggingConfig(log_to_wandb=False),
+    device=device,
+)
+
+resumed_sae = LanguageModelSAETrainingRunner(cfg).run()
+```
+
 ### Training BatchTopk SAEs
 
 <!-- prettier-ignore-start -->
