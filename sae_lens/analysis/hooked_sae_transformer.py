@@ -1,5 +1,6 @@
+from collections.abc import Callable
 from contextlib import contextmanager
-from typing import Any, Callable
+from typing import Any
 
 import torch
 from torch import nn
@@ -330,7 +331,13 @@ class HookedSAETransformer(HookedTransformer):
             )
             return []
         ids = []
-        for attr in ("bos_token_id", "eos_token_id", "pad_token_id", "sep_token_id", "cls_token_id"):
+        for attr in (
+            "bos_token_id",
+            "eos_token_id",
+            "pad_token_id",
+            "sep_token_id",
+            "cls_token_id",
+        ):
             token_id = getattr(self.tokenizer, attr, None)
             if token_id is not None:
                 ids.append(int(token_id))
@@ -355,12 +362,13 @@ class HookedSAETransformer(HookedTransformer):
     def forward(self, input: Any, **kwargs: Any) -> Any:
         """Override to inject token exclusion masks into wrappers before the forward pass."""
         wrappers_needing_mask = [
-            w for w in self._acts_to_saes.values()
+            w
+            for w in self._acts_to_saes.values()
             if w.exclude_special_tokens is not False
         ]
         if wrappers_needing_mask:
-            prepend_bos = kwargs.get("prepend_bos", None)
-            padding_side = kwargs.get("padding_side", None)
+            prepend_bos = kwargs.get("prepend_bos")
+            padding_side = kwargs.get("padding_side")
             tokens = self.to_tokens(
                 input,
                 prepend_bos=prepend_bos,
@@ -369,7 +377,9 @@ class HookedSAETransformer(HookedTransformer):
                 truncate=True,
             )
             for wrapper in wrappers_needing_mask:
-                mask = self._compute_exclusion_mask(tokens, wrapper.exclude_special_tokens)
+                mask = self._compute_exclusion_mask(
+                    tokens, wrapper.exclude_special_tokens
+                )
                 wrapper.set_token_mask(mask)
         return super().forward(input, **kwargs)
 
@@ -474,7 +484,11 @@ class HookedSAETransformer(HookedTransformer):
             clear_contexts: (bool) Whether to clear the contexts at the end of the forward pass (default: False)
             **model_kwargs: Keyword arguments for the model forward pass
         """
-        with self.saes(saes=saes, reset_saes_end=reset_saes_end, exclude_special_tokens=exclude_special_tokens):
+        with self.saes(
+            saes=saes,
+            reset_saes_end=reset_saes_end,
+            exclude_special_tokens=exclude_special_tokens,
+        ):
             return self.run_with_hooks(
                 *model_args,
                 fwd_hooks=fwd_hooks,
