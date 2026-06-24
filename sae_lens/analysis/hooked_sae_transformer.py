@@ -359,7 +359,7 @@ class HookedSAETransformer(HookedTransformer):
             mask = mask | (tokens == token_id)
         return mask
 
-    def forward(self, input: Any, **kwargs: Any) -> Any:
+    def forward(self, input: Any, **kwargs: Any) -> Any:  # type: ignore[override]
         """Override to inject token exclusion masks into wrappers before the forward pass."""
         wrappers_needing_mask = [
             w
