@@ -36,7 +36,12 @@ class _SAEWrapper(nn.Module):
         computation and needs to call these hooks with the correct values.
     """
 
-    def __init__(self, sae: SAE[Any], use_error_term: bool = False):
+    def __init__(
+        self,
+        sae: SAE[Any],
+        use_error_term: bool = False,
+        exclude_special_tokens: bool | list[int] = False,
+    ):
         super().__init__()
         # Store SAE in __dict__ to avoid registering as submodule. This keeps cache
         # paths clean by avoiding a ".sae." prefix on hook names. See class docstring.
@@ -50,7 +55,9 @@ class _SAEWrapper(nn.Module):
         self.hook_sae_error = HookPoint()
         self.hook_sae_output = HookPoint()
         self.use_error_term = use_error_term
+        self.exclude_special_tokens = exclude_special_tokens
         self._captured_input: torch.Tensor | None = None
+        self._token_mask: torch.Tensor | None = None
 
     @property
     def sae(self) -> SAE[Any]:
@@ -63,6 +70,10 @@ class _SAEWrapper(nn.Module):
         in-place between capture and use, and avoiding clone preserves memory.
         """
         self._captured_input = x
+
+    def set_token_mask(self, mask: torch.Tensor) -> None:
+        """Set a boolean mask [batch, seq] where True = bypass SAE at that position."""
+        self._token_mask = mask
 
     def forward(self, original_output: torch.Tensor) -> torch.Tensor:
         """Run SAE/transcoder at output hook location."""
@@ -89,9 +100,18 @@ class _SAEWrapper(nn.Module):
                     sae_error = self.hook_sae_error(original_output - sae_out_clean)
                 sae_out = sae_out + sae_error
 
+            # Restore original activations at excluded token positions before firing
+            # hook_sae_output, so the cache reflects what actually flows forward.
+            if self._token_mask is not None:
+                mask = self._token_mask
+                for _ in range(sae_out.dim() - mask.dim()):
+                    mask = mask.unsqueeze(-1)
+                sae_out = torch.where(mask.expand_as(sae_out), original_output, sae_out)
+
             return self.hook_sae_output(sae_out)
         finally:
             self._captured_input = None
+            self._token_mask = None
 
 
 def get_deep_attr(obj: Any, path: str):
@@ -166,7 +186,12 @@ class HookedSAETransformer(HookedTransformer):
         """Returns a dict mapping hook names to attached SAEs."""
         return {name: wrapper.sae for name, wrapper in self._acts_to_saes.items()}
 
-    def add_sae(self, sae: SAE[Any], use_error_term: bool | None = None):
+    def add_sae(
+        self,
+        sae: SAE[Any],
+        use_error_term: bool | None = None,
+        exclude_special_tokens: bool | list[int] = False,
+    ):
         """Attaches an SAE or Transcoder to the model.
 
         WARNING: This SAE will be permanently attached until you remove it with
@@ -179,6 +204,10 @@ class HookedSAETransformer(HookedTransformer):
                 model would have produced without the SAE. This works for both SAEs
                 (where input==output hook) and transcoders (where they differ).
                 Defaults to None (uses SAE's existing setting).
+            exclude_special_tokens: If True, special tokens (BOS, EOS, PAD, SEP, CLS)
+                are identified from the model tokenizer and the SAE is bypassed at those
+                positions. Pass a list of token IDs to specify custom tokens to exclude.
+                Defaults to False (SAE applied at all positions).
         """
         input_hook = sae.cfg.metadata.hook_name
         output_hook = sae.cfg.metadata.hook_name_out or input_hook
@@ -206,7 +235,11 @@ class HookedSAETransformer(HookedTransformer):
         effective_use_error_term = (
             use_error_term if use_error_term is not None else sae.use_error_term
         )
-        wrapper = _SAEWrapper(sae, use_error_term=effective_use_error_term)
+        wrapper = _SAEWrapper(
+            sae,
+            use_error_term=effective_use_error_term,
+            exclude_special_tokens=exclude_special_tokens,
+        )
 
         # For transcoders (input != output), capture input at input hook
         if input_hook != output_hook:
@@ -259,7 +292,11 @@ class HookedSAETransformer(HookedTransformer):
         if prev_wrapper is not None:
             # Rebuild hook_dict before adding new SAE
             self.setup()
-            self.add_sae(prev_wrapper.sae, use_error_term=prev_wrapper.use_error_term)
+            self.add_sae(
+                prev_wrapper.sae,
+                use_error_term=prev_wrapper.use_error_term,
+                exclude_special_tokens=prev_wrapper.exclude_special_tokens,
+            )
 
     def reset_saes(
         self,
@@ -284,12 +321,65 @@ class HookedSAETransformer(HookedTransformer):
 
         self.setup()
 
+    def _get_special_token_ids(self) -> list[int]:
+        """Return BOS, EOS, PAD, SEP, and CLS token IDs from the model tokenizer."""
+        if self.tokenizer is None:
+            logger.warning(
+                "exclude_special_tokens=True but no tokenizer is attached to the model. "
+                "Pass a list of token IDs to exclude_special_tokens instead."
+            )
+            return []
+        ids = []
+        for attr in ("bos_token_id", "eos_token_id", "pad_token_id", "sep_token_id", "cls_token_id"):
+            token_id = getattr(self.tokenizer, attr, None)
+            if token_id is not None:
+                ids.append(int(token_id))
+        return list(set(ids))
+
+    def _compute_exclusion_mask(
+        self,
+        tokens: torch.Tensor,
+        exclude_special_tokens: bool | list[int],
+    ) -> torch.Tensor:
+        """Build a boolean mask [batch, seq] where True = bypass the SAE at that position."""
+        if isinstance(exclude_special_tokens, list):
+            token_ids = exclude_special_tokens
+        else:
+            token_ids = self._get_special_token_ids()
+
+        mask = torch.zeros(tokens.shape, dtype=torch.bool, device=tokens.device)
+        for token_id in token_ids:
+            mask = mask | (tokens == token_id)
+        return mask
+
+    def forward(self, input: Any, **kwargs: Any) -> Any:
+        """Override to inject token exclusion masks into wrappers before the forward pass."""
+        wrappers_needing_mask = [
+            w for w in self._acts_to_saes.values()
+            if w.exclude_special_tokens is not False
+        ]
+        if wrappers_needing_mask:
+            prepend_bos = kwargs.get("prepend_bos", None)
+            padding_side = kwargs.get("padding_side", None)
+            tokens = self.to_tokens(
+                input,
+                prepend_bos=prepend_bos,
+                padding_side=padding_side,
+                move_to_device=True,
+                truncate=True,
+            )
+            for wrapper in wrappers_needing_mask:
+                mask = self._compute_exclusion_mask(tokens, wrapper.exclude_special_tokens)
+                wrapper.set_token_mask(mask)
+        return super().forward(input, **kwargs)
+
     def run_with_saes(
         self,
         *model_args: Any,
         saes: SAE[Any] | list[SAE[Any]] = [],
         reset_saes_end: bool = True,
         use_error_term: bool | None = None,
+        exclude_special_tokens: bool | list[int] = False,
         **model_kwargs: Any,
     ) -> None | torch.Tensor | Loss | tuple[torch.Tensor, Loss]:
         """Wrapper around HookedTransformer forward pass.
@@ -301,10 +391,14 @@ class HookedSAETransformer(HookedTransformer):
             saes: (SAE | list[SAE]) The SAEs to be attached for this forward pass
             reset_saes_end (bool): If True, all SAEs added during this run are removed at the end, and previously attached SAEs are restored to their original state. Default is True.
             use_error_term: (bool | None) If provided, will set the use_error_term attribute of all SAEs attached during this run to this value. Defaults to None.
+            exclude_special_tokens: (bool | list[int]) If True, bypasses the SAE at BOS/EOS/PAD/SEP/CLS positions using the model tokenizer. Pass a list of token IDs to specify custom exclusions. Defaults to False.
             **model_kwargs: Keyword arguments for the model forward pass
         """
         with self.saes(
-            saes=saes, reset_saes_end=reset_saes_end, use_error_term=use_error_term
+            saes=saes,
+            reset_saes_end=reset_saes_end,
+            use_error_term=use_error_term,
+            exclude_special_tokens=exclude_special_tokens,
         ):
             return self(*model_args, **model_kwargs)
 
@@ -314,6 +408,7 @@ class HookedSAETransformer(HookedTransformer):
         saes: SAE[Any] | list[SAE[Any]] = [],
         reset_saes_end: bool = True,
         use_error_term: bool | None = None,
+        exclude_special_tokens: bool | list[int] = False,
         return_cache_object: bool = True,
         remove_batch_dim: bool = False,
         **kwargs: Any,
@@ -331,6 +426,7 @@ class HookedSAETransformer(HookedTransformer):
             saes: (SAE | list[SAE]) The SAEs to be attached for this forward pass
             reset_saes_end: (bool) If True, all SAEs added during this run are removed at the end, and previously attached SAEs are restored to their original state. Default is True.
             use_error_term: (bool | None) If provided, will set the use_error_term attribute of all SAEs attached during this run to this value. Determines whether the SAE returns input or reconstruction. Defaults to None.
+            exclude_special_tokens: (bool | list[int]) If True, bypasses the SAE at BOS/EOS/PAD/SEP/CLS positions using the model tokenizer. Pass a list of token IDs to specify custom exclusions. Defaults to False.
             return_cache_object: (bool) if True, this will return an ActivationCache object, with a bunch of
                 useful HookedTransformer specific methods, otherwise it will return a dictionary of
                 activations as in HookedRootModule.
@@ -338,7 +434,10 @@ class HookedSAETransformer(HookedTransformer):
             **kwargs: Keyword arguments for the model forward pass
         """
         with self.saes(
-            saes=saes, reset_saes_end=reset_saes_end, use_error_term=use_error_term
+            saes=saes,
+            reset_saes_end=reset_saes_end,
+            use_error_term=use_error_term,
+            exclude_special_tokens=exclude_special_tokens,
         ):
             return self.run_with_cache(  # type: ignore
                 *model_args,
@@ -352,6 +451,7 @@ class HookedSAETransformer(HookedTransformer):
         *model_args: Any,
         saes: SAE[Any] | list[SAE[Any]] = [],
         reset_saes_end: bool = True,
+        exclude_special_tokens: bool | list[int] = False,
         fwd_hooks: list[tuple[str | Callable, Callable]] = [],  # type: ignore
         bwd_hooks: list[tuple[str | Callable, Callable]] = [],  # type: ignore
         reset_hooks_end: bool = True,
@@ -367,13 +467,14 @@ class HookedSAETransformer(HookedTransformer):
             *model_args: Positional arguments for the model forward pass
             saes: (SAE | list[SAE]) The SAEs to be attached for this forward pass
             reset_saes_end: (bool) If True, all SAEs added during this run are removed at the end, and previously attached SAEs are restored to their original state. (default: True)
+            exclude_special_tokens: (bool | list[int]) If True, bypasses the SAE at BOS/EOS/PAD/SEP/CLS positions using the model tokenizer. Pass a list of token IDs to specify custom exclusions. Defaults to False.
             fwd_hooks: (list[tuple[str | Callable, Callable]]) List of forward hooks to apply
             bwd_hooks: (list[tuple[str | Callable, Callable]]) List of backward hooks to apply
             reset_hooks_end: (bool) Whether to reset the hooks at the end of the forward pass (default: True)
             clear_contexts: (bool) Whether to clear the contexts at the end of the forward pass (default: False)
             **model_kwargs: Keyword arguments for the model forward pass
         """
-        with self.saes(saes=saes, reset_saes_end=reset_saes_end):
+        with self.saes(saes=saes, reset_saes_end=reset_saes_end, exclude_special_tokens=exclude_special_tokens):
             return self.run_with_hooks(
                 *model_args,
                 fwd_hooks=fwd_hooks,
@@ -389,6 +490,7 @@ class HookedSAETransformer(HookedTransformer):
         saes: SAE[Any] | list[SAE[Any]] = [],
         reset_saes_end: bool = True,
         use_error_term: bool | None = None,
+        exclude_special_tokens: bool | list[int] = False,
     ):
         """A context manager for adding temporary SAEs to the model.
 
@@ -403,6 +505,9 @@ class HookedSAETransformer(HookedTransformer):
                 attached SAEs to their original state.
             use_error_term: If provided, will set the use_error_term attribute
                 of all SAEs attached during this run to this value.
+            exclude_special_tokens: If True, bypasses the SAE at BOS/EOS/PAD/SEP/CLS
+                positions using the model tokenizer. Pass a list of token IDs to
+                specify custom exclusions. Defaults to False.
         """
         saes_to_restore: list[tuple[str, _SAEWrapper | None]] = []
         if isinstance(saes, SAE):
@@ -412,7 +517,11 @@ class HookedSAETransformer(HookedTransformer):
                 act_name = sae.cfg.metadata.hook_name
                 prev_wrapper = self._acts_to_saes.get(act_name, None)
                 saes_to_restore.append((act_name, prev_wrapper))
-                self.add_sae(sae, use_error_term=use_error_term)
+                self.add_sae(
+                    sae,
+                    use_error_term=use_error_term,
+                    exclude_special_tokens=exclude_special_tokens,
+                )
             yield self
         finally:
             if reset_saes_end:
