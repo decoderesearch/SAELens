@@ -381,6 +381,32 @@ def get_downstream_reconstruction_metrics(
     return metrics
 
 
+def _compute_explained_variance(
+    mean_sum_of_squares: list[torch.Tensor],
+    mean_act_per_dimension: list[torch.Tensor],
+    mean_sum_of_resid_squared: list[torch.Tensor],
+) -> float:
+    """Explained variance of the SAE reconstruction, relative to the per-dimension mean.
+
+    Uses the multi-dimensional identity ``Var(X) = E[X^2] - E[X]^2``::
+
+        total_variance = sum_d (E[x_d^2] - E[x_d]^2)
+        explained_variance = 1 - residual_variance / total_variance
+
+    Each argument holds one entry per eval batch (already reduced over the batch
+    dimension): ``mean_sum_of_squares[i]`` is the scalar ``sum_d E[x_d^2]``,
+    ``mean_act_per_dimension[i]`` is the ``[d_model]`` per-dimension mean ``E[x_d]``,
+    and ``mean_sum_of_resid_squared[i]`` is the scalar ``E[||x - x_hat||^2]``.
+    """
+    sum_of_squares = torch.stack(mean_sum_of_squares).mean(
+        dim=0
+    )  # scalar: sum_d E[x_d^2]
+    mean_act = torch.stack(mean_act_per_dimension).mean(dim=0)  # [d_model]: E[x_d]
+    total_variance = sum_of_squares - (mean_act**2).sum()  # sum_d (E[x_d^2] - E[x_d]^2)
+    residual_variance = torch.stack(mean_sum_of_resid_squared).mean(dim=0)
+    return (1 - residual_variance / total_variance).item()
+
+
 def get_sparsity_and_variance_metrics(
     sae: SAE[Any],
     model: HookedRootModule,
@@ -553,7 +579,7 @@ def get_sparsity_and_variance_metrics(
                 (flattened_sae_input).pow(2).sum(dim=-1).mean(dim=0)  # scalar
             )
             mean_act_per_dimension.append(
-                (flattened_sae_input).pow(2).mean(dim=0)  # [d_model]
+                (flattened_sae_input).mean(dim=0)  # E[x_d] per dimension, [d_model]
             )
             mean_sum_of_resid_squared.append(
                 resid_sum_of_squares.mean(dim=0)  # scalar
@@ -585,13 +611,11 @@ def get_sparsity_and_variance_metrics(
     for metric_name, metric_values in metric_dict.items():
         metrics[f"{metric_name}"] = torch.cat(metric_values).mean().item()
 
-    # calculate explained variance
+    # calculate explained variance, relative to the per-dimension mean (see GH #659)
     if compute_variance_metrics:
-        mean_sum_of_squares = torch.stack(mean_sum_of_squares).mean(dim=0)
-        mean_act_per_dimension = torch.cat(mean_act_per_dimension).mean(dim=0)
-        total_variance = mean_sum_of_squares - mean_act_per_dimension**2
-        residual_variance = torch.stack(mean_sum_of_resid_squared).mean(dim=0)
-        metrics["explained_variance"] = (1 - residual_variance / total_variance).item()
+        metrics["explained_variance"] = _compute_explained_variance(
+            mean_sum_of_squares, mean_act_per_dimension, mean_sum_of_resid_squared
+        )
 
     # Aggregate feature-wise metrics
     feature_metrics: dict[str, list[float]] = {}

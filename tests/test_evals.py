@@ -766,3 +766,29 @@ def test_get_sparsity_and_variance_metrics_works_with_batchtopk_saes(
 
     # Check that l0 is close to k
     assert sparsity["l0"] == pytest.approx(2.0)
+
+
+def test_compute_explained_variance_is_relative_to_the_mean():
+    """Regression test for GH #659: explained variance must be measured relative to the
+    per-dimension mean, not relative to zero. Predicting the per-dimension mean therefore
+    explains 0 variance (the pre-#659 bug reported it as ~1.0)."""
+    from sae_lens.evals import _compute_explained_variance
+
+    # One eval batch, two samples, d_model=2, with a large mean component on dim 0.
+    x = torch.tensor([[10.0, 0.0], [12.0, 0.0]])
+
+    def batch_stats(x_hat: torch.Tensor):
+        resid_ss = (x - x_hat).pow(2).sum(dim=-1)
+        return (
+            [x.pow(2).sum(dim=-1).mean(dim=0)],  # sum_d E[x_d^2]
+            [x.mean(dim=0)],  # E[x_d], shape [d_model]
+            [resid_ss.mean(dim=0)],  # E[||x - x_hat||^2]
+        )
+
+    # Predicting the per-dimension mean explains none of the variance.
+    mss, mad, mrs = batch_stats(x.mean(dim=0, keepdim=True).expand_as(x))
+    assert _compute_explained_variance(mss, mad, mrs) == pytest.approx(0.0, abs=1e-6)
+
+    # Perfect reconstruction explains all of it.
+    mss, mad, mrs = batch_stats(x)
+    assert _compute_explained_variance(mss, mad, mrs) == pytest.approx(1.0, abs=1e-6)
