@@ -1309,3 +1309,78 @@ def test_exclude_special_tokens_empty_list_applies_sae_everywhere(
         cache_no_exclude[act_name + ".hook_sae_output"],
         atol=1e-6,
     )
+
+
+def test_exclude_special_tokens_zeroes_sae_error_at_excluded_positions(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+
+    _, cache = model.run_with_cache_with_saes(
+        prompt,
+        saes=[hooked_sae],
+        use_error_term=True,
+        exclude_special_tokens=True,
+        prepend_bos=True,
+    )
+
+    error = cache[act_name + ".hook_sae_error"]
+    # BOS (position 0) is excluded, so it has no SAE error
+    assert torch.all(error[:, 0, ...] == 0)
+    # Non-excluded positions still have a real error term
+    assert error[:, 1:, ...].abs().sum() > 0
+
+
+def test_exclude_special_tokens_mask_cleared_after_forward(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+    model.add_sae(hooked_sae, exclude_special_tokens=True)
+    wrapper = model._acts_to_saes[act_name]
+
+    model(prompt)
+
+    assert wrapper._token_mask is None
+    model.reset_saes()
+
+
+def test_exclude_special_tokens_mask_cleared_when_forward_raises(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+    model.add_sae(hooked_sae, exclude_special_tokens=True)
+    wrapper = model._acts_to_saes[act_name]
+
+    def raise_error(tensor: torch.Tensor, hook: HookPoint) -> torch.Tensor:  # noqa: ARG001
+        raise RuntimeError("boom")
+
+    # hook_embed fires before any SAE wrapper, so the wrapper never runs and
+    # only the context manager can clean up the mask
+    with pytest.raises(RuntimeError, match="boom"):
+        model.run_with_hooks(prompt, fwd_hooks=[("hook_embed", raise_error)])
+
+    assert wrapper._token_mask is None
+    model.reset_saes()
+
+
+def test_exclude_special_tokens_with_token_tensor_input(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+    tokens = model.to_tokens(prompt, prepend_bos=True)
+
+    _, cache_no_sae = model.run_with_cache(tokens)
+    _, cache_with_exclusion = model.run_with_cache_with_saes(
+        tokens,
+        saes=[hooked_sae],
+        use_error_term=False,
+        exclude_special_tokens=True,
+    )
+
+    # BOS position must match the original activation even when the input is
+    # already a token tensor rather than a string
+    assert_close(
+        cache_with_exclusion[act_name + ".hook_sae_output"][:, 0, ...],
+        cache_no_sae[act_name][:, 0, ...],
+        atol=1e-5,
+    )
