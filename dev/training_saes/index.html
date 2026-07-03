@@ -478,6 +478,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#fine-tuning-an-existing-sae" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fine-tuning an existing SAE
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#training-multiple-saes-in-parallel-experimental" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -981,6 +992,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#fine-tuning-an-existing-sae" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fine-tuning an existing SAE
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#training-multiple-saes-in-parallel-experimental" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1459,6 +1481,52 @@
 </span><span id="__span-8-16"><a href="#__codelineno-8-16" id="__codelineno-8-16" name="__codelineno-8-16"></a><span class="p">)</span>
 </span><span id="__span-8-17"><a href="#__codelineno-8-17" id="__codelineno-8-17" name="__codelineno-8-17"></a><span class="n">sparse_autoencoder</span> <span class="o">=</span> <span class="n">LanguageModelSAETrainingRunner</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
 </span></code></pre></div>
+<h2 id="fine-tuning-an-existing-sae">Fine-tuning an existing SAE</h2>
+<p>Use <code>from_pretrained_path</code> to initialize a new training run from a saved
+training SAE. The path should point to a directory that can be loaded by
+<code>TrainingSAE.load_from_disk</code>, such as a directory containing <code>cfg.json</code> and
+<code>sae_weights.safetensors</code>. The runner loads the SAE weights and SAE config from
+disk, then creates a fresh activation store, optimizer, scheduler, and trainer
+state from the current <code>LanguageModelSAERunnerConfig</code>. The nested <code>sae</code> field is
+still required when you build <code>LanguageModelSAERunnerConfig</code>, so keep it
+consistent with the saved SAE.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-9-1"><a href="#__codelineno-9-1" id="__codelineno-9-1" name="__codelineno-9-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+</span><span id="__span-9-2"><a href="#__codelineno-9-2" id="__codelineno-9-2" name="__codelineno-9-2"></a>
+</span><span id="__span-9-3"><a href="#__codelineno-9-3" id="__codelineno-9-3" name="__codelineno-9-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-9-4"><a href="#__codelineno-9-4" id="__codelineno-9-4" name="__codelineno-9-4"></a>    <span class="n">LanguageModelSAERunnerConfig</span><span class="p">,</span>
+</span><span id="__span-9-5"><a href="#__codelineno-9-5" id="__codelineno-9-5" name="__codelineno-9-5"></a>    <span class="n">LanguageModelSAETrainingRunner</span><span class="p">,</span>
+</span><span id="__span-9-6"><a href="#__codelineno-9-6" id="__codelineno-9-6" name="__codelineno-9-6"></a>    <span class="n">LoggingConfig</span><span class="p">,</span>
+</span><span id="__span-9-7"><a href="#__codelineno-9-7" id="__codelineno-9-7" name="__codelineno-9-7"></a>    <span class="n">StandardTrainingSAEConfig</span><span class="p">,</span>
+</span><span id="__span-9-8"><a href="#__codelineno-9-8" id="__codelineno-9-8" name="__codelineno-9-8"></a><span class="p">)</span>
+</span><span id="__span-9-9"><a href="#__codelineno-9-9" id="__codelineno-9-9" name="__codelineno-9-9"></a>
+</span><span id="__span-9-10"><a href="#__codelineno-9-10" id="__codelineno-9-10" name="__codelineno-9-10"></a><span class="n">device</span> <span class="o">=</span> <span class="s2">"cuda"</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">"cpu"</span>
+</span><span id="__span-9-11"><a href="#__codelineno-9-11" id="__codelineno-9-11" name="__codelineno-9-11"></a>
+</span><span id="__span-9-12"><a href="#__codelineno-9-12" id="__codelineno-9-12" name="__codelineno-9-12"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">LanguageModelSAERunnerConfig</span><span class="p">(</span>
+</span><span id="__span-9-13"><a href="#__codelineno-9-13" id="__codelineno-9-13" name="__codelineno-9-13"></a>    <span class="n">model_name</span><span class="o">=</span><span class="s2">"tiny-stories-1L-21M"</span><span class="p">,</span>
+</span><span id="__span-9-14"><a href="#__codelineno-9-14" id="__codelineno-9-14" name="__codelineno-9-14"></a>    <span class="n">hook_name</span><span class="o">=</span><span class="s2">"blocks.0.hook_mlp_out"</span><span class="p">,</span>
+</span><span id="__span-9-15"><a href="#__codelineno-9-15" id="__codelineno-9-15" name="__codelineno-9-15"></a>    <span class="n">dataset_path</span><span class="o">=</span><span class="s2">"apollo-research/roneneldan-TinyStories-tokenizer-gpt2"</span><span class="p">,</span>
+</span><span id="__span-9-16"><a href="#__codelineno-9-16" id="__codelineno-9-16" name="__codelineno-9-16"></a>    <span class="n">is_dataset_tokenized</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-9-17"><a href="#__codelineno-9-17" id="__codelineno-9-17" name="__codelineno-9-17"></a>    <span class="n">streaming</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-9-18"><a href="#__codelineno-9-18" id="__codelineno-9-18" name="__codelineno-9-18"></a>    <span class="n">sae</span><span class="o">=</span><span class="n">StandardTrainingSAEConfig</span><span class="p">(</span>
+</span><span id="__span-9-19"><a href="#__codelineno-9-19" id="__codelineno-9-19" name="__codelineno-9-19"></a>        <span class="n">d_in</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
+</span><span id="__span-9-20"><a href="#__codelineno-9-20" id="__codelineno-9-20" name="__codelineno-9-20"></a>        <span class="n">d_sae</span><span class="o">=</span><span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span>
+</span><span id="__span-9-21"><a href="#__codelineno-9-21" id="__codelineno-9-21" name="__codelineno-9-21"></a>        <span class="n">apply_b_dec_to_input</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-9-22"><a href="#__codelineno-9-22" id="__codelineno-9-22" name="__codelineno-9-22"></a>        <span class="n">normalize_activations</span><span class="o">=</span><span class="s2">"expected_average_only_in"</span><span class="p">,</span>
+</span><span id="__span-9-23"><a href="#__codelineno-9-23" id="__codelineno-9-23" name="__codelineno-9-23"></a>        <span class="n">l1_coefficient</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+</span><span id="__span-9-24"><a href="#__codelineno-9-24" id="__codelineno-9-24" name="__codelineno-9-24"></a>    <span class="p">),</span>
+</span><span id="__span-9-25"><a href="#__codelineno-9-25" id="__codelineno-9-25" name="__codelineno-9-25"></a>    <span class="n">from_pretrained_path</span><span class="o">=</span><span class="s2">"path/to/existing/training_sae"</span><span class="p">,</span>
+</span><span id="__span-9-26"><a href="#__codelineno-9-26" id="__codelineno-9-26" name="__codelineno-9-26"></a>    <span class="n">training_tokens</span><span class="o">=</span><span class="mi">50_000_000</span><span class="p">,</span>
+</span><span id="__span-9-27"><a href="#__codelineno-9-27" id="__codelineno-9-27" name="__codelineno-9-27"></a>    <span class="n">train_batch_size_tokens</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
+</span><span id="__span-9-28"><a href="#__codelineno-9-28" id="__codelineno-9-28" name="__codelineno-9-28"></a>    <span class="n">logger</span><span class="o">=</span><span class="n">LoggingConfig</span><span class="p">(</span><span class="n">log_to_wandb</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+</span><span id="__span-9-29"><a href="#__codelineno-9-29" id="__codelineno-9-29" name="__codelineno-9-29"></a>    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+</span><span id="__span-9-30"><a href="#__codelineno-9-30" id="__codelineno-9-30" name="__codelineno-9-30"></a><span class="p">)</span>
+</span><span id="__span-9-31"><a href="#__codelineno-9-31" id="__codelineno-9-31" name="__codelineno-9-31"></a>
+</span><span id="__span-9-32"><a href="#__codelineno-9-32" id="__codelineno-9-32" name="__codelineno-9-32"></a><span class="n">fine_tuned_sae</span> <span class="o">=</span> <span class="n">LanguageModelSAETrainingRunner</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</span><span id="__span-9-33"><a href="#__codelineno-9-33" id="__codelineno-9-33" name="__codelineno-9-33"></a><span class="n">fine_tuned_sae</span><span class="o">.</span><span class="n">save_inference_model</span><span class="p">(</span><span class="s2">"path/to/fine_tuned_sae"</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Note that <code>from_pretrained_path</code> starts a brand new training run from the saved
+weights. To continue an existing run exactly where it left off, use
+<code>resume_from_checkpoint</code> instead — see <a href="#checkpoints">Checkpoints</a>.</p>
 <h2 id="training-multiple-saes-in-parallel-experimental">Training multiple SAEs in parallel (experimental)</h2>
 <!-- prettier-ignore-start -->
 <div class="admonition warning">
@@ -1468,56 +1536,56 @@
 <!-- prettier-ignore-end -->
 <p>If you want to train a sweep of SAEs that share the same model — e.g., several <code>l1_coefficient</code> values at one hook point, or one SAE per layer for a layer-by-layer study — you can use <a class="autorefs autorefs-internal" href="../api/#sae_lens.MultiSAETrainingRunner">MultiSAETrainingRunner</a> to run the LLM forward pass once per batch and feed the captured activations to every SAE in parallel. Each SAE keeps its own optimizer, learning-rate schedule, coefficient schedulers, activation scaler, and sparsity tracking, exactly as in single-SAE training; the runner just multiplexes the shared activation stream.</p>
 <p>The runner accepts a dict of SAE configs and a hook-name spec. Pass <code>hook_names</code> as a single string when all SAEs share one hook, or as a dict when they don't. Different SAEs can use different architectures, but SAEs sharing a hook in V1 must agree on <code>d_in</code> and <code>hook_head_index</code>.</p>
-<div class="highlight"><pre><span></span><code><span id="__span-9-1"><a href="#__codelineno-9-1" id="__codelineno-9-1" name="__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-</span><span id="__span-9-2"><a href="#__codelineno-9-2" id="__codelineno-9-2" name="__codelineno-9-2"></a>    <span class="n">MultiSAETrainingRunner</span><span class="p">,</span>
-</span><span id="__span-9-3"><a href="#__codelineno-9-3" id="__codelineno-9-3" name="__codelineno-9-3"></a>    <span class="n">MultiSAETrainingRunnerConfig</span><span class="p">,</span>
-</span><span id="__span-9-4"><a href="#__codelineno-9-4" id="__codelineno-9-4" name="__codelineno-9-4"></a>    <span class="n">StandardTrainingSAEConfig</span><span class="p">,</span>
-</span><span id="__span-9-5"><a href="#__codelineno-9-5" id="__codelineno-9-5" name="__codelineno-9-5"></a>    <span class="n">TopKTrainingSAEConfig</span><span class="p">,</span>
-</span><span id="__span-9-6"><a href="#__codelineno-9-6" id="__codelineno-9-6" name="__codelineno-9-6"></a>    <span class="n">LoggingConfig</span><span class="p">,</span>
-</span><span id="__span-9-7"><a href="#__codelineno-9-7" id="__codelineno-9-7" name="__codelineno-9-7"></a><span class="p">)</span>
-</span><span id="__span-9-8"><a href="#__codelineno-9-8" id="__codelineno-9-8" name="__codelineno-9-8"></a>
-</span><span id="__span-9-9"><a href="#__codelineno-9-9" id="__codelineno-9-9" name="__codelineno-9-9"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">MultiSAETrainingRunnerConfig</span><span class="p">(</span>
-</span><span id="__span-9-10"><a href="#__codelineno-9-10" id="__codelineno-9-10" name="__codelineno-9-10"></a>    <span class="n">saes</span><span class="o">=</span><span class="p">{</span>
-</span><span id="__span-9-11"><a href="#__codelineno-9-11" id="__codelineno-9-11" name="__codelineno-9-11"></a>        <span class="s2">"h5_l1_low"</span><span class="p">:</span>  <span class="n">StandardTrainingSAEConfig</span><span class="p">(</span><span class="n">d_in</span><span class="o">=</span><span class="mi">768</span><span class="p">,</span> <span class="n">d_sae</span><span class="o">=</span><span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span> <span class="n">l1_coefficient</span><span class="o">=</span><span class="mf">2.0</span><span class="p">),</span>
-</span><span id="__span-9-12"><a href="#__codelineno-9-12" id="__codelineno-9-12" name="__codelineno-9-12"></a>        <span class="s2">"h5_l1_high"</span><span class="p">:</span> <span class="n">StandardTrainingSAEConfig</span><span class="p">(</span><span class="n">d_in</span><span class="o">=</span><span class="mi">768</span><span class="p">,</span> <span class="n">d_sae</span><span class="o">=</span><span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span> <span class="n">l1_coefficient</span><span class="o">=</span><span class="mf">5.0</span><span class="p">),</span>
-</span><span id="__span-9-13"><a href="#__codelineno-9-13" id="__codelineno-9-13" name="__codelineno-9-13"></a>        <span class="s2">"h10_topk"</span><span class="p">:</span>   <span class="n">TopKTrainingSAEConfig</span><span class="p">(</span><span class="n">d_in</span><span class="o">=</span><span class="mi">768</span><span class="p">,</span> <span class="n">d_sae</span><span class="o">=</span><span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">64</span><span class="p">),</span>
-</span><span id="__span-9-14"><a href="#__codelineno-9-14" id="__codelineno-9-14" name="__codelineno-9-14"></a>    <span class="p">},</span>
-</span><span id="__span-9-15"><a href="#__codelineno-9-15" id="__codelineno-9-15" name="__codelineno-9-15"></a>    <span class="n">hook_names</span><span class="o">=</span><span class="p">{</span>
-</span><span id="__span-9-16"><a href="#__codelineno-9-16" id="__codelineno-9-16" name="__codelineno-9-16"></a>        <span class="s2">"h5_l1_low"</span><span class="p">:</span>  <span class="s2">"blocks.5.hook_resid_pre"</span><span class="p">,</span>
-</span><span id="__span-9-17"><a href="#__codelineno-9-17" id="__codelineno-9-17" name="__codelineno-9-17"></a>        <span class="s2">"h5_l1_high"</span><span class="p">:</span> <span class="s2">"blocks.5.hook_resid_pre"</span><span class="p">,</span>
-</span><span id="__span-9-18"><a href="#__codelineno-9-18" id="__codelineno-9-18" name="__codelineno-9-18"></a>        <span class="s2">"h10_topk"</span><span class="p">:</span>   <span class="s2">"blocks.10.hook_resid_pre"</span><span class="p">,</span>
-</span><span id="__span-9-19"><a href="#__codelineno-9-19" id="__codelineno-9-19" name="__codelineno-9-19"></a>    <span class="p">},</span>
-</span><span id="__span-9-20"><a href="#__codelineno-9-20" id="__codelineno-9-20" name="__codelineno-9-20"></a>    <span class="c1"># OR a single string when every SAE shares one hook:</span>
-</span><span id="__span-9-21"><a href="#__codelineno-9-21" id="__codelineno-9-21" name="__codelineno-9-21"></a>    <span class="c1"># hook_names="blocks.5.hook_resid_pre",</span>
-</span><span id="__span-9-22"><a href="#__codelineno-9-22" id="__codelineno-9-22" name="__codelineno-9-22"></a>
-</span><span id="__span-9-23"><a href="#__codelineno-9-23" id="__codelineno-9-23" name="__codelineno-9-23"></a>    <span class="n">model_name</span><span class="o">=</span><span class="s2">"gpt2"</span><span class="p">,</span>
-</span><span id="__span-9-24"><a href="#__codelineno-9-24" id="__codelineno-9-24" name="__codelineno-9-24"></a>    <span class="n">dataset_path</span><span class="o">=</span><span class="s2">"apollo-research/Skylion007-openwebtext-tokenizer-gpt2"</span><span class="p">,</span>
-</span><span id="__span-9-25"><a href="#__codelineno-9-25" id="__codelineno-9-25" name="__codelineno-9-25"></a>    <span class="n">training_tokens</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="mf">1e8</span><span class="p">),</span>
-</span><span id="__span-9-26"><a href="#__codelineno-9-26" id="__codelineno-9-26" name="__codelineno-9-26"></a>    <span class="n">train_batch_size_tokens</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
-</span><span id="__span-9-27"><a href="#__codelineno-9-27" id="__codelineno-9-27" name="__codelineno-9-27"></a>    <span class="n">output_path</span><span class="o">=</span><span class="s2">"output/sweep_run_1"</span><span class="p">,</span>
-</span><span id="__span-9-28"><a href="#__codelineno-9-28" id="__codelineno-9-28" name="__codelineno-9-28"></a>    <span class="n">logger</span><span class="o">=</span><span class="n">LoggingConfig</span><span class="p">(</span><span class="n">log_to_wandb</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">wandb_project</span><span class="o">=</span><span class="s2">"multi_sae_sweep"</span><span class="p">),</span>
-</span><span id="__span-9-29"><a href="#__codelineno-9-29" id="__codelineno-9-29" name="__codelineno-9-29"></a><span class="p">)</span>
-</span><span id="__span-9-30"><a href="#__codelineno-9-30" id="__codelineno-9-30" name="__codelineno-9-30"></a>
-</span><span id="__span-9-31"><a href="#__codelineno-9-31" id="__codelineno-9-31" name="__codelineno-9-31"></a><span class="n">trained_saes</span> <span class="o">=</span> <span class="n">MultiSAETrainingRunner</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>  <span class="c1"># dict[name, TrainingSAE]</span>
+<div class="highlight"><pre><span></span><code><span id="__span-10-1"><a href="#__codelineno-10-1" id="__codelineno-10-1" name="__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-10-2"><a href="#__codelineno-10-2" id="__codelineno-10-2" name="__codelineno-10-2"></a>    <span class="n">MultiSAETrainingRunner</span><span class="p">,</span>
+</span><span id="__span-10-3"><a href="#__codelineno-10-3" id="__codelineno-10-3" name="__codelineno-10-3"></a>    <span class="n">MultiSAETrainingRunnerConfig</span><span class="p">,</span>
+</span><span id="__span-10-4"><a href="#__codelineno-10-4" id="__codelineno-10-4" name="__codelineno-10-4"></a>    <span class="n">StandardTrainingSAEConfig</span><span class="p">,</span>
+</span><span id="__span-10-5"><a href="#__codelineno-10-5" id="__codelineno-10-5" name="__codelineno-10-5"></a>    <span class="n">TopKTrainingSAEConfig</span><span class="p">,</span>
+</span><span id="__span-10-6"><a href="#__codelineno-10-6" id="__codelineno-10-6" name="__codelineno-10-6"></a>    <span class="n">LoggingConfig</span><span class="p">,</span>
+</span><span id="__span-10-7"><a href="#__codelineno-10-7" id="__codelineno-10-7" name="__codelineno-10-7"></a><span class="p">)</span>
+</span><span id="__span-10-8"><a href="#__codelineno-10-8" id="__codelineno-10-8" name="__codelineno-10-8"></a>
+</span><span id="__span-10-9"><a href="#__codelineno-10-9" id="__codelineno-10-9" name="__codelineno-10-9"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">MultiSAETrainingRunnerConfig</span><span class="p">(</span>
+</span><span id="__span-10-10"><a href="#__codelineno-10-10" id="__codelineno-10-10" name="__codelineno-10-10"></a>    <span class="n">saes</span><span class="o">=</span><span class="p">{</span>
+</span><span id="__span-10-11"><a href="#__codelineno-10-11" id="__codelineno-10-11" name="__codelineno-10-11"></a>        <span class="s2">"h5_l1_low"</span><span class="p">:</span>  <span class="n">StandardTrainingSAEConfig</span><span class="p">(</span><span class="n">d_in</span><span class="o">=</span><span class="mi">768</span><span class="p">,</span> <span class="n">d_sae</span><span class="o">=</span><span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span> <span class="n">l1_coefficient</span><span class="o">=</span><span class="mf">2.0</span><span class="p">),</span>
+</span><span id="__span-10-12"><a href="#__codelineno-10-12" id="__codelineno-10-12" name="__codelineno-10-12"></a>        <span class="s2">"h5_l1_high"</span><span class="p">:</span> <span class="n">StandardTrainingSAEConfig</span><span class="p">(</span><span class="n">d_in</span><span class="o">=</span><span class="mi">768</span><span class="p">,</span> <span class="n">d_sae</span><span class="o">=</span><span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span> <span class="n">l1_coefficient</span><span class="o">=</span><span class="mf">5.0</span><span class="p">),</span>
+</span><span id="__span-10-13"><a href="#__codelineno-10-13" id="__codelineno-10-13" name="__codelineno-10-13"></a>        <span class="s2">"h10_topk"</span><span class="p">:</span>   <span class="n">TopKTrainingSAEConfig</span><span class="p">(</span><span class="n">d_in</span><span class="o">=</span><span class="mi">768</span><span class="p">,</span> <span class="n">d_sae</span><span class="o">=</span><span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">64</span><span class="p">),</span>
+</span><span id="__span-10-14"><a href="#__codelineno-10-14" id="__codelineno-10-14" name="__codelineno-10-14"></a>    <span class="p">},</span>
+</span><span id="__span-10-15"><a href="#__codelineno-10-15" id="__codelineno-10-15" name="__codelineno-10-15"></a>    <span class="n">hook_names</span><span class="o">=</span><span class="p">{</span>
+</span><span id="__span-10-16"><a href="#__codelineno-10-16" id="__codelineno-10-16" name="__codelineno-10-16"></a>        <span class="s2">"h5_l1_low"</span><span class="p">:</span>  <span class="s2">"blocks.5.hook_resid_pre"</span><span class="p">,</span>
+</span><span id="__span-10-17"><a href="#__codelineno-10-17" id="__codelineno-10-17" name="__codelineno-10-17"></a>        <span class="s2">"h5_l1_high"</span><span class="p">:</span> <span class="s2">"blocks.5.hook_resid_pre"</span><span class="p">,</span>
+</span><span id="__span-10-18"><a href="#__codelineno-10-18" id="__codelineno-10-18" name="__codelineno-10-18"></a>        <span class="s2">"h10_topk"</span><span class="p">:</span>   <span class="s2">"blocks.10.hook_resid_pre"</span><span class="p">,</span>
+</span><span id="__span-10-19"><a href="#__codelineno-10-19" id="__codelineno-10-19" name="__codelineno-10-19"></a>    <span class="p">},</span>
+</span><span id="__span-10-20"><a href="#__codelineno-10-20" id="__codelineno-10-20" name="__codelineno-10-20"></a>    <span class="c1"># OR a single string when every SAE shares one hook:</span>
+</span><span id="__span-10-21"><a href="#__codelineno-10-21" id="__codelineno-10-21" name="__codelineno-10-21"></a>    <span class="c1"># hook_names="blocks.5.hook_resid_pre",</span>
+</span><span id="__span-10-22"><a href="#__codelineno-10-22" id="__codelineno-10-22" name="__codelineno-10-22"></a>
+</span><span id="__span-10-23"><a href="#__codelineno-10-23" id="__codelineno-10-23" name="__codelineno-10-23"></a>    <span class="n">model_name</span><span class="o">=</span><span class="s2">"gpt2"</span><span class="p">,</span>
+</span><span id="__span-10-24"><a href="#__codelineno-10-24" id="__codelineno-10-24" name="__codelineno-10-24"></a>    <span class="n">dataset_path</span><span class="o">=</span><span class="s2">"apollo-research/Skylion007-openwebtext-tokenizer-gpt2"</span><span class="p">,</span>
+</span><span id="__span-10-25"><a href="#__codelineno-10-25" id="__codelineno-10-25" name="__codelineno-10-25"></a>    <span class="n">training_tokens</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="mf">1e8</span><span class="p">),</span>
+</span><span id="__span-10-26"><a href="#__codelineno-10-26" id="__codelineno-10-26" name="__codelineno-10-26"></a>    <span class="n">train_batch_size_tokens</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
+</span><span id="__span-10-27"><a href="#__codelineno-10-27" id="__codelineno-10-27" name="__codelineno-10-27"></a>    <span class="n">output_path</span><span class="o">=</span><span class="s2">"output/sweep_run_1"</span><span class="p">,</span>
+</span><span id="__span-10-28"><a href="#__codelineno-10-28" id="__codelineno-10-28" name="__codelineno-10-28"></a>    <span class="n">logger</span><span class="o">=</span><span class="n">LoggingConfig</span><span class="p">(</span><span class="n">log_to_wandb</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">wandb_project</span><span class="o">=</span><span class="s2">"multi_sae_sweep"</span><span class="p">),</span>
+</span><span id="__span-10-29"><a href="#__codelineno-10-29" id="__codelineno-10-29" name="__codelineno-10-29"></a><span class="p">)</span>
+</span><span id="__span-10-30"><a href="#__codelineno-10-30" id="__codelineno-10-30" name="__codelineno-10-30"></a>
+</span><span id="__span-10-31"><a href="#__codelineno-10-31" id="__codelineno-10-31" name="__codelineno-10-31"></a><span class="n">trained_saes</span> <span class="o">=</span> <span class="n">MultiSAETrainingRunner</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>  <span class="c1"># dict[name, TrainingSAE]</span>
 </span></code></pre></div>
 <p>Wandb metrics are namespaced by SAE name (e.g. <code>h5_l1_low/losses/overall_loss</code>) so per-SAE curves can be inspected side-by-side in one run. Built-in evals run sequentially per SAE; eval cost therefore scales linearly with the number of SAEs — if this becomes a bottleneck, raise <code>eval_every_n_wandb_logs</code> so evals run less often. You can also pass a custom per-SAE <code>evaluator</code> callable; it will be applied to every SAE with that SAE's single-hook view of the data provider.</p>
 <p>Checkpointing follows the single-SAE layout but adds a per-SAE subdirectory inside each checkpoint:</p>
-<div class="highlight"><pre><span></span><code><span id="__span-10-1"><a href="#__codelineno-10-1" id="__codelineno-10-1" name="__codelineno-10-1"></a>checkpoints/&lt;unique_id&gt;/&lt;n_training_samples&gt;/
-</span><span id="__span-10-2"><a href="#__codelineno-10-2" id="__codelineno-10-2" name="__codelineno-10-2"></a>├── runner_cfg.json
-</span><span id="__span-10-3"><a href="#__codelineno-10-3" id="__codelineno-10-3" name="__codelineno-10-3"></a>├── activations_store.pt
-</span><span id="__span-10-4"><a href="#__codelineno-10-4" id="__codelineno-10-4" name="__codelineno-10-4"></a>├── h5_l1_low/
-</span><span id="__span-10-5"><a href="#__codelineno-10-5" id="__codelineno-10-5" name="__codelineno-10-5"></a>│   ├── sae_weights.safetensors
-</span><span id="__span-10-6"><a href="#__codelineno-10-6" id="__codelineno-10-6" name="__codelineno-10-6"></a>│   ├── cfg.json
-</span><span id="__span-10-7"><a href="#__codelineno-10-7" id="__codelineno-10-7" name="__codelineno-10-7"></a>│   ├── sparsity.safetensors
-</span><span id="__span-10-8"><a href="#__codelineno-10-8" id="__codelineno-10-8" name="__codelineno-10-8"></a>│   ├── trainer_state.pt
-</span><span id="__span-10-9"><a href="#__codelineno-10-9" id="__codelineno-10-9" name="__codelineno-10-9"></a>│   └── activation_scaler.json
-</span><span id="__span-10-10"><a href="#__codelineno-10-10" id="__codelineno-10-10" name="__codelineno-10-10"></a>├── h5_l1_high/...
-</span><span id="__span-10-11"><a href="#__codelineno-10-11" id="__codelineno-10-11" name="__codelineno-10-11"></a>└── h10_topk/...
+<div class="highlight"><pre><span></span><code><span id="__span-11-1"><a href="#__codelineno-11-1" id="__codelineno-11-1" name="__codelineno-11-1"></a>checkpoints/&lt;unique_id&gt;/&lt;n_training_samples&gt;/
+</span><span id="__span-11-2"><a href="#__codelineno-11-2" id="__codelineno-11-2" name="__codelineno-11-2"></a>├── runner_cfg.json
+</span><span id="__span-11-3"><a href="#__codelineno-11-3" id="__codelineno-11-3" name="__codelineno-11-3"></a>├── activations_store.pt
+</span><span id="__span-11-4"><a href="#__codelineno-11-4" id="__codelineno-11-4" name="__codelineno-11-4"></a>├── h5_l1_low/
+</span><span id="__span-11-5"><a href="#__codelineno-11-5" id="__codelineno-11-5" name="__codelineno-11-5"></a>│   ├── sae_weights.safetensors
+</span><span id="__span-11-6"><a href="#__codelineno-11-6" id="__codelineno-11-6" name="__codelineno-11-6"></a>│   ├── cfg.json
+</span><span id="__span-11-7"><a href="#__codelineno-11-7" id="__codelineno-11-7" name="__codelineno-11-7"></a>│   ├── sparsity.safetensors
+</span><span id="__span-11-8"><a href="#__codelineno-11-8" id="__codelineno-11-8" name="__codelineno-11-8"></a>│   ├── trainer_state.pt
+</span><span id="__span-11-9"><a href="#__codelineno-11-9" id="__codelineno-11-9" name="__codelineno-11-9"></a>│   └── activation_scaler.json
+</span><span id="__span-11-10"><a href="#__codelineno-11-10" id="__codelineno-11-10" name="__codelineno-11-10"></a>├── h5_l1_high/...
+</span><span id="__span-11-11"><a href="#__codelineno-11-11" id="__codelineno-11-11" name="__codelineno-11-11"></a>└── h10_topk/...
 </span></code></pre></div>
 <p>Resume by passing <code>resume_from_checkpoint=&lt;checkpoint_dir&gt;</code>. The per-SAE keys in <code>cfg.saes</code> must exactly match the subdirectories saved in the checkpoint.</p>
 <h2 id="cli-runner">CLI Runner</h2>
 <p>The SAE training runner can also be run from the command line via the <code>sae_lens.llm_sae_training_runner</code> module. This can be useful for quickly testing different hyperparameters or running training on a remote server. The command line interface is shown below. All options to the CLI are the same as the <a class="autorefs autorefs-internal" href="../api/#sae_lens.LanguageModelSAERunnerConfig">LanguageModelSAERunnerConfig</a> with a <code>--</code> prefix. E.g., <code>--model_name</code> is the same as <code>model_name</code> in the config.</p>
-<div class="highlight"><pre><span></span><code><span id="__span-11-1"><a href="#__codelineno-11-1" id="__codelineno-11-1" name="__codelineno-11-1"></a>python<span class="w"> </span>-m<span class="w"> </span>sae_lens.llm_sae_training_runner<span class="w"> </span>--help
+<div class="highlight"><pre><span></span><code><span id="__span-12-1"><a href="#__codelineno-12-1" id="__codelineno-12-1" name="__codelineno-12-1"></a>python<span class="w"> </span>-m<span class="w"> </span>sae_lens.llm_sae_training_runner<span class="w"> </span>--help
 </span></code></pre></div>
 <h2 id="logging-to-weights-and-biases">Logging to Weights and Biases</h2>
 <p>For any real training run, you should be logging to Weights and Biases (WandB). This will allow you to track your training progress and compare different runs. To enable WandB, set <code>log_to_wandb=True</code>. The <code>wandb_project</code> parameter in the config controls the project name in WandB. You can also control the logging frequency with <code>wandb_log_frequency</code> and <code>eval_every_n_wandb_logs</code>.</p>
@@ -1534,14 +1602,16 @@
 </ul>
 <h2 id="checkpoints">Checkpoints</h2>
 <p>Checkpoints allow you to save a snapshot of the SAE and sparsitity statistics during training. To enable checkpointing, set <code>n_checkpoints</code> to a value larger than 0. If WandB logging is enabled, checkpoints will be uploaded as WandB artifacts. To save checkpoints locally, the <code>checkpoint_path</code> parameter can be set to a local directory. You can also set <code>save_final_checkpoint=True</code> to save a final checkpoint after training is finished.</p>
-<p>To resume training from a saved checkpoint, set <code>resume_from_checkpoint</code> to the path of the checkpoint when creating a <code>LanguageModelSAETrainingRunner</code>, or set <code>--resume_from_checkpoint</code> when running the CLI.</p>
-<div class="highlight"><pre><span></span><code><span id="__span-12-1"><a href="#__codelineno-12-1" id="__codelineno-12-1" name="__codelineno-12-1"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">LanguageModelSAERunnerConfig</span><span class="p">(</span>
-</span><span id="__span-12-2"><a href="#__codelineno-12-2" id="__codelineno-12-2" name="__codelineno-12-2"></a>    <span class="c1"># ... other LanguageModelSAERunnerConfig parameters ...</span>
-</span><span id="__span-12-3"><a href="#__codelineno-12-3" id="__codelineno-12-3" name="__codelineno-12-3"></a>    <span class="n">resume_from_checkpoint</span><span class="o">=</span><span class="s2">"path/to/checkpoint"</span>
-</span><span id="__span-12-4"><a href="#__codelineno-12-4" id="__codelineno-12-4" name="__codelineno-12-4"></a><span class="p">)</span>
-</span><span id="__span-12-5"><a href="#__codelineno-12-5" id="__codelineno-12-5" name="__codelineno-12-5"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">LanguageModelSAETrainingRunner</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-</span><span id="__span-12-6"><a href="#__codelineno-12-6" id="__codelineno-12-6" name="__codelineno-12-6"></a><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+<p>To resume training from a saved checkpoint, set <code>resume_from_checkpoint</code> to the path of the checkpoint when creating a <code>LanguageModelSAETrainingRunner</code>, or set <code>--resume_from_checkpoint</code> when running the CLI. This restores the SAE weights, optimizer state, scheduler state, activation store progress, and training counters, so the run continues exactly where it left off.</p>
+<p>Checkpoint directories are saved under <code>checkpoint_path</code> as <code>&lt;checkpoint_path&gt;/&lt;run_id&gt;/&lt;checkpoint_name&gt;</code>, and contain <code>sae_weights.safetensors</code>, <code>trainer_state.pt</code>, <code>activations_store_state.safetensors</code>, and <code>activation_scaler.json</code>, all of which are required to resume.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-13-1"><a href="#__codelineno-13-1" id="__codelineno-13-1" name="__codelineno-13-1"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">LanguageModelSAERunnerConfig</span><span class="p">(</span>
+</span><span id="__span-13-2"><a href="#__codelineno-13-2" id="__codelineno-13-2" name="__codelineno-13-2"></a>    <span class="c1"># ... other LanguageModelSAERunnerConfig parameters ...</span>
+</span><span id="__span-13-3"><a href="#__codelineno-13-3" id="__codelineno-13-3" name="__codelineno-13-3"></a>    <span class="n">resume_from_checkpoint</span><span class="o">=</span><span class="s2">"checkpoints/run_id/final_100000000"</span>
+</span><span id="__span-13-4"><a href="#__codelineno-13-4" id="__codelineno-13-4" name="__codelineno-13-4"></a><span class="p">)</span>
+</span><span id="__span-13-5"><a href="#__codelineno-13-5" id="__codelineno-13-5" name="__codelineno-13-5"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">LanguageModelSAETrainingRunner</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+</span><span id="__span-13-6"><a href="#__codelineno-13-6" id="__codelineno-13-6" name="__codelineno-13-6"></a><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
 </span></code></pre></div>
+<p>To instead start a fresh fine-tuning run from saved SAE weights, use <code>from_pretrained_path</code> — see <a href="#fine-tuning-an-existing-sae">Fine-tuning an existing SAE</a>.</p>
 <h2 id="optimizers-and-schedulers">Optimizers and Schedulers</h2>
 <p>The SAE training runner uses the Adam optimizer with a constant learning rate by default. The optimizer betas can be controlled with the settings <code>adam_beta1</code> and <code>adam_beta2</code>.</p>
 <p>The learning rate scheduler can be controlled with the <code>lr_scheduler_name</code> parameter. The available schedulers are: <code>constant</code> (default), <code>consineannealing</code>, and <code>cosineannealingwarmrestarts</code>. All schedulers can be used with linear warmup and linear decay, set via <code>lr_warm_up_steps</code> and <code>lr_decay_steps</code>.</p>
@@ -1555,28 +1625,28 @@
 <h2 id="pretokenizing-datasets">Pretokenizing datasets</h2>
 <p>We also provider a runner, <a class="autorefs autorefs-internal" href="../api/#sae_lens.PretokenizeRunner">PretokenizeRunner</a>, which can be used to pre-tokenize a dataset and upload it to Huggingface. See <a class="autorefs autorefs-internal" href="../api/#sae_lens.PretokenizeRunnerConfig">PretokenizeRunnerConfig</a> for all available options. We also provide a <a href="https://github.com/decoderesearch/SAELens/blob/main/tutorials/pretokenizing_datasets.ipynb">pretokenizing datasets tutorial</a> with more details.</p>
 <p>A sample run from the tutorial for GPT2 and the NeelNanda/c4-10k dataset is shown below.</p>
-<div class="highlight"><pre><span></span><code><span id="__span-13-1"><a href="#__codelineno-13-1" id="__codelineno-13-1" name="__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="n">PretokenizeRunner</span><span class="p">,</span> <span class="n">PretokenizeRunnerConfig</span>
-</span><span id="__span-13-2"><a href="#__codelineno-13-2" id="__codelineno-13-2" name="__codelineno-13-2"></a>
-</span><span id="__span-13-3"><a href="#__codelineno-13-3" id="__codelineno-13-3" name="__codelineno-13-3"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">PretokenizeRunnerConfig</span><span class="p">(</span>
-</span><span id="__span-13-4"><a href="#__codelineno-13-4" id="__codelineno-13-4" name="__codelineno-13-4"></a>    <span class="n">tokenizer_name</span><span class="o">=</span><span class="s2">"gpt2"</span><span class="p">,</span>
-</span><span id="__span-13-5"><a href="#__codelineno-13-5" id="__codelineno-13-5" name="__codelineno-13-5"></a>    <span class="n">dataset_path</span><span class="o">=</span><span class="s2">"NeelNanda/c4-10k"</span><span class="p">,</span> <span class="c1"># this is just a tiny test dataset</span>
-</span><span id="__span-13-6"><a href="#__codelineno-13-6" id="__codelineno-13-6" name="__codelineno-13-6"></a>    <span class="n">shuffle</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-13-7"><a href="#__codelineno-13-7" id="__codelineno-13-7" name="__codelineno-13-7"></a>    <span class="n">num_proc</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="c1"># increase this number depending on how many CPUs you have</span>
-</span><span id="__span-13-8"><a href="#__codelineno-13-8" id="__codelineno-13-8" name="__codelineno-13-8"></a>
-</span><span id="__span-13-9"><a href="#__codelineno-13-9" id="__codelineno-13-9" name="__codelineno-13-9"></a>    <span class="c1"># tweak these settings depending on the model</span>
-</span><span id="__span-13-10"><a href="#__codelineno-13-10" id="__codelineno-13-10" name="__codelineno-13-10"></a>    <span class="n">context_size</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
-</span><span id="__span-13-11"><a href="#__codelineno-13-11" id="__codelineno-13-11" name="__codelineno-13-11"></a>    <span class="n">begin_batch_token</span><span class="o">=</span><span class="s2">"bos"</span><span class="p">,</span>
-</span><span id="__span-13-12"><a href="#__codelineno-13-12" id="__codelineno-13-12" name="__codelineno-13-12"></a>    <span class="n">begin_sequence_token</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-13-13"><a href="#__codelineno-13-13" id="__codelineno-13-13" name="__codelineno-13-13"></a>    <span class="n">sequence_separator_token</span><span class="o">=</span><span class="s2">"eos"</span><span class="p">,</span>
-</span><span id="__span-13-14"><a href="#__codelineno-13-14" id="__codelineno-13-14" name="__codelineno-13-14"></a>
-</span><span id="__span-13-15"><a href="#__codelineno-13-15" id="__codelineno-13-15" name="__codelineno-13-15"></a>    <span class="c1"># uncomment to upload to huggingface</span>
-</span><span id="__span-13-16"><a href="#__codelineno-13-16" id="__codelineno-13-16" name="__codelineno-13-16"></a>    <span class="c1"># hf_repo_id="your-username/c4-10k-tokenized-gpt2"</span>
-</span><span id="__span-13-17"><a href="#__codelineno-13-17" id="__codelineno-13-17" name="__codelineno-13-17"></a>
-</span><span id="__span-13-18"><a href="#__codelineno-13-18" id="__codelineno-13-18" name="__codelineno-13-18"></a>    <span class="c1"># uncomment to save the dataset locally</span>
-</span><span id="__span-13-19"><a href="#__codelineno-13-19" id="__codelineno-13-19" name="__codelineno-13-19"></a>    <span class="c1"># save_path="./c4-10k-tokenized-gpt2"</span>
-</span><span id="__span-13-20"><a href="#__codelineno-13-20" id="__codelineno-13-20" name="__codelineno-13-20"></a><span class="p">)</span>
-</span><span id="__span-13-21"><a href="#__codelineno-13-21" id="__codelineno-13-21" name="__codelineno-13-21"></a>
-</span><span id="__span-13-22"><a href="#__codelineno-13-22" id="__codelineno-13-22" name="__codelineno-13-22"></a><span class="n">dataset</span> <span class="o">=</span> <span class="n">PretokenizeRunner</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+<div class="highlight"><pre><span></span><code><span id="__span-14-1"><a href="#__codelineno-14-1" id="__codelineno-14-1" name="__codelineno-14-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="n">PretokenizeRunner</span><span class="p">,</span> <span class="n">PretokenizeRunnerConfig</span>
+</span><span id="__span-14-2"><a href="#__codelineno-14-2" id="__codelineno-14-2" name="__codelineno-14-2"></a>
+</span><span id="__span-14-3"><a href="#__codelineno-14-3" id="__codelineno-14-3" name="__codelineno-14-3"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">PretokenizeRunnerConfig</span><span class="p">(</span>
+</span><span id="__span-14-4"><a href="#__codelineno-14-4" id="__codelineno-14-4" name="__codelineno-14-4"></a>    <span class="n">tokenizer_name</span><span class="o">=</span><span class="s2">"gpt2"</span><span class="p">,</span>
+</span><span id="__span-14-5"><a href="#__codelineno-14-5" id="__codelineno-14-5" name="__codelineno-14-5"></a>    <span class="n">dataset_path</span><span class="o">=</span><span class="s2">"NeelNanda/c4-10k"</span><span class="p">,</span> <span class="c1"># this is just a tiny test dataset</span>
+</span><span id="__span-14-6"><a href="#__codelineno-14-6" id="__codelineno-14-6" name="__codelineno-14-6"></a>    <span class="n">shuffle</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-14-7"><a href="#__codelineno-14-7" id="__codelineno-14-7" name="__codelineno-14-7"></a>    <span class="n">num_proc</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="c1"># increase this number depending on how many CPUs you have</span>
+</span><span id="__span-14-8"><a href="#__codelineno-14-8" id="__codelineno-14-8" name="__codelineno-14-8"></a>
+</span><span id="__span-14-9"><a href="#__codelineno-14-9" id="__codelineno-14-9" name="__codelineno-14-9"></a>    <span class="c1"># tweak these settings depending on the model</span>
+</span><span id="__span-14-10"><a href="#__codelineno-14-10" id="__codelineno-14-10" name="__codelineno-14-10"></a>    <span class="n">context_size</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
+</span><span id="__span-14-11"><a href="#__codelineno-14-11" id="__codelineno-14-11" name="__codelineno-14-11"></a>    <span class="n">begin_batch_token</span><span class="o">=</span><span class="s2">"bos"</span><span class="p">,</span>
+</span><span id="__span-14-12"><a href="#__codelineno-14-12" id="__codelineno-14-12" name="__codelineno-14-12"></a>    <span class="n">begin_sequence_token</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-14-13"><a href="#__codelineno-14-13" id="__codelineno-14-13" name="__codelineno-14-13"></a>    <span class="n">sequence_separator_token</span><span class="o">=</span><span class="s2">"eos"</span><span class="p">,</span>
+</span><span id="__span-14-14"><a href="#__codelineno-14-14" id="__codelineno-14-14" name="__codelineno-14-14"></a>
+</span><span id="__span-14-15"><a href="#__codelineno-14-15" id="__codelineno-14-15" name="__codelineno-14-15"></a>    <span class="c1"># uncomment to upload to huggingface</span>
+</span><span id="__span-14-16"><a href="#__codelineno-14-16" id="__codelineno-14-16" name="__codelineno-14-16"></a>    <span class="c1"># hf_repo_id="your-username/c4-10k-tokenized-gpt2"</span>
+</span><span id="__span-14-17"><a href="#__codelineno-14-17" id="__codelineno-14-17" name="__codelineno-14-17"></a>
+</span><span id="__span-14-18"><a href="#__codelineno-14-18" id="__codelineno-14-18" name="__codelineno-14-18"></a>    <span class="c1"># uncomment to save the dataset locally</span>
+</span><span id="__span-14-19"><a href="#__codelineno-14-19" id="__codelineno-14-19" name="__codelineno-14-19"></a>    <span class="c1"># save_path="./c4-10k-tokenized-gpt2"</span>
+</span><span id="__span-14-20"><a href="#__codelineno-14-20" id="__codelineno-14-20" name="__codelineno-14-20"></a><span class="p">)</span>
+</span><span id="__span-14-21"><a href="#__codelineno-14-21" id="__codelineno-14-21" name="__codelineno-14-21"></a>
+</span><span id="__span-14-22"><a href="#__codelineno-14-22" id="__codelineno-14-22" name="__codelineno-14-22"></a><span class="n">dataset</span> <span class="o">=</span> <span class="n">PretokenizeRunner</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
 </span></code></pre></div>
 <h2 id="list-of-pretokenized-datasets">List of Pretokenized datasets</h2>
 <p>Below is a list of pre-tokenized datasets that can be used with SAELens. If you have a dataset you would like to add to this list, please open a PR!</p>
@@ -1645,36 +1715,36 @@
 <h2 id="caching-activations">Caching activations</h2>
 <p>The next step in improving performance beyond pre-tokenizing datasets is to cache model activations. This allows you to pre-calculate all the training activations for your SAE in advance so the model does not need to be run during training to generate activations. This allows rapid training of SAEs and is especially helpful for experimenting with training hyperparameters. However, pre-calculating activations can take a very large amount of disk space, so it may not always be possible.</p>
 <p>SAELens provides a <a class="autorefs autorefs-internal" href="../api/#sae_lens.CacheActivationsRunner">CacheActivationsRunner</a> class to help with pre-calculating activations. See <a class="autorefs autorefs-internal" href="../api/#sae_lens.CacheActivationsRunnerConfig">CacheActivationsRunnerConfig</a> for all available options. This runner intentionally shares a lot of options with <a class="autorefs autorefs-internal" href="../api/#sae_lens.LanguageModelSAERunnerConfig">LanguageModelSAERunnerConfig</a>. These options should be set identically when using the cached activations in training. The CacheActivationsRunner can be used as below:</p>
-<div class="highlight"><pre><span></span><code><span id="__span-14-1"><a href="#__codelineno-14-1" id="__codelineno-14-1" name="__codelineno-14-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="n">CacheActivationsRunner</span><span class="p">,</span> <span class="n">CacheActivationsRunnerConfig</span>
-</span><span id="__span-14-2"><a href="#__codelineno-14-2" id="__codelineno-14-2" name="__codelineno-14-2"></a>
-</span><span id="__span-14-3"><a href="#__codelineno-14-3" id="__codelineno-14-3" name="__codelineno-14-3"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">CacheActivationsRunnerConfig</span><span class="p">(</span>
-</span><span id="__span-14-4"><a href="#__codelineno-14-4" id="__codelineno-14-4" name="__codelineno-14-4"></a>    <span class="n">model_name</span><span class="o">=</span><span class="s2">"tiny-stories-1L-21M"</span><span class="p">,</span>
-</span><span id="__span-14-5"><a href="#__codelineno-14-5" id="__codelineno-14-5" name="__codelineno-14-5"></a>    <span class="n">hook_name</span><span class="o">=</span><span class="s2">"blocks.0.hook_mlp_out"</span><span class="p">,</span>
-</span><span id="__span-14-6"><a href="#__codelineno-14-6" id="__codelineno-14-6" name="__codelineno-14-6"></a>    <span class="n">dataset_path</span><span class="o">=</span><span class="s2">"apollo-research/roneneldan-TinyStories-tokenizer-gpt2"</span><span class="p">,</span>
-</span><span id="__span-14-7"><a href="#__codelineno-14-7" id="__codelineno-14-7" name="__codelineno-14-7"></a>    <span class="c1"># ...</span>
-</span><span id="__span-14-8"><a href="#__codelineno-14-8" id="__codelineno-14-8" name="__codelineno-14-8"></a>    <span class="n">new_cached_activations_path</span><span class="o">=</span><span class="s2">"./tiny-stories-1L-21M-cache"</span><span class="p">,</span>
-</span><span id="__span-14-9"><a href="#__codelineno-14-9" id="__codelineno-14-9" name="__codelineno-14-9"></a>    <span class="n">hf_repo_id</span><span class="o">=</span><span class="s2">"your-username/tiny-stories-1L-21M-cache"</span><span class="p">,</span> <span class="c1"># To push to hub</span>
-</span><span id="__span-14-10"><a href="#__codelineno-14-10" id="__codelineno-14-10" name="__codelineno-14-10"></a><span class="p">)</span>
-</span><span id="__span-14-11"><a href="#__codelineno-14-11" id="__codelineno-14-11" name="__codelineno-14-11"></a>
-</span><span id="__span-14-12"><a href="#__codelineno-14-12" id="__codelineno-14-12" name="__codelineno-14-12"></a><span class="n">CacheActivationsRunner</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+<div class="highlight"><pre><span></span><code><span id="__span-15-1"><a href="#__codelineno-15-1" id="__codelineno-15-1" name="__codelineno-15-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="n">CacheActivationsRunner</span><span class="p">,</span> <span class="n">CacheActivationsRunnerConfig</span>
+</span><span id="__span-15-2"><a href="#__codelineno-15-2" id="__codelineno-15-2" name="__codelineno-15-2"></a>
+</span><span id="__span-15-3"><a href="#__codelineno-15-3" id="__codelineno-15-3" name="__codelineno-15-3"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">CacheActivationsRunnerConfig</span><span class="p">(</span>
+</span><span id="__span-15-4"><a href="#__codelineno-15-4" id="__codelineno-15-4" name="__codelineno-15-4"></a>    <span class="n">model_name</span><span class="o">=</span><span class="s2">"tiny-stories-1L-21M"</span><span class="p">,</span>
+</span><span id="__span-15-5"><a href="#__codelineno-15-5" id="__codelineno-15-5" name="__codelineno-15-5"></a>    <span class="n">hook_name</span><span class="o">=</span><span class="s2">"blocks.0.hook_mlp_out"</span><span class="p">,</span>
+</span><span id="__span-15-6"><a href="#__codelineno-15-6" id="__codelineno-15-6" name="__codelineno-15-6"></a>    <span class="n">dataset_path</span><span class="o">=</span><span class="s2">"apollo-research/roneneldan-TinyStories-tokenizer-gpt2"</span><span class="p">,</span>
+</span><span id="__span-15-7"><a href="#__codelineno-15-7" id="__codelineno-15-7" name="__codelineno-15-7"></a>    <span class="c1"># ...</span>
+</span><span id="__span-15-8"><a href="#__codelineno-15-8" id="__codelineno-15-8" name="__codelineno-15-8"></a>    <span class="n">new_cached_activations_path</span><span class="o">=</span><span class="s2">"./tiny-stories-1L-21M-cache"</span><span class="p">,</span>
+</span><span id="__span-15-9"><a href="#__codelineno-15-9" id="__codelineno-15-9" name="__codelineno-15-9"></a>    <span class="n">hf_repo_id</span><span class="o">=</span><span class="s2">"your-username/tiny-stories-1L-21M-cache"</span><span class="p">,</span> <span class="c1"># To push to hub</span>
+</span><span id="__span-15-10"><a href="#__codelineno-15-10" id="__codelineno-15-10" name="__codelineno-15-10"></a><span class="p">)</span>
+</span><span id="__span-15-11"><a href="#__codelineno-15-11" id="__codelineno-15-11" name="__codelineno-15-11"></a>
+</span><span id="__span-15-12"><a href="#__codelineno-15-12" id="__codelineno-15-12" name="__codelineno-15-12"></a><span class="n">CacheActivationsRunner</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
 </span></code></pre></div>
 <p>To use the cached activations during training, set <code>use_cached_activations=True</code> and <code>cached_activations_path</code> to match the <code>new_cached_activations_path</code> above option in training configuration.</p>
 <h2 id="uploading-saes-to-huggingface">Uploading SAEs to Huggingface</h2>
 <p>Once you have a set of SAEs that you're happy with, your next step is to share them with the world! SAELens has a <code>upload_saes_to_huggingface()</code> function which makes this easy to do. We also provide a <a href="https://github.com/decoderesearch/SAELens/blob/main/tutorials/uploading_saes_to_huggingface.ipynb">uploading saes to huggingface tutorial</a> with more details.</p>
 <p>You'll just need to pass a dictionary of SAEs to upload along with the huggingface repo id to upload to. The dictionary keys will become the folders in the repo where each SAE will be located. It's best practice to use the hook point that the SAE was trained on as the key to make it clear to users where in the model to apply the SAE. The values of this dictionary can be either an SAE object, or a path to a saved SAE object on disk from the <code>sae.save_model()</code> method.</p>
 <p>A sample is shown below:</p>
-<div class="highlight"><pre><span></span><code><span id="__span-15-1"><a href="#__codelineno-15-1" id="__codelineno-15-1" name="__codelineno-15-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="n">upload_saes_to_huggingface</span>
-</span><span id="__span-15-2"><a href="#__codelineno-15-2" id="__codelineno-15-2" name="__codelineno-15-2"></a>
-</span><span id="__span-15-3"><a href="#__codelineno-15-3" id="__codelineno-15-3" name="__codelineno-15-3"></a><span class="n">saes_dict</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-15-4"><a href="#__codelineno-15-4" id="__codelineno-15-4" name="__codelineno-15-4"></a>    <span class="s2">"blocks.0.hook_resid_pre"</span><span class="p">:</span> <span class="n">layer_0_sae</span><span class="p">,</span>
-</span><span id="__span-15-5"><a href="#__codelineno-15-5" id="__codelineno-15-5" name="__codelineno-15-5"></a>    <span class="s2">"blocks.1.hook_resid_pre"</span><span class="p">:</span> <span class="n">layer_1_sae</span><span class="p">,</span>
-</span><span id="__span-15-6"><a href="#__codelineno-15-6" id="__codelineno-15-6" name="__codelineno-15-6"></a>    <span class="c1"># ...</span>
-</span><span id="__span-15-7"><a href="#__codelineno-15-7" id="__codelineno-15-7" name="__codelineno-15-7"></a><span class="p">}</span>
-</span><span id="__span-15-8"><a href="#__codelineno-15-8" id="__codelineno-15-8" name="__codelineno-15-8"></a>
-</span><span id="__span-15-9"><a href="#__codelineno-15-9" id="__codelineno-15-9" name="__codelineno-15-9"></a><span class="n">upload_saes_to_huggingface</span><span class="p">(</span>
-</span><span id="__span-15-10"><a href="#__codelineno-15-10" id="__codelineno-15-10" name="__codelineno-15-10"></a>    <span class="n">saes_dict</span><span class="p">,</span>
-</span><span id="__span-15-11"><a href="#__codelineno-15-11" id="__codelineno-15-11" name="__codelineno-15-11"></a>    <span class="n">hf_repo_id</span><span class="o">=</span><span class="s2">"your-username/your-sae-repo"</span><span class="p">,</span>
-</span><span id="__span-15-12"><a href="#__codelineno-15-12" id="__codelineno-15-12" name="__codelineno-15-12"></a><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span id="__span-16-1"><a href="#__codelineno-16-1" id="__codelineno-16-1" name="__codelineno-16-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="n">upload_saes_to_huggingface</span>
+</span><span id="__span-16-2"><a href="#__codelineno-16-2" id="__codelineno-16-2" name="__codelineno-16-2"></a>
+</span><span id="__span-16-3"><a href="#__codelineno-16-3" id="__codelineno-16-3" name="__codelineno-16-3"></a><span class="n">saes_dict</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-16-4"><a href="#__codelineno-16-4" id="__codelineno-16-4" name="__codelineno-16-4"></a>    <span class="s2">"blocks.0.hook_resid_pre"</span><span class="p">:</span> <span class="n">layer_0_sae</span><span class="p">,</span>
+</span><span id="__span-16-5"><a href="#__codelineno-16-5" id="__codelineno-16-5" name="__codelineno-16-5"></a>    <span class="s2">"blocks.1.hook_resid_pre"</span><span class="p">:</span> <span class="n">layer_1_sae</span><span class="p">,</span>
+</span><span id="__span-16-6"><a href="#__codelineno-16-6" id="__codelineno-16-6" name="__codelineno-16-6"></a>    <span class="c1"># ...</span>
+</span><span id="__span-16-7"><a href="#__codelineno-16-7" id="__codelineno-16-7" name="__codelineno-16-7"></a><span class="p">}</span>
+</span><span id="__span-16-8"><a href="#__codelineno-16-8" id="__codelineno-16-8" name="__codelineno-16-8"></a>
+</span><span id="__span-16-9"><a href="#__codelineno-16-9" id="__codelineno-16-9" name="__codelineno-16-9"></a><span class="n">upload_saes_to_huggingface</span><span class="p">(</span>
+</span><span id="__span-16-10"><a href="#__codelineno-16-10" id="__codelineno-16-10" name="__codelineno-16-10"></a>    <span class="n">saes_dict</span><span class="p">,</span>
+</span><span id="__span-16-11"><a href="#__codelineno-16-11" id="__codelineno-16-11" name="__codelineno-16-11"></a>    <span class="n">hf_repo_id</span><span class="o">=</span><span class="s2">"your-username/your-sae-repo"</span><span class="p">,</span>
+</span><span id="__span-16-12"><a href="#__codelineno-16-12" id="__codelineno-16-12" name="__codelineno-16-12"></a><span class="p">)</span>
 </span></code></pre></div>
 
 
