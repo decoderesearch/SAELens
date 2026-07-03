@@ -645,6 +645,104 @@ def test_get_sparsity_and_variance_metrics_identity_sae_perfect_reconstruction(
     assert metrics["mse"] == pytest.approx(0.0, abs=1e-5)
 
 
+def test_get_sparsity_and_variance_metrics_mse_matches_mean_squared_reconstruction_error(
+    model: HookedTransformer,
+    example_dataset: Dataset,
+):
+    d_in = 64
+    hook_name = "blocks.1.hook_resid_pre"
+    cfg = build_runner_cfg(d_in=d_in, d_sae=2 * d_in, hook_name=hook_name)
+
+    training_sae = StandardTrainingSAE.from_dict(cfg.get_training_sae_cfg_dict())
+    sae = StandardSAE.from_dict(training_sae.cfg.get_inference_sae_cfg_dict())
+    random_params(sae)
+
+    eval_batch_size_prompts = 4
+    activation_store = ActivationsStore.from_config(
+        model, cfg, override_dataset=example_dataset
+    )
+    metrics, _ = get_sparsity_and_variance_metrics(
+        sae=sae,
+        model=model,
+        activation_store=activation_store,
+        activation_scaler=ActivationScaler(None),
+        n_batches=1,
+        compute_l2_norms=False,
+        compute_sparsity_metrics=False,
+        compute_variance_metrics=True,
+        compute_featurewise_density_statistics=True,
+        eval_batch_size_prompts=eval_batch_size_prompts,
+        model_kwargs={},
+    )
+
+    # Recompute the expected MSE by hand on the same batch of tokens: mean over
+    # tokens of ||x - x_hat||^2, matching the training MSE convention.
+    fresh_store = ActivationsStore.from_config(
+        model, cfg, override_dataset=example_dataset
+    )
+    batch_tokens = fresh_store.get_batch_tokens(eval_batch_size_prompts)
+    _, cache = model.run_with_cache(
+        batch_tokens, prepend_bos=False, names_filter=[hook_name]
+    )
+    acts = cache[hook_name].flatten(0, 1)
+    sae_out = sae.decode(sae.encode(acts))
+    expected_mse = (acts - sae_out).pow(2).sum(dim=-1).mean().item()
+
+    assert metrics["mse"] == pytest.approx(expected_mse, rel=1e-4)
+
+
+def test_get_sparsity_and_variance_metrics_mse_is_invariant_to_batch_size(
+    model: HookedTransformer,
+    example_dataset: Dataset,
+):
+    d_in = 64
+    hook_name = "blocks.1.hook_resid_pre"
+    cfg = build_runner_cfg(d_in=d_in, d_sae=2 * d_in, hook_name=hook_name)
+
+    training_sae = StandardTrainingSAE.from_dict(cfg.get_training_sae_cfg_dict())
+    sae = StandardSAE.from_dict(training_sae.cfg.get_inference_sae_cfg_dict())
+    random_params(sae)
+
+    eval_kwargs: dict[str, Any] = dict(
+        sae=sae,
+        model=model,
+        activation_scaler=ActivationScaler(None),
+        compute_l2_norms=False,
+        compute_sparsity_metrics=False,
+        compute_variance_metrics=True,
+        compute_featurewise_density_statistics=True,
+        model_kwargs={},
+    )
+
+    # Evaluate the same 4 prompts as one batch of 4 and as two batches of 2.
+    store_one_batch = ActivationsStore.from_config(
+        model, cfg, override_dataset=example_dataset
+    )
+    metrics_one_batch, _ = get_sparsity_and_variance_metrics(
+        activation_store=store_one_batch,
+        n_batches=1,
+        eval_batch_size_prompts=4,
+        **eval_kwargs,
+    )
+
+    store_two_batches = ActivationsStore.from_config(
+        model, cfg, override_dataset=example_dataset
+    )
+    metrics_two_batches, _ = get_sparsity_and_variance_metrics(
+        activation_store=store_two_batches,
+        n_batches=2,
+        eval_batch_size_prompts=2,
+        **eval_kwargs,
+    )
+
+    assert metrics_two_batches["mse"] == pytest.approx(
+        metrics_one_batch["mse"], rel=1e-4
+    )
+    assert metrics_two_batches["explained_variance"] == pytest.approx(
+        metrics_one_batch["explained_variance"], rel=1e-4
+    )
+
+
 def test_explained_variance_invariant_to_activation_shift(
     model: HookedTransformer,
     example_dataset: Dataset,

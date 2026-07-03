@@ -579,7 +579,6 @@ def get_sparsity_and_variance_metrics(
                 (flattened_sae_input - flattened_sae_out).pow(2).sum(dim=-1)
             )
 
-            mse = resid_sum_of_squares / flattened_mask.sum()
             # Explained variance (old, incorrect, formula)
             batched_variance_sum = (
                 (flattened_sae_input - flattened_sae_input.mean(dim=0))
@@ -600,7 +599,10 @@ def get_sparsity_and_variance_metrics(
             )
             cossim = (x_normed * x_hat_normed).sum(dim=-1)
 
-            metric_dict["mse"].append(mse)
+            # Per-token squared reconstruction error ||x - x_hat||^2, averaged
+            # over all tokens after the eval loop. Matches the training MSE
+            # convention of sum over dimensions, mean over tokens.
+            metric_dict["mse"].append(resid_sum_of_squares)
             metric_dict["cossim"].append(cossim)
 
         if compute_featurewise_density_statistics:
