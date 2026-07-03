@@ -13,9 +13,9 @@ from transformer_lens import HookedTransformer
 from sae_lens.config import LanguageModelSAERunnerConfig
 from sae_lens.evals import (
     EvalConfig,
+    ExplainedVarianceCalculator,
     _kl,
     all_loadable_saes,
-    compute_explained_variance,
     get_downstream_reconstruction_metrics,
     get_eval_everything_config,
     get_saes_from_regex,
@@ -34,7 +34,6 @@ from sae_lens.saes.batchtopk_sae import (
 from sae_lens.saes.sae import SAE, TrainingSAE
 from sae_lens.saes.standard_sae import StandardSAE, StandardTrainingSAE
 from sae_lens.saes.topk_sae import TopKTrainingSAE
-from sae_lens.synthetic.evals import ExplainedVarianceCalculator
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
 from tests.helpers import (
@@ -703,13 +702,49 @@ def test_explained_variance_invariant_to_activation_shift(
     )
 
 
+def _explained_variance(
+    input_batches: list[torch.Tensor], output_batches: list[torch.Tensor]
+) -> float:
+    calc = ExplainedVarianceCalculator()
+    for sae_input, sae_output in zip(input_batches, output_batches):
+        calc.add_batch(sae_output=sae_output, hidden_acts=sae_input)
+    return calc.compute()
+
+
+def test_explained_variance_matches_hand_computed_example():
+    # mu = [1, 2]
+    # total_variance    = E[sum_d (x_d - mu_d)^2] = ((1 + 4) + (1 + 4)) / 2 = 5
+    # residual_variance = E[sum_d (x_d - x_hat_d)^2] = (1 + 1) / 2 = 1
+    # explained_variance = 1 - 1/5 = 0.8
+    x = torch.tensor([[2.0, 0.0], [0.0, 4.0]])
+    x_hat = torch.tensor([[2.0, 1.0], [0.0, 3.0]])
+
+    assert _explained_variance([x], [x_hat]) == pytest.approx(0.8)
+
+
+def test_explained_variance_perfect_reconstruction_returns_one():
+    x = torch.randn(1000, 8) + 5.0
+
+    assert _explained_variance([x], [x]) == pytest.approx(1.0)
+
+
+def test_explained_variance_predicting_the_mean_returns_zero():
+    # Regression canary for GH #659: the buggy formula measured variance
+    # relative to zero, so predicting the mean reported EV near 1 for
+    # activations with a large mean component instead of 0.
+    x = torch.randn(10000, 8, dtype=torch.float64) + 5.0
+    x_hat = x.mean(dim=0, keepdim=True).expand_as(x)
+
+    assert _explained_variance([x], [x_hat]) == pytest.approx(0.0, abs=1e-9)
+
+
 def test_explained_variance_single_batch_matches_formula():
     d_model = 8
     n_samples = 10000
     x = torch.randn(n_samples, d_model) + 5.0
     x_hat = x + torch.randn(n_samples, d_model) * 0.3
 
-    ev = compute_explained_variance([x], [x_hat])
+    ev = _explained_variance([x], [x_hat])
 
     total_var = x.var(dim=0, correction=0).sum()
     residual_var = (x - x_hat).pow(2).sum(dim=-1).mean()
@@ -718,19 +753,19 @@ def test_explained_variance_single_batch_matches_formula():
     assert ev == pytest.approx(expected_ev, rel=1e-5)
 
 
-def test_explained_variance_batched_matches_unbatched():
+def test_explained_variance_batched_matches_unbatched_with_unequal_batch_sizes():
     d_model = 8
-    n_samples = 3000
-    x = torch.randn(n_samples, d_model) + 5.0
-    x_hat = x + torch.randn(n_samples, d_model) * 0.3
+    x = torch.randn(3000, d_model, dtype=torch.float64) + 5.0
+    x_hat = x + torch.randn(3000, d_model, dtype=torch.float64) * 0.3
 
-    ev_single = compute_explained_variance([x], [x_hat])
+    ev_single = _explained_variance([x], [x_hat])
 
-    x_batches = list(x.chunk(3))
-    x_hat_batches = list(x_hat.chunk(3))
-    ev_batched = compute_explained_variance(x_batches, x_hat_batches)
+    # Unequal batch sizes: every sample must be weighted equally, so the split
+    # must not change the result.
+    sizes = [1500, 1000, 500]
+    ev_batched = _explained_variance(list(x.split(sizes)), list(x_hat.split(sizes)))
 
-    assert ev_batched == pytest.approx(ev_single, rel=1e-5)
+    assert ev_batched == pytest.approx(ev_single, rel=1e-12)
 
 
 def test_explained_variance_invariant_to_input_bias():
@@ -740,10 +775,10 @@ def test_explained_variance_invariant_to_input_bias():
     x = torch.randn(n_samples, d_model, dtype=torch.float64)
     x_hat = x + torch.randn(n_samples, d_model, dtype=torch.float64) * 0.3
 
-    ev_original = compute_explained_variance([x], [x_hat])
+    ev_original = _explained_variance([x], [x_hat])
 
     bias = torch.full((d_model,), 100.0, dtype=torch.float64)
-    ev_biased = compute_explained_variance([x + bias], [x_hat + bias])
+    ev_biased = _explained_variance([x + bias], [x_hat + bias])
 
     assert ev_biased == pytest.approx(ev_original, rel=1e-10)
 
@@ -754,31 +789,24 @@ def test_explained_variance_zero_total_variance():
     x = torch.full((n_samples, d_model), 5.0)
 
     # Constant input, perfect reconstruction -> 1.0
-    assert compute_explained_variance([x], [x]) == 1.0
+    assert _explained_variance([x], [x]) == 1.0
 
     # Constant input, nonzero residual -> 0.0
     x_hat = x + 0.5
-    assert compute_explained_variance([x], [x_hat]) == 0.0
+    assert _explained_variance([x], [x_hat]) == 0.0
 
 
-def test_explained_variance_matches_synthetic_calculator():
-    d_model = 8
-    n_samples = 3000
-    batch_size = 1000
-    x = torch.randn(n_samples, d_model) + 5.0
-    x_hat = x + torch.randn(n_samples, d_model) * 0.3
+def test_explained_variance_with_no_samples_returns_zero():
+    assert ExplainedVarianceCalculator().compute() == 0.0
 
-    x_batches = list(x.split(batch_size))
-    x_hat_batches = list(x_hat.split(batch_size))
 
-    ev_evals = compute_explained_variance(x_batches, x_hat_batches)
+def test_explained_variance_with_known_noise_level():
+    # x ~ N(0, 1), x_hat = x + N(0, 0.5^2) -> EV = 1 - 0.25/1 = 0.75
+    num_samples = 100000
+    x = torch.randn(num_samples, 1)
+    x_hat = x + 0.5 * torch.randn(num_samples, 1)
 
-    calc = ExplainedVarianceCalculator(hidden_dim=d_model)
-    for inp, out in zip(x_batches, x_hat_batches):
-        calc.add_batch(sae_output=out, hidden_acts=inp)
-    ev_synthetic = calc.compute()
-
-    assert ev_evals == pytest.approx(ev_synthetic, rel=1e-5)
+    assert _explained_variance([x], [x_hat]) == pytest.approx(0.75, abs=0.02)
 
 
 def test_process_args():
