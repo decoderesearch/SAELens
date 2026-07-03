@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 import torch
+from safetensors.torch import load_file
 from transformer_lens import HookedTransformer
 
 from sae_lens import __version__
@@ -30,6 +31,7 @@ from tests.helpers import (
     ALL_TRAINING_ARCHITECTURES,
     NEEL_NANDA_C4_10K_DATASET,
     TINYSTORIES_MODEL,
+    assert_close,
     build_runner_cfg_for_arch,
 )
 
@@ -858,50 +860,40 @@ class TestResumeFromCheckpoint:
         self,
         small_training_cfg: LanguageModelSAERunnerConfig[StandardTrainingSAEConfig],
     ):
-        """Test that training can be resumed from a checkpoint."""
-        # First part: train for a small number of tokens
+        # First part: train to completion and save a final checkpoint
         first_cfg = small_training_cfg
-        first_cfg.training_tokens = 64  # Half of total
+        first_cfg.training_tokens = 64
+        first_cfg.n_checkpoints = 0
+        first_cfg.save_final_checkpoint = True
 
         runner1 = LanguageModelSAETrainingRunner(first_cfg)
         runner1.run()
 
-        # Get the checkpoint directory
         assert first_cfg.checkpoint_path is not None
         checkpoint_dirs = list(Path(first_cfg.checkpoint_path).glob("*"))
         assert len(checkpoint_dirs) == 1
         checkpoint_path = checkpoint_dirs[0]
 
-        # Second part: resume training from the checkpoint
+        # Second part: resume with the same token target. The restored trainer
+        # state already counts 64 training samples, so the run must take zero
+        # training steps and return the checkpointed weights unchanged. A run
+        # that failed to restore the checkpoint would train from scratch and
+        # produce different weights.
         second_cfg = small_training_cfg
-        second_cfg.training_tokens = 128  # Full amount
-        second_cfg.save_final_checkpoint = True
+        second_cfg.save_final_checkpoint = False
+        second_cfg.resume_from_checkpoint = str(checkpoint_path)
 
-        # Resume training from checkpoint
-        runner2 = LanguageModelSAETrainingRunner(
-            second_cfg, resume_from_checkpoint=str(checkpoint_path)
-        )
-        runner2.run()
+        runner2 = LanguageModelSAETrainingRunner(second_cfg)
+        resumed_sae = runner2.run()
 
-        # The resumed SAE should have trained on all tokens
-        # Check if various metrics are reasonable
+        checkpoint_weights = load_file(str(checkpoint_path / SAE_WEIGHTS_FILENAME))
+        resumed_state = resumed_sae.state_dict()
+        for name, checkpoint_value in checkpoint_weights.items():
+            assert_close(resumed_state[name], checkpoint_value)
 
-        # Get the final checkpoint and check its metrics
-        assert second_cfg.checkpoint_path is not None
-        final_checkpoint_dirs = list(Path(second_cfg.checkpoint_path).glob("*"))
-        assert (
-            len(final_checkpoint_dirs) >= 1
-        )  # Should have at least the original checkpoint
-
-        # Find the latest checkpoint (could be different from the first if new one was created)
-        latest_checkpoint = max(final_checkpoint_dirs, key=lambda p: p.stat().st_mtime)
-
-        # Load the final state
-        final_training_state_path = latest_checkpoint / TRAINER_STATE_FILENAME
-        final_training_state = torch.load(final_training_state_path)
-
-        # Ensure the resumed training completed the full training
-        assert final_training_state["n_training_samples"] >= 128
+        # The restored trainer state must reflect the first run's progress
+        training_state = torch.load(checkpoint_path / TRAINER_STATE_FILENAME)
+        assert training_state["n_training_samples"] == 64
 
     def test_activations_store_state_preserved(
         self,

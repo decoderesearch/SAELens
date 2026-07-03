@@ -119,7 +119,6 @@ class LanguageModelSAETrainingRunner:
         override_dataset: HfDataset | None = None,
         override_model: HookedRootModule | None = None,
         override_sae: TrainingSAE[Any] | None = None,
-        resume_from_checkpoint: Path | str | None = None,
     ):
         if override_dataset is not None:
             logger.warning(
