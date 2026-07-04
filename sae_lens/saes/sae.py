@@ -842,6 +842,10 @@ class TrainingSAEConfig(SAEConfig, ABC):
     @abstractmethod
     def architecture(cls) -> str: ...
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.add_training_info_to_metadata()
+
     @classmethod
     def from_sae_runner_config(
         cls: type[T_TRAINING_SAE_CONFIG],
