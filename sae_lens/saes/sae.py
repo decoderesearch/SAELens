@@ -884,7 +884,7 @@ class TrainingSAEConfig(SAEConfig, ABC):
         return {
             **super().to_dict(),
             **asdict(self),
-            "metadata": self.metadata.to_dict(),
+            "metadata": self._metadata_with_training_info(),
             "architecture": self.architecture(),
         }
 
@@ -893,6 +893,35 @@ class TrainingSAEConfig(SAEConfig, ABC):
         Get the architecture for inference.
         """
         return get_sae_class(self.architecture())[1]
+
+    def get_training_architecture_details(self) -> dict[str, Any]:
+        """
+        Return config fields that describe training behavior but are not needed
+        by the inference SAE architecture.
+        """
+        inference_config_field_names = {
+            field.name for field in fields(self.get_inference_config_class())
+        }
+        return {
+            field.name: getattr(self, field.name)
+            for field in fields(self)
+            if field.name not in inference_config_field_names
+            and field.name != "metadata"
+        }
+
+    def _metadata_with_training_info(self) -> dict[str, Any]:
+        metadata = self.metadata.to_dict()
+        metadata["training_architecture"] = self.architecture()
+        metadata["training_architecture_details"] = (
+            self.get_training_architecture_details()
+        )
+        return metadata
+
+    def add_training_info_to_metadata(self) -> None:
+        self.metadata.training_architecture = self.architecture()
+        self.metadata.training_architecture_details = (
+            self.get_training_architecture_details()
+        )
 
     # this needs to exist so we can initialize the parent sae cfg without the training specific
     # parameters. Maybe there's a cleaner way to do this
@@ -908,7 +937,7 @@ class TrainingSAEConfig(SAEConfig, ABC):
             for field_name in base_config_field_names
         }
         result_dict["architecture"] = base_sae_cfg_class.architecture()
-        result_dict["metadata"] = self.metadata.to_dict()
+        result_dict["metadata"] = self._metadata_with_training_info()
         return result_dict
 
 
@@ -916,6 +945,7 @@ class TrainingSAE(SAE[T_TRAINING_SAE_CONFIG], ABC):
     """Abstract base class for training versions of SAEs."""
 
     def __init__(self, cfg: T_TRAINING_SAE_CONFIG, use_error_term: bool = False):
+        cfg.add_training_info_to_metadata()
         super().__init__(cfg, use_error_term)
 
         # Turn off hook_z reshaping for training mode - the activation store

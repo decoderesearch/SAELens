@@ -82,6 +82,11 @@ def test_LanguageModelSAETrainingRunner_runs_and_saves_all_architectures(
     assert sae.cfg.metadata.exclude_special_tokens is True
     assert sae.cfg.metadata.sae_lens_version == __version__
     assert sae.cfg.metadata.sae_lens_training_version == __version__
+    assert sae.cfg.metadata.training_architecture == architecture
+    assert (
+        sae.cfg.metadata.training_architecture_details
+        == cfg.sae.get_training_architecture_details()
+    )
 
     assert (tmp_path / "final_100").exists()
     loaded_sae = TrainingSAE.load_from_disk(tmp_path / "final_100")
@@ -698,6 +703,20 @@ def test_LanguageModelSAETrainingRunner_saves_final_output_and_checkpoints(
     # we should save the inference model in the final output, not the training model
     assert sae.cfg.architecture() == "batchtopk"
     assert output_sae.cfg.architecture() == "jumprelu"
+    assert checkpoint_sae.cfg.metadata.training_architecture == "batchtopk"
+    assert output_sae.cfg.metadata.training_architecture == "batchtopk"
+    assert checkpoint_sae.cfg.metadata.training_architecture_details == {
+        "decoder_init_norm": 0.1,
+        "aux_loss_coefficient": 1.0,
+        "use_sparse_activations": False,
+        "k": 10,
+        "rescale_acts_by_decoder_norm": False,
+        "topk_threshold_lr": 0.02,
+    }
+    assert (
+        output_sae.cfg.metadata.training_architecture_details
+        == checkpoint_sae.cfg.metadata.training_architecture_details
+    )
 
     # Models should have the same architecture and dimensions
     assert output_sae.cfg.d_in == checkpoint_sae.cfg.d_in
