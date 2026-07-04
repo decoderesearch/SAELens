@@ -46,13 +46,19 @@ jobs:
           path: ~/.cache/huggingface
           restore-keys: |
             huggingface-${{ runner.os }}-3.11-
+      # The save step below uses a unique per-run key: GitHub caches are
+      # immutable, so re-saving under an existing key silently discards any
+      # configs fetched during this run. Restore falls back to the most recent
+      # cache via prefix match, so progress accumulates across runs even when
+      # a run fails partway through.
       - name: Restore SAE config cache
         id: cache-sae-config-restore
         uses: actions/cache/restore@v4
         with:
-          key: sae-config-cache-v1-${{ hashFiles('sae_lens/pretrained_saes.yaml') }}
+          key: sae-config-cache-v1-${{ hashFiles('sae_lens/pretrained_saes.yaml') }}-${{ github.run_id }}
           path: ~/.cache/sae_config_cache
           restore-keys: |
+            sae-config-cache-v1-${{ hashFiles('sae_lens/pretrained_saes.yaml') }}-
             sae-config-cache-v1-
       - name: Load cached Poetry installation
         id: cached-poetry

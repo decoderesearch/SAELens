@@ -1,9 +1,11 @@
 import json
+import time
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
+import requests
 import torch
 import yaml
 from huggingface_hub import hf_hub_download as real_hf_hub_download
@@ -13,6 +15,7 @@ from sparsify import SparseCoder, SparseCoderConfig
 
 from sae_lens import StandardSAE, StandardSAEConfig
 from sae_lens.loading.pretrained_sae_loaders import (
+    _get_with_rate_limit_retry,
     _infer_gemma_3_raw_cfg_dict,
     dictionary_learning_sae_huggingface_loader_1,
     gemma_2_sae_huggingface_loader,
@@ -2435,3 +2438,72 @@ def test_qwen_scope_sae_loads_via_from_pretrained(
 
     actual_acts = sae.encode(residual)
     assert_close(actual_acts, expected_acts)
+
+
+def _fake_response(
+    status_code: int, headers: dict[str, str] | None = None
+) -> requests.Response:
+    response = requests.Response()
+    response.status_code = status_code
+    response.headers.update(headers or {})
+    return response
+
+
+def test_get_with_rate_limit_retry_retries_on_429_and_honors_retry_after(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    responses = iter(
+        [
+            _fake_response(429, {"Retry-After": "3"}),
+            _fake_response(429),
+            _fake_response(200),
+        ]
+    )
+    sleeps: list[float] = []
+
+    def fake_get(url: str, **kwargs: Any) -> requests.Response:  # noqa: ARG001
+        return next(responses)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+
+    response = _get_with_rate_limit_retry("http://test/url", {})
+
+    assert response.status_code == 200
+    # First delay comes from the Retry-After header, second from exponential backoff
+    assert sleeps == [3.0, 2.0]
+
+
+def test_get_with_rate_limit_retry_raises_after_max_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[str] = []
+
+    def fake_get(url: str, **kwargs: Any) -> requests.Response:  # noqa: ARG001
+        calls.append(url)
+        return _fake_response(429)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+    with pytest.raises(requests.HTTPError, match="429"):
+        _get_with_rate_limit_retry("http://test/url", {}, max_attempts=3)
+
+    assert len(calls) == 3
+
+
+def test_get_with_rate_limit_retry_does_not_retry_other_errors(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[str] = []
+
+    def fake_get(url: str, **kwargs: Any) -> requests.Response:  # noqa: ARG001
+        calls.append(url)
+        return _fake_response(404)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    with pytest.raises(requests.HTTPError, match="404"):
+        _get_with_rate_limit_retry("http://test/url", {})
+
+    assert len(calls) == 1
