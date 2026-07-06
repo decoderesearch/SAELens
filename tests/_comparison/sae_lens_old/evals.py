@@ -16,8 +16,7 @@ import einops
 import pandas as pd
 import torch
 from tqdm import tqdm
-from transformer_lens import HookedTransformer
-from transformer_lens.hook_points import HookedRootModule
+from transformer_lens import HookedRootModule, HookedTransformer
 
 from tests._comparison.sae_lens_old.sae import SAE
 from tests._comparison.sae_lens_old.toolkit.pretrained_saes_directory import (
