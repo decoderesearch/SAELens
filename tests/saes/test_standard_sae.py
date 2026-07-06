@@ -19,6 +19,7 @@ from sae_lens.saes.standard_sae import (
 )
 from sae_lens.util import dtype_to_str
 from tests.helpers import (
+    ALL_FOLDABLE_ARCHITECTURES,
     assert_close,
     assert_not_close,
     build_runner_cfg,
@@ -696,3 +697,32 @@ def test_StandardSAE_forward_hooks():
     assert cache["hook_sae_acts_post"].equal(sae.encode(x))
     assert cache["hook_sae_recons"].equal(out)
     assert cache["hook_sae_output"].equal(out)
+
+
+@pytest.mark.parametrize("architecture", ALL_FOLDABLE_ARCHITECTURES)
+@torch.no_grad()
+def test_fold_W_dec_norm_keeps_parameter_storage_in_place(
+    architecture: str,
+):
+    cfg = build_sae_cfg_for_arch(architecture)
+    sae = SAE.from_dict(cfg.to_dict())
+    sae.turn_off_forward_pass_hook_z_reshaping()
+
+    for param in sae.parameters():
+        param.data = torch.rand_like(param)
+
+    w_dec_ptr = sae.W_dec.data.data_ptr()
+    w_enc_ptr = sae.W_enc.data.data_ptr()
+    b_enc_ptr = None
+    b_enc = getattr(sae, "b_enc", None)
+    if isinstance(b_enc, torch.nn.Parameter):
+        b_enc_ptr = b_enc.data.data_ptr()
+
+    sae.fold_W_dec_norm()
+
+    assert sae.W_dec.data.data_ptr() == w_dec_ptr
+    assert sae.W_enc.data.data_ptr() == w_enc_ptr
+    if b_enc_ptr is not None:
+        current_b_enc = getattr(sae, "b_enc", None)
+        assert isinstance(current_b_enc, torch.nn.Parameter)
+        assert current_b_enc.data.data_ptr() == b_enc_ptr
