@@ -33,7 +33,7 @@ from typing import Any, Literal
 import torch
 import wandb
 from safetensors.torch import save_file
-from transformer_lens.HookedRootModule import HookedRootModule
+from transformer_lens.HookedTransformer import HookedRootModule
 
 from sae_lens import __version__, logger
 from sae_lens.config import HfDataset, LoggingConfig, SAETrainerConfig

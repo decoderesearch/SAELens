@@ -17,7 +17,7 @@ from requests import HTTPError
 from safetensors.torch import save_file
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformer_lens.HookedRootModule import HookedRootModule
+from transformer_lens.HookedTransformer import HookedRootModule
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from tests._comparison.sae_lens_old import logger

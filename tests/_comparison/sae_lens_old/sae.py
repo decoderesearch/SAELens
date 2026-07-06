@@ -14,7 +14,7 @@ import torch
 from safetensors.torch import save_file
 from torch import nn
 from transformer_lens.hook_points import HookPoint
-from transformer_lens.HookedRootModule import HookedRootModule
+from transformer_lens.HookedTransformer import HookedRootModule
 from typing_extensions import deprecated
 
 from tests._comparison.sae_lens_old.config import (

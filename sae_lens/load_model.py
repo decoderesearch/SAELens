@@ -3,8 +3,7 @@ from typing import Any, Callable, Literal, cast
 import torch
 from transformer_lens import HookedTransformer
 from transformer_lens.hook_points import HookPoint
-from transformer_lens.HookedRootModule import HookedRootModule
-from transformer_lens.HookedTransformer import Loss, Output
+from transformer_lens.HookedTransformer import HookedRootModule, Loss, Output
 from transformer_lens.utils import (
     USE_DEFAULT_VALUE,
     get_tokens_with_bos_removed,

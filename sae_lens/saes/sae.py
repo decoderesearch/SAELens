@@ -23,7 +23,7 @@ from numpy.typing import NDArray
 from safetensors.torch import load_file, save_file
 from torch import nn
 from transformer_lens.hook_points import HookPoint
-from transformer_lens.HookedRootModule import HookedRootModule
+from transformer_lens.HookedTransformer import HookedRootModule
 from typing_extensions import deprecated, overload, override
 
 from sae_lens import __version__
