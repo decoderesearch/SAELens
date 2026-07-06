@@ -8,7 +8,7 @@ from typing import Any, cast
 import torch
 import wandb
 from simple_parsing import ArgumentParser
-from transformer_lens import HookedRootModule
+from transformer_lens.HookedRootModule import HookedRootModule
 
 from tests._comparison.sae_lens_old import logger
 from tests._comparison.sae_lens_old.config import (

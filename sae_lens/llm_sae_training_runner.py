@@ -14,7 +14,7 @@ import torch
 import wandb
 from safetensors.torch import save_file
 from simple_parsing import ArgumentParser, subgroups
-from transformer_lens import HookedRootModule
+from transformer_lens.HookedRootModule import HookedRootModule
 from typing_extensions import deprecated, override
 
 from sae_lens import logger

@@ -15,7 +15,7 @@ from huggingface_hub.utils import HfHubHTTPError
 from requests import HTTPError
 from safetensors.torch import load_file, save_file
 from tqdm.auto import tqdm
-from transformer_lens import HookedRootModule
+from transformer_lens.HookedRootModule import HookedRootModule
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from sae_lens import logger
