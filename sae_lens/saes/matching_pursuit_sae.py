@@ -151,12 +151,12 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
 
     @override
     def __post_init__(self):
-        super().__post_init__()
         if self.decoder_init_norm != 1.0:
             self.decoder_init_norm = 1.0
             warnings.warn(
                 "decoder_init_norm must be set to 1.0 for MatchingPursuitTrainingSAE, setting to 1.0"
             )
+        super().__post_init__()
 
 
 class MatchingPursuitTrainingSAE(TrainingSAE[MatchingPursuitTrainingSAEConfig]):

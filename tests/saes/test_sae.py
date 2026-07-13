@@ -37,6 +37,34 @@ def test_TrainingSAEConfig_to_and_from_dict_all_architectures(architecture: str)
     assert reloaded_cfg.to_dict() == cfg.to_dict()
     assert reloaded_cfg.__class__ == cfg.__class__
     assert reloaded_cfg.__class__ == get_sae_training_class(architecture)[1]
+    assert cfg.to_dict()["metadata"]["training_architecture"] == architecture
+
+
+def test_TrainingSAEConfig_serializes_training_architecture_details():
+    cfg = build_sae_training_cfg_for_arch(
+        architecture="matryoshka_batchtopk",
+        d_sae=128,
+        k=8,
+        rescale_acts_by_decoder_norm=False,
+        topk_threshold_lr=0.03,
+        matryoshka_widths=[32, 64, 128],
+        use_matryoshka_aux_loss=True,
+    )
+
+    cfg_dict = cfg.to_dict()
+    metadata = cfg_dict["metadata"]
+
+    assert metadata["training_architecture"] == "matryoshka_batchtopk"
+    assert metadata["training_architecture_details"] == {
+        "decoder_init_norm": 0.1,
+        "aux_loss_coefficient": 1.0,
+        "use_sparse_activations": False,
+        "k": 8,
+        "rescale_acts_by_decoder_norm": False,
+        "topk_threshold_lr": 0.03,
+        "matryoshka_widths": [32, 64, 128],
+        "use_matryoshka_aux_loss": True,
+    }
 
 
 @pytest.mark.parametrize("architecture", ALL_TRAINING_ARCHITECTURES)
