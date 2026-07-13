@@ -5,7 +5,7 @@ import torch
 import wandb
 from torch.optim import Adam
 from tqdm import tqdm
-from transformer_lens.hook_points import HookedRootModule
+from transformer_lens.HookedTransformer import HookedRootModule
 
 from tests._comparison.sae_lens_old import __version__
 from tests._comparison.sae_lens_old.config import LanguageModelSAERunnerConfig
