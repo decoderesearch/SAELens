@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v6.46.0 (2026-07-13)
+
+### Chore
+
+* chore: fix HookedRootModule type imports (#715) ([`9e08bfb`](https://github.com/decoderesearch/SAELens/commit/9e08bfb3e51332d65ea014b0205f744e5061ca2a))
+
+* chore: deploy_docs failures from HF rate limiting and lost cache progress (#713) ([`11b7eed`](https://github.com/decoderesearch/SAELens/commit/11b7eedef2c695d00f05ba59e36a284922a88823))
+
+### Feature
+
+* feat: preserve training architecture in SAE metadata (#714) ([`c12dacb`](https://github.com/decoderesearch/SAELens/commit/c12dacb0ae2e2d477653e9e0475a4c08e4aeba3b))
+
 ## v6.45.3 (2026-07-04)
 
 ### Fix
