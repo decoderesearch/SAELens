@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Literal
 
-import numpy as np
 import torch
 from torch import nn
 from typing_extensions import override
@@ -219,18 +218,26 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
 
     Similar to the inference-only JumpReLUSAE, but with:
 
-      - A learnable log-threshold parameter (instead of a raw threshold).
+      - A learnable threshold parameter.
       - A specialized auxiliary loss term for sparsity (L0 or similar).
+
+    The threshold is parameterized directly rather than as exp(log_threshold):
+    under Adam the per-step parameter movement is capped at ~lr regardless of
+    gradient magnitude, so a log parameterization moves the effective threshold
+    by only ~threshold * lr per step. With a small init this freezes the
+    threshold and the L0 penalty cannot reduce L0 at all (issue #494). The
+    reference implementations (DeepMind's pseudocode, dictionary_learning)
+    parameterize the threshold directly.
 
     Methods of interest include:
 
-    - initialize_weights: sets up W_enc, b_enc, W_dec, b_dec, and log_threshold.
+    - initialize_weights: sets up W_enc, b_enc, W_dec, b_dec, and threshold.
     - encode_with_hidden_pre_jumprelu: runs a forward pass for training.
     - training_forward_pass: calculates MSE and auxiliary losses, returning a TrainStepOutput.
     """
 
     b_enc: nn.Parameter
-    log_threshold: nn.Parameter
+    threshold: nn.Parameter
 
     def __init__(self, cfg: JumpReLUTrainingSAEConfig, use_error_term: bool = False):
         super().__init__(cfg, use_error_term)
@@ -238,30 +245,25 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
         # We'll store a bandwidth for the training approach, if needed
         self.bandwidth = cfg.jumprelu_bandwidth
 
-        # In typical JumpReLU training code, we may track a log_threshold:
-        self.log_threshold = nn.Parameter(
-            torch.ones(self.cfg.d_sae, dtype=self.dtype, device=self.device)
-            * np.log(cfg.jumprelu_init_threshold)
+        self.threshold = nn.Parameter(
+            torch.full(
+                (self.cfg.d_sae,),
+                cfg.jumprelu_init_threshold,
+                dtype=self.dtype,
+                device=self.device,
+            )
         )
 
     @override
     def initialize_weights(self) -> None:
         """
-        Initialize parameters like the base SAE, but also add log_threshold.
+        Initialize parameters like the base SAE, but also add b_enc.
         """
         super().initialize_weights()
         # Encoder Bias
         self.b_enc = nn.Parameter(
             torch.zeros(self.cfg.d_sae, dtype=self.dtype, device=self.device)
         )
-
-    @property
-    def threshold(self) -> torch.Tensor:
-        """
-        Returns the parameterized threshold > 0 for each unit.
-        threshold = exp(log_threshold).
-        """
-        return torch.exp(self.log_threshold)
 
     @override
     def encode_with_hidden_pre(
@@ -338,23 +340,15 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
 
         # Scale the threshold by the same factor as we scaled b_enc
         # This ensures the same features remain active/inactive after folding
-        self.log_threshold.data = torch.log(current_thresh * W_dec_norms)
-
-    @override
-    def process_state_dict_for_saving(self, state_dict: dict[str, Any]) -> None:
-        """Convert log_threshold to threshold for saving"""
-        if "log_threshold" in state_dict:
-            threshold = torch.exp(state_dict["log_threshold"]).detach().contiguous()
-            del state_dict["log_threshold"]
-            state_dict["threshold"] = threshold
+        self.threshold.data = current_thresh * W_dec_norms
 
     @override
     def process_state_dict_for_loading(self, state_dict: dict[str, Any]) -> None:
-        """Convert threshold to log_threshold for loading"""
-        if "threshold" in state_dict:
-            threshold = state_dict["threshold"]
-            del state_dict["threshold"]
-            state_dict["log_threshold"] = torch.log(threshold).detach().contiguous()
+        """Convert log_threshold from older checkpoints to threshold"""
+        if "log_threshold" in state_dict:
+            log_threshold = state_dict["log_threshold"]
+            del state_dict["log_threshold"]
+            state_dict["threshold"] = torch.exp(log_threshold).detach().contiguous()
 
 
 def calculate_pre_act_loss(

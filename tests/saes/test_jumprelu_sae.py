@@ -37,9 +37,8 @@ def test_JumpReLUTrainingSAE_encoding():
     # Check the JumpReLU thresholding
     sae_in = sae.process_sae_in(x)
     expected_hidden_pre = sae_in @ sae.W_enc + sae.b_enc
-    threshold = torch.exp(sae.log_threshold)
     expected_feature_acts = JumpReLU.apply(
-        expected_hidden_pre, threshold, sae.bandwidth
+        expected_hidden_pre, sae.threshold, sae.bandwidth
     )
 
     assert_close(feature_acts, expected_feature_acts, atol=1e-6)  # type: ignore
@@ -155,8 +154,8 @@ def test_JumpReLUTrainingSAE_initialization():
 
     assert sae.W_enc.shape == (cfg.d_in, cfg.d_sae)
     assert sae.W_dec.shape == (cfg.d_sae, cfg.d_in)
-    assert isinstance(sae.log_threshold, torch.nn.Parameter)
-    assert sae.log_threshold.shape == (cfg.d_sae,)
+    assert isinstance(sae.threshold, torch.nn.Parameter)
+    assert sae.threshold.shape == (cfg.d_sae,)
     assert sae.b_enc.shape == (cfg.d_sae,)
     assert sae.b_dec.shape == (cfg.d_in,)
     assert isinstance(sae.activation_fn, torch.nn.ReLU)
@@ -188,14 +187,14 @@ def test_JumpReLUTrainingSAE_save_and_load_inference_sae(tmp_path: Path) -> None
     training_sae.W_dec.data = torch.randn_like(training_sae.W_dec.data)
     training_sae.b_enc.data = torch.randn_like(training_sae.b_enc.data)
     training_sae.b_dec.data = torch.randn_like(training_sae.b_dec.data)
-    training_sae.log_threshold.data = torch.randn_like(training_sae.log_threshold.data)
+    training_sae.threshold.data = torch.rand_like(training_sae.threshold.data)
 
     # Save original state for comparison
     original_W_enc = training_sae.W_enc.data.clone()
     original_W_dec = training_sae.W_dec.data.clone()
     original_b_enc = training_sae.b_enc.data.clone()
     original_b_dec = training_sae.b_dec.data.clone()
-    original_threshold = training_sae.threshold.data.clone()  # exp(log_threshold)
+    original_threshold = training_sae.threshold.data.clone()
 
     # Save as inference model
     model_path = str(tmp_path)
@@ -215,7 +214,7 @@ def test_JumpReLUTrainingSAE_save_and_load_inference_sae(tmp_path: Path) -> None
     assert_close(inference_sae.b_enc, original_b_enc)
     assert_close(inference_sae.b_dec, original_b_dec)
 
-    # Most importantly, check that log_threshold was converted to threshold
+    # Most importantly, check that the threshold roundtrips to inference
     assert_close(inference_sae.threshold, original_threshold)
 
     # Verify forward pass gives same results
@@ -371,7 +370,7 @@ def test_JumpReLUTrainingSAE_tanh_scale_increases_l0_loss():
     sae_large.W_dec.data = sae_small.W_dec.data.clone()
     sae_large.b_enc.data = sae_small.b_enc.data.clone()
     sae_large.b_dec.data = sae_small.b_dec.data.clone()
-    sae_large.log_threshold.data = sae_small.log_threshold.data.clone()
+    sae_large.threshold.data = sae_small.threshold.data.clone()
 
     # Use same input for both
     x = torch.randn(batch_size, cfg_small.d_in)
