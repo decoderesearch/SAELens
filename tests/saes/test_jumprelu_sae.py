@@ -403,9 +403,9 @@ def test_JumpReLUTrainingSAE_tanh_scale_increases_l0_loss():
     l0_loss_small = train_step_output_small.losses["l0_loss"]
     l0_loss_large = train_step_output_large.losses["l0_loss"]
 
-    assert l0_loss_large > l0_loss_small, (
-        f"Expected l0_loss_large ({l0_loss_large}) > l0_loss_small ({l0_loss_small})"
-    )
+    assert (
+        l0_loss_large > l0_loss_small
+    ), f"Expected l0_loss_large ({l0_loss_large}) > l0_loss_small ({l0_loss_small})"
 
     # Verify the feature activations are the same (since weights are identical)
     assert_close(
