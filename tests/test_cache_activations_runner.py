@@ -124,6 +124,58 @@ def test_load_cached_activations(tmp_path: Path):
         )
 
 
+def test_load_cached_activations_does_not_load_the_dataset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    cfg = _default_cfg(tmp_path)
+    runner = CacheActivationsRunner(cfg)
+    runner.run()
+
+    model = HookedTransformer.from_pretrained(cfg.model_name)
+
+    def fail_if_called(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError(
+            "load_dataset should not be called when reading cached activations"
+        )
+
+    monkeypatch.setattr(
+        "sae_lens.training.activations_store.load_dataset", fail_if_called
+    )
+
+    activations_store = ActivationsStore.from_config(model, cfg)
+
+    assert activations_store.dataset is None
+    buffer = activations_store.get_raw_llm_batch()
+    assert buffer[0].shape == (
+        activations_store.store_batch_size_prompts * cfg.context_size,
+        cfg.d_in,
+    )
+
+
+def test_activations_store_requires_dataset_or_cache_path():
+    with pytest.raises(
+        ValueError, match="Either dataset or cached_activations_path must be provided"
+    ):
+        ActivationsStore(
+            model=HookedTransformer.from_pretrained("gelu-1l"),
+            dataset=None,
+            cached_activations_path=None,
+            streaming=False,
+            hook_name="blocks.0.hook_mlp_out",
+            hook_head_index=None,
+            context_size=8,
+            d_in=512,
+            n_batches_in_buffer=2,
+            total_training_tokens=16,
+            store_batch_size_prompts=8,
+            train_batch_size_tokens=8,
+            prepend_bos=False,
+            normalize_activations="none",
+            device=torch.device("cpu"),
+            dtype="float32",
+        )
+
+
 def test_cache_activations_runner_to_string():
     cfg = _default_cfg(Path("tmp_path"))
     runner = CacheActivationsRunner(cfg)
