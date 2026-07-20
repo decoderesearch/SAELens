@@ -87,6 +87,9 @@ def test_LanguageModelSAETrainingRunner_runs_and_saves_all_architectures(
         sae.cfg.metadata.training_architecture_details
         == cfg.sae.get_training_architecture_details()
     )
+    assert 0 <= sae.cfg.metadata["l0"] <= sae.cfg.d_sae
+    # far fewer steps have run than the 1000-step dead feature window
+    assert sae.cfg.metadata["num_dead_features"] == 0
 
     assert (tmp_path / "final_100").exists()
     loaded_sae = TrainingSAE.load_from_disk(tmp_path / "final_100")
@@ -716,6 +719,14 @@ def test_LanguageModelSAETrainingRunner_saves_final_output_and_checkpoints(
     assert (
         output_sae.cfg.metadata.training_architecture_details
         == checkpoint_sae.cfg.metadata.training_architecture_details
+    )
+    # batchtopk with k=10 caps the mean l0 at 10
+    assert 0 < checkpoint_sae.cfg.metadata["l0"] <= 10
+    assert checkpoint_sae.cfg.metadata["num_dead_features"] == 0
+    assert output_sae.cfg.metadata["l0"] == checkpoint_sae.cfg.metadata["l0"]
+    assert (
+        output_sae.cfg.metadata["num_dead_features"]
+        == checkpoint_sae.cfg.metadata["num_dead_features"]
     )
 
     # Models should have the same architecture and dimensions

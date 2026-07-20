@@ -340,6 +340,10 @@ def test_checkpoints_save_runner_cfg(
     for checkpoint_cfg_path in checkpoint_cfg_paths:
         with open(checkpoint_cfg_path) as f:
             checkpoint_cfg = json.load(f)
+        if checkpoint_cfg_path.parent.name.startswith("final_"):
+            # the final checkpoint additionally records end-of-training stats
+            assert checkpoint_cfg["metadata"].pop("l0") >= 0
+            assert checkpoint_cfg["metadata"].pop("num_dead_features") == 0
         assert checkpoint_cfg == cfg.sae.to_dict()
 
     for checkpoint_runner_cfg_path in checkpoint_runner_cfg_paths:
@@ -494,6 +498,41 @@ def test_sae_trainer_saves_final_checkpoint_when_enabled(
     assert (final_checkpoint_dir / "sae_weights.safetensors").exists()
     assert (final_checkpoint_dir / "cfg.json").exists()
     assert (final_checkpoint_dir / "sparsity.safetensors").exists()
+
+    # fit() records end-of-training stats in the metadata before saving
+    with open(final_checkpoint_dir / "cfg.json") as f:
+        saved_metadata = json.load(f)["metadata"]
+    assert saved_metadata["l0"] == pytest.approx(trainer.feature_sparsity.sum().item())
+    assert saved_metadata["num_dead_features"] == trainer.dead_neurons.sum().item()
+
+
+def test_set_final_sae_metadata_records_l0_and_num_dead_features(
+    trainer: SAETrainer[StandardTrainingSAE, StandardTrainingSAEConfig],
+) -> None:
+    d_sae = trainer.sae.cfg.d_sae
+    trainer.act_freq_scores = torch.zeros(d_sae)
+    trainer.act_freq_scores[:3] = torch.tensor([4.0, 2.0, 2.0])
+    trainer.n_frac_active_samples = 4
+    trainer.n_forward_passes_since_fired = torch.zeros(d_sae)
+    trainer.n_forward_passes_since_fired[:2] = trainer.cfg.dead_feature_window + 1
+
+    trainer.set_final_sae_metadata()
+
+    # firing probabilities are (1.0, 0.5, 0.5), so the mean l0 is 2.0
+    assert trainer.sae.cfg.metadata.l0 == pytest.approx(2.0)
+    assert trainer.sae.cfg.metadata.num_dead_features == 2
+
+
+def test_set_final_sae_metadata_skips_when_no_samples_seen(
+    trainer: SAETrainer[StandardTrainingSAE, StandardTrainingSAEConfig],
+) -> None:
+    trainer.n_frac_active_samples = 0
+
+    trainer.set_final_sae_metadata()
+
+    # an empty sparsity window would make l0 a NaN, so nothing is recorded
+    assert trainer.sae.cfg.metadata.l0 is None
+    assert trainer.sae.cfg.metadata.num_dead_features is None
 
 
 def test_sae_trainer_skips_final_checkpoint_when_disabled(

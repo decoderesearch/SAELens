@@ -193,11 +193,31 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
             )
             self.activation_scaler.scaling_factor = None
 
+        self.set_final_sae_metadata()
+
         if self.cfg.save_final_checkpoint:
             self.save_checkpoint(checkpoint_name=f"final_{self.n_training_samples}")
 
         pbar.close()
         return self.sae
+
+    @torch.no_grad()
+    def set_final_sae_metadata(self) -> None:
+        """
+        Record end-of-training stats in the SAE metadata so they are saved
+        along with the SAE.
+
+        Public seam used by `fit()` and external coordinators (e.g.
+        `MultiSAETrainer`) once training is complete, since these stats are
+        only known at the end of training.
+        """
+        # feature_sparsity holds per-feature firing probabilities over the
+        # current sparsity window, so its sum is the mean l0 over that window.
+        # Skip when the window is empty (training never stepped): 0/0 would
+        # store NaN, which is not valid strict JSON.
+        if self.n_frac_active_samples > 0:
+            self.sae.cfg.metadata.l0 = self.feature_sparsity.sum().item()
+            self.sae.cfg.metadata.num_dead_features = self.dead_neurons.sum().item()
 
     def save_checkpoint(
         self,
