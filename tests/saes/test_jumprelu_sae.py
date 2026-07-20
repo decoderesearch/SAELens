@@ -3,8 +3,10 @@ from pathlib import Path
 
 import pytest
 import torch
+from safetensors.torch import save_file
 from torch import nn
 
+from sae_lens.constants import SAE_WEIGHTS_FILENAME
 from sae_lens.saes.jumprelu_sae import (
     JumpReLU,
     JumpReLUSAE,
@@ -401,14 +403,65 @@ def test_JumpReLUTrainingSAE_tanh_scale_increases_l0_loss():
     l0_loss_small = train_step_output_small.losses["l0_loss"]
     l0_loss_large = train_step_output_large.losses["l0_loss"]
 
-    assert (
-        l0_loss_large > l0_loss_small
-    ), f"Expected l0_loss_large ({l0_loss_large}) > l0_loss_small ({l0_loss_small})"
+    assert l0_loss_large > l0_loss_small, (
+        f"Expected l0_loss_large ({l0_loss_large}) > l0_loss_small ({l0_loss_small})"
+    )
 
     # Verify the feature activations are the same (since weights are identical)
     assert_close(
         train_step_output_small.feature_acts, train_step_output_large.feature_acts
     )
+
+
+def test_JumpReLUTrainingSAE_threshold_travels_at_the_adam_step_size():
+    init_threshold = 0.01
+    lr = 1e-3
+    steps = 50
+    cfg = build_jumprelu_sae_training_cfg(
+        jumprelu_init_threshold=init_threshold, l0_coefficient=1.0
+    )
+    sae = JumpReLUTrainingSAE(cfg)
+    optimizer = torch.optim.Adam(sae.parameters(), lr=lr)
+
+    for _ in range(steps):
+        train_step_output = sae.training_forward_pass(
+            step_input=TrainStepInput(
+                sae_in=torch.randn(512, cfg.d_in),
+                coefficients={"l0": 1.0},
+                dead_neuron_mask=None,
+                n_training_steps=0,
+                is_logging_step=False,
+            ),
+        )
+        optimizer.zero_grad()
+        train_step_output.loss.backward()
+        optimizer.step()
+
+    movement = sae.threshold.detach().mean().item() - init_threshold
+    # Adam normalizes by the gradient magnitude, so a step moves a parameter by
+    # at most ~lr. Parameterizing the threshold as exp(log_threshold) therefore
+    # caps its travel at ~init_threshold * lr * steps, which freezes it and
+    # leaves the l0 penalty unable to reduce l0 at all (#494).
+    assert movement > 20 * init_threshold * lr * steps
+    assert movement < lr * steps
+
+
+def test_JumpReLUTrainingSAE_loads_legacy_log_threshold_checkpoint(
+    tmp_path: Path,
+) -> None:
+    cfg = build_jumprelu_sae_training_cfg(device="cpu")
+    sae = JumpReLUTrainingSAE(cfg)
+    sae.threshold.data = torch.rand_like(sae.threshold.data) + 0.1
+    expected_threshold = sae.threshold.data.clone()
+
+    legacy_state_dict = {k: v.clone() for k, v in sae.state_dict().items()}
+    legacy_state_dict["log_threshold"] = torch.log(legacy_state_dict.pop("threshold"))
+    save_file(legacy_state_dict, tmp_path / SAE_WEIGHTS_FILENAME)
+
+    loaded_sae = JumpReLUTrainingSAE(cfg)
+    loaded_sae.load_weights_from_checkpoint(tmp_path)
+
+    assert_close(loaded_sae.threshold, expected_threshold, atol=1e-6)
 
 
 def test_JumpReLUTrainingSAE_errors_on_invalid_sparsity_loss_mode():
