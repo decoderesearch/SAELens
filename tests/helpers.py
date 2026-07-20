@@ -7,6 +7,7 @@ import torch
 from transformer_lens import HookedTransformer
 
 from sae_lens.config import LanguageModelSAERunnerConfig, LoggingConfig
+from sae_lens.registry import SAE_TRAINING_CLASS_REGISTRY
 from sae_lens.saes.batchtopk_sae import BatchTopKTrainingSAEConfig
 from sae_lens.saes.gated_sae import GatedSAEConfig, GatedTrainingSAEConfig
 from sae_lens.saes.jumprelu_sae import JumpReLUSAEConfig, JumpReLUTrainingSAEConfig
@@ -15,7 +16,14 @@ from sae_lens.saes.matching_pursuit_sae import (
     MatchingPursuitTrainingSAEConfig,
 )
 from sae_lens.saes.matryoshka_batchtopk_sae import MatryoshkaBatchTopKTrainingSAEConfig
-from sae_lens.saes.sae import T_TRAINING_SAE_CONFIG, SAEConfig, TrainingSAEConfig
+from sae_lens.saes.sae import (
+    T_TRAINING_SAE_CONFIG,
+    SAEConfig,
+    TrainingSAE,
+    TrainingSAEConfig,
+    TrainStepInput,
+    TrainStepOutput,
+)
 from sae_lens.saes.standard_sae import StandardSAEConfig, StandardTrainingSAEConfig
 from sae_lens.saes.temporal_sae import TemporalSAEConfig
 from sae_lens.saes.topk_sae import TopKSAEConfig, TopKTrainingSAEConfig
@@ -36,15 +44,7 @@ ALL_FOLDABLE_ARCHITECTURES = [
     "gated",
     "jumprelu",
 ]  # Architectures with fold W_dec to unit norm implementation
-ALL_TRAINING_ARCHITECTURES = [
-    "standard",
-    "gated",
-    "jumprelu",
-    "topk",
-    "batchtopk",
-    "matryoshka_batchtopk",
-    "matching_pursuit",
-]
+ALL_TRAINING_ARCHITECTURES = list(SAE_TRAINING_CLASS_REGISTRY.keys())
 
 
 def to_sparse(tensor: torch.Tensor) -> torch.Tensor:
@@ -725,6 +725,21 @@ def random_params(model: torch.nn.Module) -> None:
         param.data = torch.rand_like(param)
     for buffer in model.buffers():
         buffer.data = torch.rand_like(buffer)
+
+
+def run_training_forward_pass_with_cache(
+    sae: TrainingSAE[Any], step_input: TrainStepInput
+) -> tuple[TrainStepOutput, dict[str, torch.Tensor]]:
+    """
+    Like ``run_with_cache``, but captures the values flowing through each SAE hook
+    point during ``training_forward_pass`` rather than during ``forward``. Returns the
+    train step output alongside a hook-name -> activation cache, so tests can verify
+    the hooks actually fire during the training forward pass itself.
+    """
+    cache, fwd_hooks, _ = sae.get_caching_hooks()
+    with sae.hooks(fwd_hooks=fwd_hooks):
+        step_output = sae.training_forward_pass(step_input)
+    return step_output, cache
 
 
 SAE_TRAINING_CONFIG_BUILDERS = {

@@ -1122,3 +1122,265 @@ def test_error_term_unchanged_when_latents_ablated():
 
     # Verify outputs changed (ablation had an effect on reconstruction)
     assert not torch.allclose(output_ablated, output_baseline, atol=1e-5)
+
+
+# ============================================================================
+# exclude_special_tokens Tests
+# ============================================================================
+
+
+def test_exclude_special_tokens_stored_on_wrapper(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+
+    model.add_sae(hooked_sae, exclude_special_tokens=True)
+    wrapper = get_deep_attr(model, act_name)
+    assert isinstance(wrapper, _SAEWrapper)
+    assert wrapper.exclude_special_tokens is True
+    model.reset_saes()
+
+    model.add_sae(hooked_sae, exclude_special_tokens=[1, 2, 3])
+    wrapper = get_deep_attr(model, act_name)
+    assert wrapper.exclude_special_tokens == [1, 2, 3]
+    model.reset_saes()
+
+    model.add_sae(hooked_sae, exclude_special_tokens=False)
+    wrapper = get_deep_attr(model, act_name)
+    assert wrapper.exclude_special_tokens is False
+    model.reset_saes()
+
+
+def test_exclude_special_tokens_context_manager_stores_setting(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+    with model.saes(saes=[hooked_sae], exclude_special_tokens=True):
+        wrapper = get_deep_attr(model, act_name)
+        assert isinstance(wrapper, _SAEWrapper)
+        assert wrapper.exclude_special_tokens is True
+    assert len(model._acts_to_saes) == 0
+
+
+def test_exclude_special_tokens_bypasses_bos_position(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+
+    _, cache_no_sae = model.run_with_cache(prompt, prepend_bos=True)
+    _, cache_with_exclusion = model.run_with_cache_with_saes(
+        prompt,
+        saes=[hooked_sae],
+        use_error_term=False,
+        exclude_special_tokens=True,
+        prepend_bos=True,
+    )
+
+    # hook_sae_output at BOS (position 0) must equal the original activation
+    # because BOS is excluded and the wrapper restores original_output there
+    sae_out_at_bos = cache_with_exclusion[act_name + ".hook_sae_output"][:, 0, ...]
+    original_at_bos = cache_no_sae[act_name][:, 0, ...]
+    assert_close(sae_out_at_bos, original_at_bos, atol=1e-5)
+
+
+def test_exclude_special_tokens_false_applies_sae_at_bos(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+
+    _, cache_no_sae = model.run_with_cache(prompt, prepend_bos=True)
+    _, cache_with_sae = model.run_with_cache_with_saes(
+        prompt,
+        saes=[hooked_sae],
+        use_error_term=False,
+        exclude_special_tokens=False,
+        prepend_bos=True,
+    )
+
+    # With no exclusion, BOS position is also reconstructed by the SAE
+    sae_out_at_bos = cache_with_sae[act_name + ".hook_sae_output"][:, 0, ...]
+    original_at_bos = cache_no_sae[act_name][:, 0, ...]
+    assert_not_close(sae_out_at_bos, original_at_bos)
+
+
+def test_exclude_specific_token_ids_bypasses_those_positions(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+
+    tokens = model.to_tokens(prompt, prepend_bos=True)
+    target_token_id = int(tokens[0, 1].item())
+
+    _, cache_no_sae = model.run_with_cache(prompt, prepend_bos=True)
+    _, cache_with_exclusion = model.run_with_cache_with_saes(
+        prompt,
+        saes=[hooked_sae],
+        use_error_term=False,
+        exclude_special_tokens=[target_token_id],
+        prepend_bos=True,
+    )
+
+    # Position 1 has the excluded token — must match original
+    assert_close(
+        cache_with_exclusion[act_name + ".hook_sae_output"][:, 1, ...],
+        cache_no_sae[act_name][:, 1, ...],
+        atol=1e-5,
+    )
+
+
+def test_exclude_special_tokens_run_with_saes(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    logits = model.run_with_saes(
+        prompt, saes=[hooked_sae], use_error_term=True, exclude_special_tokens=True
+    )
+    assert logits is not None
+    assert len(model._acts_to_saes) == 0
+
+
+def test_exclude_special_tokens_run_with_cache_with_saes(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    logits, cache = model.run_with_cache_with_saes(
+        prompt, saes=[hooked_sae], use_error_term=True, exclude_special_tokens=True
+    )
+    assert logits is not None
+    act_name = hooked_sae.cfg.metadata.hook_name
+    assert act_name + ".hook_sae_acts_post" in cache
+    assert len(model._acts_to_saes) == 0
+
+
+def test_exclude_special_tokens_run_with_hooks_with_saes(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    c = Counter()
+    act_name = hooked_sae.cfg.metadata.hook_name
+    logits = model.run_with_hooks_with_saes(
+        prompt,
+        saes=[hooked_sae],
+        fwd_hooks=[(act_name + ".hook_sae_acts_post", c.inc)],
+        exclude_special_tokens=True,
+    )
+    assert logits is not None
+    assert c.count == 1
+    assert len(model._acts_to_saes) == 0
+
+
+def test_exclude_special_tokens_restored_after_context_exit(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+
+    model.add_sae(hooked_sae, exclude_special_tokens=True)
+    assert model._acts_to_saes[act_name].exclude_special_tokens is True
+
+    second_sae = SAE.from_dict(hooked_sae.cfg.to_dict())  # type: ignore
+    with model.saes(saes=[second_sae], exclude_special_tokens=False):
+        assert model._acts_to_saes[act_name].exclude_special_tokens is False
+
+    # Original wrapper (exclude_special_tokens=True) should be restored
+    assert model._acts_to_saes[act_name].exclude_special_tokens is True
+    model.reset_saes()
+
+
+def test_exclude_special_tokens_empty_list_applies_sae_everywhere(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+
+    _, cache_empty_exclude = model.run_with_cache_with_saes(
+        prompt,
+        saes=[hooked_sae],
+        use_error_term=False,
+        exclude_special_tokens=[],
+        prepend_bos=True,
+    )
+    _, cache_no_exclude = model.run_with_cache_with_saes(
+        prompt,
+        saes=[hooked_sae],
+        use_error_term=False,
+        exclude_special_tokens=False,
+        prepend_bos=True,
+    )
+
+    # Both empty-list and False should produce identical SAE outputs
+    assert_close(
+        cache_empty_exclude[act_name + ".hook_sae_output"],
+        cache_no_exclude[act_name + ".hook_sae_output"],
+        atol=1e-6,
+    )
+
+
+def test_exclude_special_tokens_zeroes_sae_error_at_excluded_positions(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+
+    _, cache = model.run_with_cache_with_saes(
+        prompt,
+        saes=[hooked_sae],
+        use_error_term=True,
+        exclude_special_tokens=True,
+        prepend_bos=True,
+    )
+
+    error = cache[act_name + ".hook_sae_error"]
+    # BOS (position 0) is excluded, so it has no SAE error
+    assert torch.all(error[:, 0, ...] == 0)
+    # Non-excluded positions still have a real error term
+    assert error[:, 1:, ...].abs().sum() > 0
+
+
+def test_exclude_special_tokens_mask_cleared_after_forward(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+    model.add_sae(hooked_sae, exclude_special_tokens=True)
+    wrapper = model._acts_to_saes[act_name]
+
+    model(prompt)
+
+    assert wrapper._token_mask is None
+    model.reset_saes()
+
+
+def test_exclude_special_tokens_mask_cleared_when_forward_raises(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+    model.add_sae(hooked_sae, exclude_special_tokens=True)
+    wrapper = model._acts_to_saes[act_name]
+
+    def raise_error(tensor: torch.Tensor, hook: HookPoint) -> torch.Tensor:  # noqa: ARG001
+        raise RuntimeError("boom")
+
+    # hook_embed fires before any SAE wrapper, so the wrapper never runs and
+    # only the context manager can clean up the mask
+    with pytest.raises(RuntimeError, match="boom"):
+        model.run_with_hooks(prompt, fwd_hooks=[("hook_embed", raise_error)])
+
+    assert wrapper._token_mask is None
+    model.reset_saes()
+
+
+def test_exclude_special_tokens_with_token_tensor_input(
+    model: HookedSAETransformer, hooked_sae: SAE
+):
+    act_name = hooked_sae.cfg.metadata.hook_name
+    tokens = model.to_tokens(prompt, prepend_bos=True)
+
+    _, cache_no_sae = model.run_with_cache(tokens)
+    _, cache_with_exclusion = model.run_with_cache_with_saes(
+        tokens,
+        saes=[hooked_sae],
+        use_error_term=False,
+        exclude_special_tokens=True,
+    )
+
+    # BOS position must match the original activation even when the input is
+    # already a token tensor rather than a string
+    assert_close(
+        cache_with_exclusion[act_name + ".hook_sae_output"][:, 0, ...],
+        cache_no_sae[act_name][:, 0, ...],
+        atol=1e-5,
+    )

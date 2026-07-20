@@ -15,6 +15,7 @@ from tests.helpers import (
     build_topk_sae_cfg,
     build_topk_sae_training_cfg,
     random_params,
+    run_training_forward_pass_with_cache,
 )
 
 
@@ -477,3 +478,47 @@ def test_TopKSAE_fold_W_dec_norm_errors_when_rescale_acts_by_decoder_norm_is_Fal
 
     with pytest.raises(NotImplementedError):
         sae.fold_W_dec_norm()
+
+
+def test_TopKTrainingSAE_training_forward_pass_hooks():
+    sae = TopKTrainingSAE(build_topk_sae_training_cfg())
+    x = torch.randn(32, sae.cfg.d_in)
+    step_input = TrainStepInput(
+        sae_in=x,
+        coefficients={},
+        dead_neuron_mask=None,
+        n_training_steps=0,
+        is_logging_step=False,
+    )
+    # topk rescales hidden_pre by the decoder norm after hook_sae_acts_pre fires,
+    # so the hook captures the raw pre-activation, not train_step_output.hidden_pre
+    raw_hidden_pre = sae.process_sae_in(x) @ sae.W_enc + sae.b_enc
+
+    train_step_output, train_cache = run_training_forward_pass_with_cache(
+        sae, step_input
+    )
+    assert train_cache["hook_sae_input"].equal(x)
+    assert train_cache["hook_sae_acts_pre"].equal(raw_hidden_pre)
+    assert train_cache["hook_sae_acts_post"].equal(train_step_output.feature_acts)
+    assert train_cache["hook_sae_recons"].equal(train_step_output.sae_out)
+
+    # Verify training output matches a regular run_with_cache forward pass
+    _, cache = sae.run_with_cache(x)
+    assert train_cache["hook_sae_input"].equal(cache["hook_sae_input"])
+    assert train_cache["hook_sae_acts_pre"].equal(cache["hook_sae_acts_pre"])
+    assert train_cache["hook_sae_acts_post"].equal(cache["hook_sae_acts_post"])
+    assert train_cache["hook_sae_recons"].equal(cache["hook_sae_recons"])
+    assert train_cache["hook_sae_recons"].equal(cache["hook_sae_output"])
+
+
+def test_TopKSAE_forward_hooks():
+    sae = TopKSAE(build_topk_sae_cfg())
+    x = torch.randn(32, sae.cfg.d_in)
+    out, cache = sae.run_with_cache(x)
+    assert cache["hook_sae_input"].equal(x)
+    assert cache["hook_sae_acts_pre"].equal(
+        sae.process_sae_in(x) @ sae.W_enc + sae.b_enc
+    )
+    assert cache["hook_sae_acts_post"].equal(sae.encode(x))
+    assert cache["hook_sae_recons"].equal(out)
+    assert cache["hook_sae_output"].equal(out)

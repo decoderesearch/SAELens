@@ -47,25 +47,22 @@ class BatchTopKTrainingSAEConfig(TopKTrainingSAEConfig):
         k (float): Average number of features to keep active across the batch. Unlike
             standard TopK SAEs where k is an integer per sample, this is a float
             representing the average number of active features across all samples in
-            the batch. Defaults to 100.
+            the batch.
         topk_threshold_lr (float): Learning rate for updating the global topk threshold.
             The threshold is updated using an exponential moving average of the minimum
-            positive activation value. Defaults to 0.01.
+            positive activation value.
         aux_loss_coefficient (float): Coefficient for the auxiliary loss that encourages
             dead neurons to learn useful features. Inherited from TopKTrainingSAEConfig.
-            Defaults to 1.0.
         rescale_acts_by_decoder_norm (bool): Treat the decoder as if it was already normalized.
-            Inherited from TopKTrainingSAEConfig. Defaults to True.
+            Inherited from TopKTrainingSAEConfig.
         decoder_init_norm (float | None): Norm to initialize decoder weights to.
-            Inherited from TrainingSAEConfig. Defaults to 0.1.
+            Inherited from TrainingSAEConfig.
         d_in (int): Input dimension (dimensionality of the activations being encoded).
             Inherited from SAEConfig.
         d_sae (int): SAE latent dimension (number of features in the SAE).
             Inherited from SAEConfig.
         dtype (str): Data type for the SAE parameters. Inherited from SAEConfig.
-            Defaults to "float32".
         device (str): Device to place the SAE on. Inherited from SAEConfig.
-            Defaults to "cpu".
     """
 
     k: float = 100  # type: ignore[assignment]
@@ -102,6 +99,7 @@ class BatchTopKTrainingSAE(TopKTrainingSAE):
             torch.tensor(0.0, dtype=torch.double, device=self.W_dec.device),
         )
 
+    @override
     def get_activation_fn(self) -> Callable[[torch.Tensor], torch.Tensor]:
         return BatchTopK(self.cfg.k)
 

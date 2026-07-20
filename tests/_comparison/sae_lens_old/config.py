@@ -83,8 +83,8 @@ class LanguageModelSAERunnerConfig:
         from_pretrained_path (str, optional): The path to a pretrained SAE. We can finetune an existing SAE if needed.
         apply_b_dec_to_input (bool): Whether to apply the decoder bias to the input. Not currently advised.
         decoder_orthogonal_init (bool): Whether to use orthogonal initialization for the decoder. Not currently advised.
-        decoder_heuristic_init (bool): Whether to use heuristic initialization for the decoder. See Anthropic April Update.
-        init_encoder_as_decoder_transpose (bool): Whether to initialize the encoder as the transpose of the decoder. See Anthropic April Update.
+        decoder_heuristic_init (bool): Whether to use heuristic initialization for the decoder. See Anthropic April 2024 Update.
+        init_encoder_as_decoder_transpose (bool): Whether to initialize the encoder as the transpose of the decoder. See Anthropic April 2024 Update.
         n_batches_in_buffer (int): The number of batches in the buffer. When not using cached activations, a buffer in ram is used. The larger it is, the better shuffled the activations will be.
         training_tokens (int): The number of training tokens.
         finetuning_tokens (int): The number of finetuning tokens. See [here](https://www.lesswrong.com/posts/3JuSjTZyMzaSeTxKk/addressing-feature-suppression-in-saes)
@@ -184,7 +184,7 @@ class LanguageModelSAERunnerConfig:
     training_tokens: int = 2_000_000
     finetuning_tokens: int = 0
     store_batch_size_prompts: int = 32
-    normalize_activations: str = "none"  # none, expected_average_only_in (Anthropic April Update), constant_norm_rescale (Anthropic Feb Update)
+    normalize_activations: str = "none"  # none, expected_average_only_in (Anthropic April 2024 Update), constant_norm_rescale (Anthropic Feb 2024 Update)
     seqpos_slice: tuple[int | None, ...] = (None,)
 
     # Misc

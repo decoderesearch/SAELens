@@ -18,7 +18,7 @@ import pandas as pd
 import torch
 from tqdm.auto import tqdm
 from transformer_lens import HookedTransformer
-from transformer_lens.hook_points import HookedRootModule
+from transformer_lens.HookedTransformer import HookedRootModule
 
 from sae_lens.loading.pretrained_saes_directory import get_pretrained_saes_directory
 from sae_lens.saes.sae import SAE, SAEConfig
@@ -381,6 +381,50 @@ def get_downstream_reconstruction_metrics(
     return metrics
 
 
+class ExplainedVarianceCalculator:
+    """Streaming calculator for explained variance (R²) over batches.
+
+    Computes 1 - E[||x - x_hat||²] / Var(x), where Var(x) = E[||x||²] - ||E[x]||²
+    is the total variance summed over dimensions. Batches may have different
+    sizes; every sample is weighted equally.
+
+    Cross-batch sums are accumulated on CPU in float64, since Var(x) is a
+    difference of two large nearly-equal numbers when activations have a large
+    mean component and is prone to catastrophic cancellation.
+    """
+
+    def __init__(self) -> None:
+        self.sum_x: torch.Tensor | None = None
+        self.sum_squared_norm = 0.0
+        self.sum_squared_residual = 0.0
+        self.num_samples = 0
+
+    def add_batch(self, sae_output: torch.Tensor, hidden_acts: torch.Tensor) -> None:
+        """Add a batch. Both shapes: (batch_size, hidden_dim)."""
+        batch_sum = hidden_acts.sum(dim=0).to(device="cpu", dtype=torch.float64)
+        self.sum_x = batch_sum if self.sum_x is None else self.sum_x + batch_sum
+        self.sum_squared_norm += hidden_acts.pow(2).sum().item()
+        self.sum_squared_residual += (hidden_acts - sae_output).pow(2).sum().item()
+        self.num_samples += hidden_acts.shape[0]
+
+    def compute(self) -> float:
+        """Return explained variance (R²) across all samples."""
+        if self.num_samples == 0 or self.sum_x is None:
+            return 0.0
+
+        # Total variance = E[||x||²] - ||E[x]||²
+        mean_squared_norm = self.sum_squared_norm / self.num_samples
+        mean_x = self.sum_x / self.num_samples
+        total_variance = mean_squared_norm - mean_x.pow(2).sum().item()
+
+        # MSE = E[||x - x_hat||²]
+        mse = self.sum_squared_residual / self.num_samples
+
+        if total_variance < 1e-10:
+            return 1.0 if mse < 1e-10 else 0.0
+        return 1.0 - mse / total_variance
+
+
 def get_sparsity_and_variance_metrics(
     sae: SAE[Any],
     model: HookedRootModule,
@@ -411,9 +455,7 @@ def get_sparsity_and_variance_metrics(
         metric_dict["l0"] = []
         metric_dict["l1"] = []
 
-    mean_sum_of_squares = []  # for explained variance
-    mean_act_per_dimension = []  # for explained variance
-    mean_sum_of_resid_squared = []  # for explained variance
+    explained_variance_calc = ExplainedVarianceCalculator()
     if compute_variance_metrics:
         # explained_variance is left out of the dict here, since we don't want to naively
         # average over the batch dimension. This is handled later in the function.
@@ -537,7 +579,6 @@ def get_sparsity_and_variance_metrics(
                 (flattened_sae_input - flattened_sae_out).pow(2).sum(dim=-1)
             )
 
-            mse = resid_sum_of_squares / flattened_mask.sum()
             # Explained variance (old, incorrect, formula)
             batched_variance_sum = (
                 (flattened_sae_input - flattened_sae_input.mean(dim=0))
@@ -546,17 +587,8 @@ def get_sparsity_and_variance_metrics(
             )
             explained_variance_legacy = 1 - resid_sum_of_squares / batched_variance_sum
             metric_dict["explained_variance_legacy"].append(explained_variance_legacy)
-            # Individual sums for the new (correct) formula. We're taking the mean over the batch
-            # dimension here to save memory, but we could also pass the full tensors and take the
-            # mean later (like we do for other metrics).
-            mean_sum_of_squares.append(
-                (flattened_sae_input).pow(2).sum(dim=-1).mean(dim=0)  # scalar
-            )
-            mean_act_per_dimension.append(
-                (flattened_sae_input).pow(2).mean(dim=0)  # [d_model]
-            )
-            mean_sum_of_resid_squared.append(
-                resid_sum_of_squares.mean(dim=0)  # scalar
+            explained_variance_calc.add_batch(
+                sae_output=flattened_sae_out, hidden_acts=flattened_sae_input
             )
 
             x_normed = flattened_sae_input / torch.norm(
@@ -567,7 +599,10 @@ def get_sparsity_and_variance_metrics(
             )
             cossim = (x_normed * x_hat_normed).sum(dim=-1)
 
-            metric_dict["mse"].append(mse)
+            # Per-token squared reconstruction error ||x - x_hat||^2, averaged
+            # over all tokens after the eval loop. Matches the training MSE
+            # convention of sum over dimensions, mean over tokens.
+            metric_dict["mse"].append(resid_sum_of_squares)
             metric_dict["cossim"].append(cossim)
 
         if compute_featurewise_density_statistics:
@@ -587,11 +622,7 @@ def get_sparsity_and_variance_metrics(
 
     # calculate explained variance
     if compute_variance_metrics:
-        mean_sum_of_squares = torch.stack(mean_sum_of_squares).mean(dim=0)
-        mean_act_per_dimension = torch.cat(mean_act_per_dimension).mean(dim=0)
-        total_variance = mean_sum_of_squares - mean_act_per_dimension**2
-        residual_variance = torch.stack(mean_sum_of_resid_squared).mean(dim=0)
-        metrics["explained_variance"] = (1 - residual_variance / total_variance).item()
+        metrics["explained_variance"] = explained_variance_calc.compute()
 
     # Aggregate feature-wise metrics
     feature_metrics: dict[str, list[float]] = {}

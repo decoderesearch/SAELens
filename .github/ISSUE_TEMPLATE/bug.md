@@ -15,7 +15,7 @@ Please try to provide a minimal example to reproduce the bug. Error messages and
 **System Info**
 Describe the characteristic of your environment:
 
-- Describe how `transformer_lens` was installed (pip, docker, source, ...)
+- Describe how `SAELens` was installed (pip, docker, source, ...)
 - What OS are you using? (Linux, MacOS, Windows)
 - Python version (We suppourt 3.10 -3.12 currently)
 

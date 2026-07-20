@@ -13,7 +13,8 @@ import einops
 import torch
 from safetensors.torch import save_file
 from torch import nn
-from transformer_lens.hook_points import HookedRootModule, HookPoint
+from transformer_lens.hook_points import HookPoint
+from transformer_lens.HookedTransformer import HookedRootModule
 from typing_extensions import deprecated
 
 from tests._comparison.sae_lens_old.config import (
@@ -517,11 +518,11 @@ class SAE(HookedRootModule):
 
         return model_weights_path, cfg_path
 
-    # overwrite this in subclasses to modify the state_dict in-place before saving
+    # override this in subclasses to modify the state_dict in-place before saving
     def process_state_dict_for_saving(self, state_dict: dict[str, Any]) -> None:
         pass
 
-    # overwrite this in subclasses to modify the state_dict in-place after loading
+    # override this in subclasses to modify the state_dict in-place after loading
     def process_state_dict_for_loading(self, state_dict: dict[str, Any]) -> None:
         pass
 

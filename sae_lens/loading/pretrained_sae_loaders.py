@@ -1,5 +1,6 @@
 import json
 import re
+import time
 import warnings
 from pathlib import Path
 from typing import Any, Protocol
@@ -1746,6 +1747,24 @@ def mwhanna_transcoder_huggingface_loader(
     return cfg_dict, state_dict, None
 
 
+def _get_with_rate_limit_retry(
+    url: str, headers: dict[str, str | bytes], max_attempts: int = 5
+) -> requests.Response:
+    """GET a URL, retrying on HTTP 429 with backoff (honors Retry-After, capped at 60s)."""
+    for attempt in range(max_attempts):
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code != 429 or attempt == max_attempts - 1:
+            response.raise_for_status()
+            return response
+        retry_after = response.headers.get("Retry-After")
+        delay = min(float(retry_after) if retry_after else 2.0**attempt, 60.0)
+        logger.warning(
+            f"Rate limited (HTTP 429) fetching {url}, retrying in {delay:.0f}s"
+        )
+        time.sleep(delay)
+    raise AssertionError("unreachable")
+
+
 def get_safetensors_tensor_shapes(repo_id: str, filename: str) -> dict[str, list[int]]:
     """
     Get tensor shapes from a safetensors file on HuggingFace Hub
@@ -1767,15 +1786,13 @@ def get_safetensors_tensor_shapes(repo_id: str, filename: str) -> dict[str, list
 
     # Fetch first 8 bytes to get metadata size
     headers: dict[str, str | bytes] = {**hf_headers, "Range": "bytes=0-7"}
-    response = requests.get(url, headers=headers, timeout=10)
-    response.raise_for_status()
+    response = _get_with_rate_limit_retry(url, headers)
 
     meta_size = int.from_bytes(response.content, byteorder="little")
 
     # Fetch the metadata header
     headers = {**hf_headers, "Range": f"bytes=8-{8 + meta_size - 1}"}
-    response = requests.get(url, headers=headers, timeout=10)
-    response.raise_for_status()
+    response = _get_with_rate_limit_retry(url, headers)
 
     metadata_json = response.content.decode("utf-8").strip()
     metadata = json.loads(metadata_json)

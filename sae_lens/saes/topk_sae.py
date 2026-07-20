@@ -121,26 +121,22 @@ class TopKSAEConfig(SAEConfig):
 
     Args:
         k (int): Number of top features to keep active during inference. Only the top k
-            features with the highest pre-activations will be non-zero. Defaults to 100.
+            features with the highest pre-activations will be non-zero.
         rescale_acts_by_decoder_norm (bool): Whether to treat the decoder as if it was
             already normalized. This affects the topk selection by rescaling pre-activations
-            by decoder norms. Requires that the SAE was trained this way. Defaults to False.
+            by decoder norms. Requires that the SAE was trained this way.
         d_in (int): Input dimension (dimensionality of the activations being encoded).
             Inherited from SAEConfig.
         d_sae (int): SAE latent dimension (number of features in the SAE).
             Inherited from SAEConfig.
         dtype (str): Data type for the SAE parameters. Inherited from SAEConfig.
-            Defaults to "float32".
         device (str): Device to place the SAE on. Inherited from SAEConfig.
-            Defaults to "cpu".
         apply_b_dec_to_input (bool): Whether to apply decoder bias to the input
-            before encoding. Inherited from SAEConfig. Defaults to True.
+            before encoding. Inherited from SAEConfig.
         normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm"]):
             Normalization strategy for input activations. Inherited from SAEConfig.
-            Defaults to "none".
         reshape_activations (Literal["none", "hook_z"]): How to reshape activations
             (useful for attention head outputs). Inherited from SAEConfig.
-            Defaults to "none".
         metadata (SAEMetadata): Metadata about the SAE (model name, hook name, etc.).
             Inherited from SAEConfig.
     """
@@ -251,6 +247,7 @@ class TopKSAE(SAE[TopKSAEConfig]):
         super().initialize_weights()
         _init_weights_topk(self)
 
+    @override
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Converts input x into feature activations.
@@ -260,9 +257,10 @@ class TopKSAE(SAE[TopKSAEConfig]):
         hidden_pre = self.hook_sae_acts_pre(sae_in @ self.W_enc + self.b_enc)
         if self.cfg.rescale_acts_by_decoder_norm:
             hidden_pre = hidden_pre * self.W_dec.norm(dim=-1)
-        # The BaseSAE already sets self.activation_fn to TopK(...) if config requests topk.
+        # The base SAE already sets self.activation_fn to TopK(...) if config requests topk.
         return self.hook_sae_acts_post(self.activation_fn(hidden_pre))
 
+    @override
     def decode(
         self,
         feature_acts: torch.Tensor,
@@ -293,7 +291,7 @@ class TopKSAE(SAE[TopKSAEConfig]):
             raise NotImplementedError(
                 "Folding W_dec_norm is not safe for TopKSAEs when rescale_acts_by_decoder_norm is False, as this may change the topk activations"
             )
-        _fold_norm_topk(W_dec=self.W_dec, b_enc=self.b_enc, W_enc=self.W_enc)
+        super().fold_W_dec_norm()
 
 
 @dataclass
@@ -303,37 +301,33 @@ class TopKTrainingSAEConfig(TrainingSAEConfig):
 
     Args:
         k (int): Number of top features to keep active. Only the top k features
-            with the highest pre-activations will be non-zero. Defaults to 100.
+            with the highest pre-activations will be non-zero.
         use_sparse_activations (bool): Whether to use sparse tensor representations
             for activations during training. This can reduce memory usage and improve
             performance when k is small relative to d_sae, but is only worthwhile if
-            using float32 and not using autocast. Defaults to False.
+            using float32 and not using autocast.
         aux_loss_coefficient (float): Coefficient for the auxiliary loss that encourages
             dead neurons to learn useful features. This loss helps prevent neuron death
             in TopK SAEs by having dead neurons reconstruct the residual error from
-            live neurons. Defaults to 1.0.
+            live neurons.
         rescale_acts_by_decoder_norm (bool): Treat the decoder as if it was already normalized.
             This is a good idea since decoder norm can randomly drift during training, and this
-            affects what the topk activations will be. Defaults to True.
+            affects what the topk activations will be.
         decoder_init_norm (float | None): Norm to initialize decoder weights to.
             0.1 corresponds to the "heuristic" initialization from Anthropic's April update.
-            Use None to disable. Inherited from TrainingSAEConfig. Defaults to 0.1.
+            Use None to disable. Inherited from TrainingSAEConfig.
         d_in (int): Input dimension (dimensionality of the activations being encoded).
             Inherited from SAEConfig.
         d_sae (int): SAE latent dimension (number of features in the SAE).
             Inherited from SAEConfig.
         dtype (str): Data type for the SAE parameters. Inherited from SAEConfig.
-            Defaults to "float32".
         device (str): Device to place the SAE on. Inherited from SAEConfig.
-            Defaults to "cpu".
         apply_b_dec_to_input (bool): Whether to apply decoder bias to the input
-            before encoding. Inherited from SAEConfig. Defaults to True.
+            before encoding. Inherited from SAEConfig.
         normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm"]):
             Normalization strategy for input activations. Inherited from SAEConfig.
-            Defaults to "none".
         reshape_activations (Literal["none", "hook_z"]): How to reshape activations
             (useful for attention head outputs). Inherited from SAEConfig.
-            Defaults to "none".
         metadata (SAEMetadata): Metadata about the SAE training (model name, hook name, etc.).
             Inherited from SAEConfig.
     """
@@ -366,6 +360,7 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
         super().initialize_weights()
         _init_weights_topk(self)
 
+    @override
     def encode_with_hidden_pre(
         self, x: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -442,7 +437,7 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
             raise NotImplementedError(
                 "Folding W_dec_norm is not safe for TopKSAEs when rescale_acts_by_decoder_norm is False, as this may change the topk activations"
             )
-        _fold_norm_topk(W_dec=self.W_dec, b_enc=self.b_enc, W_enc=self.W_enc)
+        super().fold_W_dec_norm()
 
     @override
     def get_activation_fn(self) -> Callable[[torch.Tensor], torch.Tensor]:
@@ -512,6 +507,7 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
         super().process_state_dict_for_saving_inference(state_dict)
         if self.cfg.rescale_acts_by_decoder_norm:
             _fold_norm_topk(
+                W_dec_norm=self.get_W_dec_norm(),
                 W_enc=state_dict["W_enc"],
                 b_enc=state_dict["b_enc"],
                 W_dec=state_dict["W_dec"],
@@ -555,11 +551,11 @@ def _init_weights_topk(
 
 
 def _fold_norm_topk(
+    W_dec_norm: torch.Tensor,
     W_enc: torch.Tensor,
     b_enc: torch.Tensor,
     W_dec: torch.Tensor,
 ) -> None:
-    W_dec_norm = W_dec.norm(dim=-1).clamp(min=1e-8)
     b_enc.data = b_enc.data * W_dec_norm
     W_dec_norms = W_dec_norm.unsqueeze(1)
     W_dec.data = W_dec.data / W_dec_norms

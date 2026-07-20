@@ -11,7 +11,7 @@ from safetensors import safe_open
 from transformer_lens.hook_points import HookPoint
 
 from sae_lens.config import LanguageModelSAERunnerConfig
-from sae_lens.saes.sae import SAE, TrainingSAE, _disable_hooks
+from sae_lens.saes.sae import SAE, TrainStepInput, _disable_hooks
 from sae_lens.saes.standard_sae import (
     StandardSAE,
     StandardTrainingSAE,
@@ -19,16 +19,13 @@ from sae_lens.saes.standard_sae import (
 )
 from sae_lens.util import dtype_to_str
 from tests.helpers import (
-    ALL_ARCHITECTURES,
-    ALL_FOLDABLE_ARCHITECTURES,
-    ALL_TRAINING_ARCHITECTURES,
     assert_close,
     assert_not_close,
     build_runner_cfg,
     build_sae_cfg,
     build_sae_cfg_for_arch,
     build_sae_training_cfg,
-    build_sae_training_cfg_for_arch,
+    run_training_forward_pass_with_cache,
 )
 
 
@@ -252,7 +249,7 @@ def test_StandardSAE_fold_w_dec_norm(
     W_dec_norms = sae.W_dec.norm(dim=-1).unsqueeze(1)
     assert_close(sae2.W_dec.data, sae.W_dec.data / W_dec_norms)
     assert_close(sae2.W_enc.data, sae.W_enc.data * W_dec_norms.T)
-    assert_close(sae2.b_enc.data, sae.b_enc.data * W_dec_norms.squeeze())
+    assert_close(sae2.b_enc.data, sae.b_enc.data * W_dec_norms.squeeze(-1))
 
     # fold_W_dec_norm should normalize W_dec to have unit norm.
     assert sae2.W_dec.norm(dim=-1).mean().item() == pytest.approx(1.0, abs=1e-6)
@@ -275,102 +272,6 @@ def test_StandardSAE_fold_w_dec_norm(
 
     # but actual outputs should be the same
     assert_close(sae_out_1, sae_out_2, atol=1e-5)
-
-
-@pytest.mark.parametrize("architecture", ALL_ARCHITECTURES)
-@torch.no_grad()
-def test_sae_fold_w_dec_norm_all_architectures(architecture: str):
-    cfg = build_sae_cfg_for_arch(architecture)
-    sae = SAE.from_dict(cfg.to_dict())
-    sae.turn_off_forward_pass_hook_z_reshaping()  # hook z reshaping not needed here.
-
-    # make sure all parameters are not 0s
-    for param in sae.parameters():
-        param.data = torch.rand_like(param)
-
-    assert sae.W_dec.norm(dim=-1).mean().item() != pytest.approx(1.0, abs=1e-6)
-    sae2 = deepcopy(sae)
-
-    # If this is a topk SAE, assert this throws a NotImplementedError
-    if architecture not in ALL_FOLDABLE_ARCHITECTURES:
-        with pytest.raises(NotImplementedError):
-            sae2.fold_W_dec_norm()
-        return
-
-    sae2.fold_W_dec_norm()
-
-    # fold_W_dec_norm should normalize W_dec to have unit norm.
-    assert sae2.W_dec.norm(dim=-1).mean().item() == pytest.approx(1.0, abs=1e-6)
-
-    # we expect activations of features to differ by W_dec norm weights.
-    activations = torch.randn(10, 4, cfg.d_in, device=cfg.device)
-    feature_activations_1 = sae.encode(activations)
-    feature_activations_2 = sae2.encode(activations)
-
-    assert_close(
-        feature_activations_1.nonzero(),
-        feature_activations_2.nonzero(),
-    )
-
-    expected_feature_activations_2 = feature_activations_1 * sae.W_dec.norm(dim=-1)
-    assert_close(feature_activations_2, expected_feature_activations_2, atol=1e-5)
-
-    sae_out_1 = sae.decode(feature_activations_1)
-    sae_out_2 = sae2.decode(feature_activations_2)
-
-    # but actual outputs should be the same
-    assert_close(sae_out_1, sae_out_2, atol=1e-5)
-
-
-@pytest.mark.parametrize("architecture", ALL_TRAINING_ARCHITECTURES)
-@torch.no_grad()
-def test_training_sae_fold_w_dec_norm_all_architectures(architecture: str):
-    cfg = build_sae_training_cfg_for_arch(architecture)
-    sae = TrainingSAE.from_dict(cfg.to_dict())
-    sae.turn_off_forward_pass_hook_z_reshaping()  # hook z reshaping not needed here.
-
-    # make sure all parameters are not 0s
-    for param in sae.parameters():
-        param.data = torch.rand_like(param)
-
-    assert sae.W_dec.norm(dim=-1).mean().item() != pytest.approx(1.0, abs=1e-6)
-    sae2 = deepcopy(sae)
-
-    if architecture in {"matching_pursuit"}:
-        with pytest.raises(NotImplementedError):
-            sae2.fold_W_dec_norm()
-        return
-
-    sae2.fold_W_dec_norm()
-
-    # fold_W_dec_norm should normalize W_dec to have unit norm.
-    assert sae2.W_dec.norm(dim=-1).mean().item() == pytest.approx(1.0, abs=1e-6)
-
-    # we expect activations of features to differ by W_dec norm weights.
-    activations = torch.randn(10, 4, cfg.d_in, device=cfg.device)
-    feature_activations_1 = sae.encode(activations)
-    feature_activations_2 = sae2.encode(activations)
-
-    assert_close(
-        feature_activations_1.nonzero(),
-        feature_activations_2.nonzero(),
-    )
-
-    if architecture in {"topk", "batchtopk", "matryoshka_batchtopk"}:
-        # Due to how rescale_acts_by_decoder_norm works in TopKSAEs, it's like the
-        # SAE has the norm folded in throughout the entire training process.
-        assert_close(feature_activations_2, feature_activations_1, atol=1e-4, rtol=1e-4)
-    else:
-        expected_feature_activations_2 = feature_activations_1 * sae.W_dec.norm(dim=-1)
-        assert_close(
-            feature_activations_2, expected_feature_activations_2, atol=1e-4, rtol=1e-4
-        )
-
-    sae_out_1 = sae.decode(feature_activations_1)
-    sae_out_2 = sae2.decode(feature_activations_2)
-
-    # but actual outputs should be the same
-    assert_close(sae_out_1, sae_out_2)
 
 
 @torch.no_grad()
@@ -415,148 +316,6 @@ def test_StandardSAE_fold_norm_scaling_factor(
 
     # but actual outputs should be the same
     assert_close(sae_out_1, sae_out_2, atol=1e-5)
-
-
-@pytest.mark.parametrize("architecture", ALL_FOLDABLE_ARCHITECTURES)
-@torch.no_grad()
-def test_sae_fold_norm_scaling_factor_all_architectures(architecture: str):
-    cfg = build_sae_cfg_for_arch(architecture)
-    norm_scaling_factor = 3.0
-
-    sae = SAE.from_dict(cfg.to_dict())
-    # make sure all parameters are not 0s
-    for param in sae.parameters():
-        param.data = torch.rand_like(param)
-
-    sae2 = deepcopy(sae)
-    sae2.fold_activation_norm_scaling_factor(norm_scaling_factor)
-
-    assert sae2.cfg.normalize_activations == "none"
-
-    assert_close(sae2.W_enc.data, sae.W_enc.data * norm_scaling_factor)
-
-    # we expect activations of features to differ by W_dec norm weights.
-    # assume activations are already scaled
-    activations = torch.randn(10, 4, cfg.d_in, device=cfg.device)
-    # we divide to get the unscale activations
-    unscaled_activations = activations / norm_scaling_factor
-
-    feature_activations_1 = sae.encode(activations)
-    if feature_activations_1.is_sparse:
-        feature_activations_1 = feature_activations_1.to_dense()
-    # with the scaling folded in, the unscaled activations should produce the same
-    # result.
-    feature_activations_2 = sae2.encode(unscaled_activations)
-    if feature_activations_2.is_sparse:
-        feature_activations_2 = feature_activations_2.to_dense()
-
-    assert_close(
-        feature_activations_1.nonzero(),
-        feature_activations_2.nonzero(),
-    )
-
-    assert_close(feature_activations_2, feature_activations_1, atol=1e-5)
-
-    sae_out_1 = sae.decode(feature_activations_1)
-    sae_out_2 = norm_scaling_factor * sae2.decode(feature_activations_2)
-
-    # but actual outputs should be the same
-    assert_close(sae_out_1, sae_out_2, atol=1e-5)
-
-
-@pytest.mark.parametrize("architecture", ALL_FOLDABLE_ARCHITECTURES)
-@torch.no_grad()
-def test_fold_W_dec_norm_does_not_produce_nan_with_zero_norm_decoder(
-    architecture: str,
-):
-    """
-    Regression test for https://github.com/decoderesearch/SAELens/issues/588
-
-    When decoder weights have zero norm (dead latents), the division in
-    fold_W_dec_norm should not produce NaN values. This is handled by
-    clamping the norm to a minimum of 1e-8.
-    """
-    cfg = build_sae_cfg_for_arch(architecture)
-    sae = SAE.from_dict(cfg.to_dict())
-    sae.turn_off_forward_pass_hook_z_reshaping()
-
-    # Initialize parameters with random values
-    for param in sae.parameters():
-        param.data = torch.rand_like(param)
-
-    # Set some decoder rows to zero to simulate dead latents
-    num_zero_rows = min(5, sae.W_dec.shape[0])
-    sae.W_dec.data[:num_zero_rows] = 0.0
-
-    # Verify that we actually have zero-norm rows
-    norms_before = sae.W_dec.norm(dim=-1)
-    assert (norms_before[:num_zero_rows] == 0).all()
-
-    # TopK SAEs with rescale_acts_by_decoder_norm=False raise NotImplementedError
-    if architecture == "topk" and not getattr(
-        sae.cfg, "rescale_acts_by_decoder_norm", False
-    ):
-        with pytest.raises(NotImplementedError):
-            sae.fold_W_dec_norm()
-        return
-
-    # Call fold_W_dec_norm - this should not produce NaN values
-    sae.fold_W_dec_norm()
-
-    # Verify no NaN or Inf values in any parameters
-    for name, param in sae.named_parameters():
-        assert not torch.isnan(
-            param
-        ).any(), f"NaN found in {name} after fold_W_dec_norm"
-        assert not torch.isinf(
-            param
-        ).any(), f"Inf found in {name} after fold_W_dec_norm"
-
-
-@pytest.mark.parametrize("architecture", ALL_TRAINING_ARCHITECTURES)
-@torch.no_grad()
-def test_training_fold_W_dec_norm_does_not_produce_nan_with_zero_norm_decoder(
-    architecture: str,
-):
-    """
-    Regression test for https://github.com/decoderesearch/SAELens/issues/588
-
-    When decoder weights have zero norm (dead latents), the division in
-    fold_W_dec_norm should not produce NaN values for TrainingSAE classes.
-    """
-    cfg = build_sae_training_cfg_for_arch(architecture)
-    sae = TrainingSAE.from_dict(cfg.to_dict())
-    sae.turn_off_forward_pass_hook_z_reshaping()
-
-    # Initialize parameters with random values
-    for param in sae.parameters():
-        param.data = torch.rand_like(param)
-
-    # Set some decoder rows to zero to simulate dead latents
-    num_zero_rows = min(5, sae.W_dec.shape[0])
-    sae.W_dec.data[:num_zero_rows] = 0.0
-
-    # Verify that we actually have zero-norm rows
-    norms_before = sae.W_dec.norm(dim=-1)
-    assert (norms_before[:num_zero_rows] == 0).all()
-
-    # Call fold_W_dec_norm - this should not produce NaN values
-
-    if architecture in {"matching_pursuit"}:
-        with pytest.raises(NotImplementedError):
-            sae.fold_W_dec_norm()
-        return
-
-    sae.fold_W_dec_norm()
-
-    # Verify no NaN or Inf values in any parameters
-    for name, param in sae.named_parameters():
-        assert not torch.isnan(
-            param
-        ).any(), f"NaN found in {name} after fold_W_dec_norm"
-        assert not torch.isinf(
-            param
-        ).any(), f"Inf found in {name} after fold_W_dec_norm"
 
 
 def test_StandardSAE_save_and_load_from_pretrained(tmp_path: Path) -> None:
@@ -795,6 +554,7 @@ def test_StandardSAE_constant_norm_rescale():
     cfg = build_sae_cfg(d_in=2, d_sae=3, normalize_activations="constant_norm_rescale")
 
     sae = StandardSAE(cfg)
+    pre_activation_vars = list(vars(sae).keys())
 
     test_input = torch.randn(10, 2, device=cfg.device)
 
@@ -803,12 +563,15 @@ def test_StandardSAE_constant_norm_rescale():
     assert_close(scaled_input, test_input * expected_scaler, atol=1e-6)
     scaled_output = sae.run_time_activation_norm_fn_out(scaled_input)
     assert_close(scaled_output, test_input)
+    # Basic verification of temporary extra state cleanup
+    assert list(vars(sae).keys()) == pre_activation_vars
 
 
 def test_StandardSAE_layer_norm():
     cfg = build_sae_cfg(d_in=2, d_sae=3, normalize_activations="layer_norm")
 
     sae = StandardSAE(cfg)
+    pre_activation_vars = list(vars(sae).keys())
 
     test_input = torch.randn(10, 2, device=cfg.device)
 
@@ -822,6 +585,8 @@ def test_StandardSAE_layer_norm():
     )
     scaled_output = sae.run_time_activation_norm_fn_out(scaled_input)
     assert_close(scaled_output, test_input, atol=1e-4)
+    # Basic verification of temporary extra state cleanup
+    assert list(vars(sae).keys()) == pre_activation_vars
 
 
 def test_StandardSAE_none():
@@ -890,3 +655,44 @@ def test_StandardTrainingSAE_save_and_load_inference_sae(tmp_path: Path) -> None
     training_full_out = training_sae(sae_in)
     inference_full_out = inference_sae(sae_in)
     assert_close(training_full_out, inference_full_out)
+
+
+def test_StandardTrainingSAE_training_forward_pass_hooks():
+    sae = StandardTrainingSAE(build_sae_training_cfg())
+    x = torch.randn(32, sae.cfg.d_in)
+    step_input = TrainStepInput(
+        sae_in=x,
+        coefficients={"l1": sae.cfg.l1_coefficient},
+        dead_neuron_mask=None,
+        n_training_steps=0,
+        is_logging_step=False,
+    )
+
+    train_step_output, train_cache = run_training_forward_pass_with_cache(
+        sae, step_input
+    )
+    assert train_cache["hook_sae_input"].equal(x)
+    assert train_cache["hook_sae_acts_pre"].equal(train_step_output.hidden_pre)
+    assert train_cache["hook_sae_acts_post"].equal(train_step_output.feature_acts)
+    assert train_cache["hook_sae_recons"].equal(train_step_output.sae_out)
+
+    # Verify training output matches a regular run_with_cache forward pass
+    _, cache = sae.run_with_cache(x)
+    assert train_cache["hook_sae_input"].equal(cache["hook_sae_input"])
+    assert train_cache["hook_sae_acts_pre"].equal(cache["hook_sae_acts_pre"])
+    assert train_cache["hook_sae_acts_post"].equal(cache["hook_sae_acts_post"])
+    assert train_cache["hook_sae_recons"].equal(cache["hook_sae_recons"])
+    assert train_cache["hook_sae_recons"].equal(cache["hook_sae_output"])
+
+
+def test_StandardSAE_forward_hooks():
+    sae = StandardSAE(build_sae_cfg())
+    x = torch.randn(32, sae.cfg.d_in)
+    out, cache = sae.run_with_cache(x)
+    assert cache["hook_sae_input"].equal(x)
+    assert cache["hook_sae_acts_pre"].equal(
+        sae.process_sae_in(x) @ sae.W_enc + sae.b_enc
+    )
+    assert cache["hook_sae_acts_post"].equal(sae.encode(x))
+    assert cache["hook_sae_recons"].equal(out)
+    assert cache["hook_sae_output"].equal(out)

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sae-lens"
-version = "6.44.2"
+version = "6.46.0"
 description = "Training and Analyzing Sparse Autoencoders (SAEs)"
 authors = ["Joseph Bloom"]
 readme = "README.md"
@@ -31,12 +31,14 @@ mamba-lens = { version = "^0.0.4", optional = true }
 python-dotenv = ">=1.0.1"
 pyyaml = "^6.0.1"
 typing-extensions = "^4.10.0"
-simple-parsing = "^0.1.6"
+simple-parsing = "^0.1.8"
 tenacity = ">=9.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.2"
 pytest-cov = "^4.1.0"
+pytest-profiling = "^1.8.1"
+pytest-randomly = "^4.1.0"
 pre-commit = "^3.6.2"
 pyright = "1.1.365"
 mamba-lens = "^0.0.4"
@@ -109,6 +111,13 @@ version_variables = ["sae_lens/__init__.py:__version__"]
 version_toml = ["pyproject.toml:tool.poetry.version"]
 build_command = "pip install poetry && poetry build"
 branches = { main = { match = "main" }, alpha = { match = "alpha", prerelease = true }, beta = { match = "beta", prerelease = true } }
+
+
+
+
+
+
+
 
 
 

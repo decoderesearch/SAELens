@@ -1,9 +1,11 @@
 import json
+import time
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
+import requests
 import torch
 import yaml
 from huggingface_hub import hf_hub_download as real_hf_hub_download
@@ -13,6 +15,7 @@ from sparsify import SparseCoder, SparseCoderConfig
 
 from sae_lens import StandardSAE, StandardSAEConfig
 from sae_lens.loading.pretrained_sae_loaders import (
+    _get_with_rate_limit_retry,
     _infer_gemma_3_raw_cfg_dict,
     dictionary_learning_sae_huggingface_loader_1,
     gemma_2_sae_huggingface_loader,
@@ -2364,16 +2367,25 @@ def test_qwen_scope_sae_huggingface_loader_with_mocked_download(
     # The transpose must preserve the underlying linear operation: in the
     # native Qwen Scope formula, pre_acts = residual @ raw_W_enc.T + b_enc.
     # In SAELens, pre_acts = residual @ W_enc + b_enc. They must agree.
+    #
+    # The loader stores W_enc/W_dec as `.T.contiguous()`, so each matmul below
+    # multiplies a contiguous tensor while the reference multiplies a transposed
+    # view. Over these large reduction dims (2048 and 32768) the two layouts can
+    # accumulate float32 in a different order on some BLAS backends, so the
+    # results agree only up to rounding. Use tolerances that absorb that noise
+    # while still catching a real loader regression (which would be orders of
+    # magnitude off); the default rtol=1e-5/atol=1e-8 is too tight here and
+    # causes intermittent CI failures.
     residual = torch.randn(2, 7, d_in)
     expected_pre_acts = residual @ raw_W_enc.T + raw_b_enc
     actual_pre_acts = residual @ state_dict["W_enc"] + state_dict["b_enc"]
-    assert_close(actual_pre_acts, expected_pre_acts)
+    assert_close(actual_pre_acts, expected_pre_acts, rtol=1e-3, atol=1e-2)
 
     # Same for the decoder: native is feats @ raw_W_dec.T + b_dec, SAELens is feats @ W_dec + b_dec.
     feats = torch.randn(2, 7, d_sae)
     expected_recon = feats @ raw_W_dec.T + raw_b_dec
     actual_recon = feats @ state_dict["W_dec"] + state_dict["b_dec"]
-    assert_close(actual_recon, expected_recon)
+    assert_close(actual_recon, expected_recon, rtol=1e-3, atol=1e-2)
 
 
 def test_qwen_scope_sae_loads_via_from_pretrained(
@@ -2426,3 +2438,72 @@ def test_qwen_scope_sae_loads_via_from_pretrained(
 
     actual_acts = sae.encode(residual)
     assert_close(actual_acts, expected_acts)
+
+
+def _fake_response(
+    status_code: int, headers: dict[str, str] | None = None
+) -> requests.Response:
+    response = requests.Response()
+    response.status_code = status_code
+    response.headers.update(headers or {})
+    return response
+
+
+def test_get_with_rate_limit_retry_retries_on_429_and_honors_retry_after(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    responses = iter(
+        [
+            _fake_response(429, {"Retry-After": "3"}),
+            _fake_response(429),
+            _fake_response(200),
+        ]
+    )
+    sleeps: list[float] = []
+
+    def fake_get(url: str, **kwargs: Any) -> requests.Response:  # noqa: ARG001
+        return next(responses)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+
+    response = _get_with_rate_limit_retry("http://test/url", {})
+
+    assert response.status_code == 200
+    # First delay comes from the Retry-After header, second from exponential backoff
+    assert sleeps == [3.0, 2.0]
+
+
+def test_get_with_rate_limit_retry_raises_after_max_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[str] = []
+
+    def fake_get(url: str, **kwargs: Any) -> requests.Response:  # noqa: ARG001
+        calls.append(url)
+        return _fake_response(429)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+    with pytest.raises(requests.HTTPError, match="429"):
+        _get_with_rate_limit_retry("http://test/url", {}, max_attempts=3)
+
+    assert len(calls) == 3
+
+
+def test_get_with_rate_limit_retry_does_not_retry_other_errors(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[str] = []
+
+    def fake_get(url: str, **kwargs: Any) -> requests.Response:  # noqa: ARG001
+        calls.append(url)
+        return _fake_response(404)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    with pytest.raises(requests.HTTPError, match="404"):
+        _get_with_rate_limit_retry("http://test/url", {})
+
+    assert len(calls) == 1

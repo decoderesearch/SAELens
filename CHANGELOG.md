@@ -1,5 +1,159 @@
 # CHANGELOG
 
+## v6.46.0 (2026-07-13)
+
+### Chore
+
+* chore: fix HookedRootModule type imports (#715) ([`9e08bfb`](https://github.com/decoderesearch/SAELens/commit/9e08bfb3e51332d65ea014b0205f744e5061ca2a))
+
+* chore: deploy_docs failures from HF rate limiting and lost cache progress (#713) ([`11b7eed`](https://github.com/decoderesearch/SAELens/commit/11b7eedef2c695d00f05ba59e36a284922a88823))
+
+### Feature
+
+* feat: preserve training architecture in SAE metadata (#714) ([`c12dacb`](https://github.com/decoderesearch/SAELens/commit/c12dacb0ae2e2d477653e9e0475a4c08e4aeba3b))
+
+## v6.45.3 (2026-07-04)
+
+### Fix
+
+* fix: Add missing calls to reshape_fn_out() in TemporalSAE (#695) ([`095d280`](https://github.com/decoderesearch/SAELens/commit/095d280dc0b98c1277a4387867f3c6ac6e970ab3))
+
+## v6.45.2 (2026-07-04)
+
+### Fix
+
+* fix: mse eval metric scaled inversely with eval batch token count (#711) ([`09ec191`](https://github.com/decoderesearch/SAELens/commit/09ec191058fe0f7c5f6850372a7f79e002dbeae3))
+
+* fix: remove ignored resume_from_checkpoint param from LLM runner (#712) ([`2c54b63`](https://github.com/decoderesearch/SAELens/commit/2c54b63b209a9b8119ece54d673e98e9095308ea))
+
+## v6.45.1 (2026-07-03)
+
+### Fix
+
+* fix: bug in explained_variance computing variance relative to zero instead of mean (#665) ([`4d7f530`](https://github.com/decoderesearch/SAELens/commit/4d7f530d88e7fa7413d04daf7c7270f39c07d11b))
+
+## v6.45.0 (2026-07-03)
+
+### Chore
+
+* chore: Document fine tuning existing SAEs (#709) ([`d29fd78`](https://github.com/decoderesearch/SAELens/commit/d29fd78fe08c9a2ab406202f840e1345a3c16298))
+
+* chore: Add pytest-profiling dependency, required by some tests (#687)
+
+Required for pytest --profile-svg to work, as instructed for example in benchmark/test_cache_activations_runner.py
+
+Co-authored-by: David Chanin &lt;chanindav@gmail.com&gt; ([`ccdfbe5`](https://github.com/decoderesearch/SAELens/commit/ccdfbe5dda0ad455e5b4620ffededa2769190113))
+
+* chore: DRY fold decoder norms logic (#705) ([`40e5857`](https://github.com/decoderesearch/SAELens/commit/40e5857bfc650f6a1bf8e2a72fa8cfc7a5efa984))
+
+### Feature
+
+* feat: add exclude_special_tokens to HookedSAETransformer (#708) ([`0e64dee`](https://github.com/decoderesearch/SAELens/commit/0e64dee5fc8ea261060ece13d2aa0596c725d7c2))
+
+## v6.44.4 (2026-06-22)
+
+### Fix
+
+* fix: TemporalSAE don&#39;t apply decoding bias if weights are tied and bias wasn&#39;t applied at encoding (#703) ([`0e3ca58`](https://github.com/decoderesearch/SAELens/commit/0e3ca58bdf28587a8614d658ede7ef5778f8a7b6))
+
+### Test
+
+* test: Verify TemporalSAE applies b_dec only when untied or applied at input
+
+PR #703 fixed TemporalSAE to fold b_dec back in at decode/forward only when
+the weights are untied or apply_b_dec_to_input is set. The existing tests
+only assert output shapes and run with b_dec zero-initialized, so they pass
+regardless of whether b_dec is applied. Add tests that set b_dec to a nonzero
+value and assert it is applied exactly in those cases, covering both decode()
+and forward().
+
+Co-Authored-By: Claude Opus 4.8 (1M context) &lt;noreply@anthropic.com&gt; ([`398815f`](https://github.com/decoderesearch/SAELens/commit/398815fda145d7920ad956e49b5ff3ddea9b05c3))
+
+## v6.44.3 (2026-06-16)
+
+### Chore
+
+* chore: Relax tolerance in Qwen Scope loader test to fix flaky CI (#706) ([`10c26c8`](https://github.com/decoderesearch/SAELens/commit/10c26c8d14ed12cb5b7f76f41244a81879f7df92))
+
+* chore: Add pytest-randomly to enable reproducing CI test failures (#690)
+
+Also shuffles tests order, so might uncover hidden dependencies between tests ([`ab964a9`](https://github.com/decoderesearch/SAELens/commit/ab964a9343d296e49ba23d2773495f69a2c85844))
+
+* chore: SAE overrides tidy (#694)
+
+* chore: Consistent override decorators in SAE and SAE config classes
+
+* chore: overwrite-&gt;override in docstrings ([`165b95c`](https://github.com/decoderesearch/SAELens/commit/165b95c58b795b8709582f01fa52e9e15bac24da))
+
+* chore: Update Custom SAEs guide following recent changes (#701) ([`0485aef`](https://github.com/decoderesearch/SAELens/commit/0485aef2c258f13ff845085f7bcd1bd3b8d62339))
+
+* chore: Fix copy-pasted &#34;transformer_lens&#34; in bug template (#683) ([`ef7fcac`](https://github.com/decoderesearch/SAELens/commit/ef7fcacfa210dc53834d57cb2a62b9267962d28d))
+
+* chore: SAE comments tidy (#693)
+
+* chore: More precise comment wording, initialize_weights isn&#39;t abstract
+
+Similar to wording in JumpReLUSAE
+
+* chore: Fix base SAE class name in comments ([`5fa595d`](https://github.com/decoderesearch/SAELens/commit/5fa595d512ad76b2ea31df9cc018b93468d12702))
+
+* chore: Remove misplaced comment (#696)
+
+Could alterntively be moved up, but seems redundant ([`95e4c68`](https://github.com/decoderesearch/SAELens/commit/95e4c680964332cdb2f23d97608aa20f093c644a))
+
+* chore: Comments tidy (#686)
+
+* tidy: Non-DRY comment was out of sync, didn&#39;t cover layer_norm case
+
+* doc: Mention year in references to Anthropic updates ([`ce29888`](https://github.com/decoderesearch/SAELens/commit/ce29888a9f250b53892c5b038ba77d8e0dbfdc21))
+
+* chore: Fix outdated path in comment (#689) ([`6d0955f`](https://github.com/decoderesearch/SAELens/commit/6d0955fe3bf437f30974ef0794b945b2f157958b))
+
+### Documentation
+
+* docs: Fix docstrings/comment in TemporalSAE (#702) ([`b100d70`](https://github.com/decoderesearch/SAELens/commit/b100d70230e7a3af26088f02809cfcb5bda1c9e5))
+
+* docs: update slack link ([`d0e63fc`](https://github.com/decoderesearch/SAELens/commit/d0e63fc3851ecda7e3b2d914bf9472e417e0b197))
+
+### Fix
+
+* fix: layer_norm cleanup similar to the one for constant_norm_rescale (#698) ([`e712428`](https://github.com/decoderesearch/SAELens/commit/e712428db203fdc03b2c827bf7d31f7c3ec1472d))
+
+* fix: training CLI fixes (#700)
+
+* refactor: Reuse SAE_TRAINING_CLASS_REGISTRY.keys() to DRY
+
+* test: Failing test reveals the hard-coded --architecture choices in the training CLI is out-of-date
+
+* fix: CLI allows all registered training architectures, no longer hard-coded
+
+* test: Ensure expected architecture in config parsed from CLI args
+
+* doc: Fix outdated doc references to old CLI name
+
+* chore: Update simple-parsing
+
+* fix: Help strings were wrong for many arguments in training CLI. Fixes #699
+
+* chore: Amend training configs docstrings, adds missing help for more training CLI arguments
+
+* chore: DRY, remove default values specified in docstrings
+
+Less noise in CLI args description
+Defaults already show CLI args description, in mkdocs, and in help() signatures
+
+* chore: Add missing parameter to docstring, also shows in training CLI help
+
+* test: Add failing test for --architecture showing in training CLI help
+
+* fix: --architecture/sae training CLI argument now shows in help
+
+Besides fixing the issue, the code is simplified using simple-parsing&#39;s subgroups feature ([`e54c32a`](https://github.com/decoderesearch/SAELens/commit/e54c32a650602a22693f81f530539cc35e7048eb))
+
+### Unknown
+
+* Add missing hooks (#704) ([`a2eb4b2`](https://github.com/decoderesearch/SAELens/commit/a2eb4b21eb2bf64fece3451051daa6ec3d00be1c))
+
 ## v6.44.2 (2026-05-27)
 
 ### Fix

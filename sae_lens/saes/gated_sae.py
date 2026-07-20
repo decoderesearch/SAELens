@@ -48,6 +48,7 @@ class GatedSAE(SAE[GatedSAEConfig]):
         super().initialize_weights()
         _init_weights_gated(self)
 
+    @override
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Encode the input tensor into the feature space using a gated encoder.
@@ -69,6 +70,7 @@ class GatedSAE(SAE[GatedSAEConfig]):
         # Combine gating and magnitudes
         return self.hook_sae_acts_post(active_features * feature_magnitudes)
 
+    @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """
         Decode the feature activations back into the input space:
@@ -86,17 +88,16 @@ class GatedSAE(SAE[GatedSAEConfig]):
         # 4) reshape if needed (hook_z)
         return self.reshape_fn_out(sae_out_pre, self.d_head)
 
+    @override
     @torch.no_grad()
     def fold_W_dec_norm(self):
         """Override to handle gated-specific parameters."""
-        W_dec_norms = self.W_dec.norm(dim=-1).clamp(min=1e-8).unsqueeze(1)
-        self.W_dec.data = self.W_dec.data / W_dec_norms
-        self.W_enc.data = self.W_enc.data * W_dec_norms.T
+        W_dec_norms = self.fold_and_get_W_dec_norm()
 
         # Gated-specific parameters need special handling
         # r_mag doesn't need scaling since W_enc scaling is sufficient for magnitude path
-        self.b_gate.data = self.b_gate.data * W_dec_norms.squeeze()
-        self.b_mag.data = self.b_mag.data * W_dec_norms.squeeze()
+        self.b_gate.data = self.b_gate.data * W_dec_norms
+        self.b_mag.data = self.b_mag.data * W_dec_norms
 
 
 @dataclass
@@ -138,10 +139,12 @@ class GatedTrainingSAE(TrainingSAE[GatedTrainingSAEConfig]):
             )
         super().__init__(cfg, use_error_term)
 
+    @override
     def initialize_weights(self) -> None:
         super().initialize_weights()
         _init_weights_gated(self)
 
+    @override
     def encode_with_hidden_pre(
         self, x: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -166,6 +169,7 @@ class GatedTrainingSAE(TrainingSAE[GatedTrainingSAEConfig]):
         # Return both the final feature activations and the pre-activation (for logging or penalty)
         return feature_acts, magnitude_pre_activation
 
+    @override
     def calculate_aux_loss(
         self,
         step_input: TrainStepInput,
@@ -207,6 +211,7 @@ class GatedTrainingSAE(TrainingSAE[GatedTrainingSAEConfig]):
             "weights/b_mag": b_mag_dist,
         }
 
+    @override
     def get_coefficients(self) -> dict[str, float | TrainCoefficientConfig]:
         return {
             "l1": TrainCoefficientConfig(
@@ -215,17 +220,16 @@ class GatedTrainingSAE(TrainingSAE[GatedTrainingSAEConfig]):
             ),
         }
 
+    @override
     @torch.no_grad()
     def fold_W_dec_norm(self):
         """Override to handle gated-specific parameters."""
-        W_dec_norms = self.W_dec.norm(dim=-1).clamp(min=1e-8).unsqueeze(1)
-        self.W_dec.data = self.W_dec.data / W_dec_norms
-        self.W_enc.data = self.W_enc.data * W_dec_norms.T
+        W_dec_norms = self.fold_and_get_W_dec_norm()
 
         # Gated-specific parameters need special handling
         # r_mag doesn't need scaling since W_enc scaling is sufficient for magnitude path
-        self.b_gate.data = self.b_gate.data * W_dec_norms.squeeze()
-        self.b_mag.data = self.b_mag.data * W_dec_norms.squeeze()
+        self.b_gate.data = self.b_gate.data * W_dec_norms
+        self.b_mag.data = self.b_mag.data * W_dec_norms
 
 
 def _init_weights_gated(

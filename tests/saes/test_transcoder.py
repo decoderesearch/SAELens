@@ -1,5 +1,5 @@
 import copy
-from typing import Any
+from typing import Any, Callable
 
 import pytest
 import torch
@@ -694,3 +694,26 @@ class TestTranscoderIntegration:
         out2, feat2 = transcoder2.forward_with_activations(x)
         assert_close(out1, out2)
         assert_close(feat1, feat2)
+
+
+@pytest.mark.parametrize(
+    "build_cfg, sae_class",
+    [
+        (build_transcoder_cfg, Transcoder),
+        (build_skip_transcoder_cfg, SkipTranscoder),
+        (build_jumprelu_transcoder_cfg, JumpReLUTranscoder),
+        (build_jumprelu_skip_transcoder_cfg, JumpReLUSkipTranscoder),
+    ],
+)
+def test_transcoder_forward_pass_calls_hooks(
+    build_cfg: Callable[[], TranscoderConfig], sae_class: type[Transcoder]
+):
+    sae = sae_class(build_cfg())
+    x = torch.randn(8, sae.cfg.d_in)
+    _, cache = sae.run_with_cache(x)
+    assert_close(cache["hook_sae_input"], x)
+    assert_close(
+        cache["hook_sae_acts_pre"], sae.process_sae_in(x) @ sae.W_enc + sae.b_enc
+    )
+    assert_close(cache["hook_sae_acts_post"], sae.encode(x))
+    assert "hook_sae_recons" in cache

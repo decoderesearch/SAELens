@@ -174,6 +174,12 @@ def test_multi_sae_runner_trains_two_saes_at_different_hooks(
     assert set(saes.keys()) == {"resid", "topk_mlp"}
     assert saes["resid"].cfg.metadata.hook_name == "blocks.0.hook_resid_pre"
     assert saes["topk_mlp"].cfg.metadata.hook_name == "blocks.0.hook_mlp_out"
+    assert saes["resid"].cfg.metadata.training_architecture == "standard"
+    assert saes["topk_mlp"].cfg.metadata.training_architecture == "topk"
+    assert (
+        saes["topk_mlp"].cfg.metadata.training_architecture_details
+        == cfg.saes["topk_mlp"].get_training_architecture_details()
+    )
 
 
 def test_multi_sae_runner_resume_from_checkpoint(

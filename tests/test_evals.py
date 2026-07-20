@@ -13,6 +13,7 @@ from transformer_lens import HookedTransformer
 from sae_lens.config import LanguageModelSAERunnerConfig
 from sae_lens.evals import (
     EvalConfig,
+    ExplainedVarianceCalculator,
     _kl,
     all_loadable_saes,
     get_downstream_reconstruction_metrics,
@@ -642,6 +643,268 @@ def test_get_sparsity_and_variance_metrics_identity_sae_perfect_reconstruction(
 
     # MSE loss should be very close to 0
     assert metrics["mse"] == pytest.approx(0.0, abs=1e-5)
+
+
+def test_get_sparsity_and_variance_metrics_mse_matches_mean_squared_reconstruction_error(
+    model: HookedTransformer,
+    example_dataset: Dataset,
+):
+    d_in = 64
+    hook_name = "blocks.1.hook_resid_pre"
+    cfg = build_runner_cfg(d_in=d_in, d_sae=2 * d_in, hook_name=hook_name)
+
+    training_sae = StandardTrainingSAE.from_dict(cfg.get_training_sae_cfg_dict())
+    sae = StandardSAE.from_dict(training_sae.cfg.get_inference_sae_cfg_dict())
+    random_params(sae)
+
+    eval_batch_size_prompts = 4
+    activation_store = ActivationsStore.from_config(
+        model, cfg, override_dataset=example_dataset
+    )
+    metrics, _ = get_sparsity_and_variance_metrics(
+        sae=sae,
+        model=model,
+        activation_store=activation_store,
+        activation_scaler=ActivationScaler(None),
+        n_batches=1,
+        compute_l2_norms=False,
+        compute_sparsity_metrics=False,
+        compute_variance_metrics=True,
+        compute_featurewise_density_statistics=True,
+        eval_batch_size_prompts=eval_batch_size_prompts,
+        model_kwargs={},
+    )
+
+    # Recompute the expected MSE by hand on the same batch of tokens: mean over
+    # tokens of ||x - x_hat||^2, matching the training MSE convention.
+    fresh_store = ActivationsStore.from_config(
+        model, cfg, override_dataset=example_dataset
+    )
+    batch_tokens = fresh_store.get_batch_tokens(eval_batch_size_prompts)
+    _, cache = model.run_with_cache(
+        batch_tokens, prepend_bos=False, names_filter=[hook_name]
+    )
+    acts = cache[hook_name].flatten(0, 1)
+    sae_out = sae.decode(sae.encode(acts))
+    expected_mse = (acts - sae_out).pow(2).sum(dim=-1).mean().item()
+
+    assert metrics["mse"] == pytest.approx(expected_mse, rel=1e-4)
+
+
+def test_get_sparsity_and_variance_metrics_mse_is_invariant_to_batch_size(
+    model: HookedTransformer,
+    example_dataset: Dataset,
+):
+    d_in = 64
+    hook_name = "blocks.1.hook_resid_pre"
+    cfg = build_runner_cfg(d_in=d_in, d_sae=2 * d_in, hook_name=hook_name)
+
+    training_sae = StandardTrainingSAE.from_dict(cfg.get_training_sae_cfg_dict())
+    sae = StandardSAE.from_dict(training_sae.cfg.get_inference_sae_cfg_dict())
+    random_params(sae)
+
+    eval_kwargs: dict[str, Any] = dict(
+        sae=sae,
+        model=model,
+        activation_scaler=ActivationScaler(None),
+        compute_l2_norms=False,
+        compute_sparsity_metrics=False,
+        compute_variance_metrics=True,
+        compute_featurewise_density_statistics=True,
+        model_kwargs={},
+    )
+
+    # Evaluate the same 4 prompts as one batch of 4 and as two batches of 2.
+    store_one_batch = ActivationsStore.from_config(
+        model, cfg, override_dataset=example_dataset
+    )
+    metrics_one_batch, _ = get_sparsity_and_variance_metrics(
+        activation_store=store_one_batch,
+        n_batches=1,
+        eval_batch_size_prompts=4,
+        **eval_kwargs,
+    )
+
+    store_two_batches = ActivationsStore.from_config(
+        model, cfg, override_dataset=example_dataset
+    )
+    metrics_two_batches, _ = get_sparsity_and_variance_metrics(
+        activation_store=store_two_batches,
+        n_batches=2,
+        eval_batch_size_prompts=2,
+        **eval_kwargs,
+    )
+
+    assert metrics_two_batches["mse"] == pytest.approx(
+        metrics_one_batch["mse"], rel=1e-4
+    )
+    assert metrics_two_batches["explained_variance"] == pytest.approx(
+        metrics_one_batch["explained_variance"], rel=1e-4
+    )
+
+
+def test_explained_variance_invariant_to_activation_shift(
+    model: HookedTransformer,
+    example_dataset: Dataset,
+):
+    d_in = 64
+    hook_name = "blocks.1.hook_resid_pre"
+    cfg = build_runner_cfg(d_in=d_in, d_sae=2 * d_in, hook_name=hook_name)
+
+    training_sae = StandardTrainingSAE.from_dict(cfg.get_training_sae_cfg_dict())
+    sae = StandardSAE.from_dict(training_sae.cfg.get_inference_sae_cfg_dict())
+    random_params(sae)
+    # The shift invariance requires b_dec to be subtracted from the input during
+    # encoding so that the shift cancels: encode(x+c) with b_dec+c == encode(x) with b_dec.
+    sae.cfg.apply_b_dec_to_input = True
+
+    eval_kwargs: dict[str, Any] = dict(
+        sae=sae,
+        model=model,
+        activation_scaler=ActivationScaler(None),
+        n_batches=3,
+        compute_l2_norms=False,
+        compute_sparsity_metrics=False,
+        compute_variance_metrics=True,
+        compute_featurewise_density_statistics=True,
+        eval_batch_size_prompts=4,
+        model_kwargs={},
+    )
+
+    activation_store = ActivationsStore.from_config(
+        model, cfg, override_dataset=example_dataset
+    )
+    metrics_original, _ = get_sparsity_and_variance_metrics(
+        activation_store=activation_store, **eval_kwargs
+    )
+
+    # Shifting activations by a constant and adjusting b_dec by the same amount
+    # should not change explained_variance: the shift cancels in encoding
+    # (so features are identical) and both input and output shift equally.
+    shift = torch.full((d_in,), 5.0)
+    sae.b_dec.data += shift
+    model.add_hook(hook_name, lambda tensor, **_: tensor + shift, is_permanent=True)
+    try:
+        activation_store_shifted = ActivationsStore.from_config(
+            model, cfg, override_dataset=example_dataset
+        )
+        metrics_shifted, _ = get_sparsity_and_variance_metrics(
+            activation_store=activation_store_shifted, **eval_kwargs
+        )
+    finally:
+        model.reset_hooks(including_permanent=True)
+
+    # Tolerance is limited by float32 catastrophic cancellation in E[||x||^2] - ||E[x]||^2
+    assert metrics_shifted["explained_variance"] == pytest.approx(
+        metrics_original["explained_variance"], rel=1e-3
+    )
+
+
+def _explained_variance(
+    input_batches: list[torch.Tensor], output_batches: list[torch.Tensor]
+) -> float:
+    calc = ExplainedVarianceCalculator()
+    for sae_input, sae_output in zip(input_batches, output_batches):
+        calc.add_batch(sae_output=sae_output, hidden_acts=sae_input)
+    return calc.compute()
+
+
+def test_explained_variance_matches_hand_computed_example():
+    # mu = [1, 2]
+    # total_variance    = E[sum_d (x_d - mu_d)^2] = ((1 + 4) + (1 + 4)) / 2 = 5
+    # residual_variance = E[sum_d (x_d - x_hat_d)^2] = (1 + 1) / 2 = 1
+    # explained_variance = 1 - 1/5 = 0.8
+    x = torch.tensor([[2.0, 0.0], [0.0, 4.0]])
+    x_hat = torch.tensor([[2.0, 1.0], [0.0, 3.0]])
+
+    assert _explained_variance([x], [x_hat]) == pytest.approx(0.8)
+
+
+def test_explained_variance_perfect_reconstruction_returns_one():
+    x = torch.randn(1000, 8) + 5.0
+
+    assert _explained_variance([x], [x]) == pytest.approx(1.0)
+
+
+def test_explained_variance_predicting_the_mean_returns_zero():
+    # Regression canary for GH #659: the buggy formula measured variance
+    # relative to zero, so predicting the mean reported EV near 1 for
+    # activations with a large mean component instead of 0.
+    x = torch.randn(10000, 8, dtype=torch.float64) + 5.0
+    x_hat = x.mean(dim=0, keepdim=True).expand_as(x)
+
+    assert _explained_variance([x], [x_hat]) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_explained_variance_single_batch_matches_formula():
+    d_model = 8
+    n_samples = 10000
+    x = torch.randn(n_samples, d_model) + 5.0
+    x_hat = x + torch.randn(n_samples, d_model) * 0.3
+
+    ev = _explained_variance([x], [x_hat])
+
+    total_var = x.var(dim=0, correction=0).sum()
+    residual_var = (x - x_hat).pow(2).sum(dim=-1).mean()
+    expected_ev = (1 - residual_var / total_var).item()
+
+    assert ev == pytest.approx(expected_ev, rel=1e-5)
+
+
+def test_explained_variance_batched_matches_unbatched_with_unequal_batch_sizes():
+    d_model = 8
+    x = torch.randn(3000, d_model, dtype=torch.float64) + 5.0
+    x_hat = x + torch.randn(3000, d_model, dtype=torch.float64) * 0.3
+
+    ev_single = _explained_variance([x], [x_hat])
+
+    # Unequal batch sizes: every sample must be weighted equally, so the split
+    # must not change the result.
+    sizes = [1500, 1000, 500]
+    ev_batched = _explained_variance(list(x.split(sizes)), list(x_hat.split(sizes)))
+
+    assert ev_batched == pytest.approx(ev_single, rel=1e-12)
+
+
+def test_explained_variance_invariant_to_input_bias():
+    # Use float64 to avoid catastrophic cancellation with large biases
+    d_model = 8
+    n_samples = 10000
+    x = torch.randn(n_samples, d_model, dtype=torch.float64)
+    x_hat = x + torch.randn(n_samples, d_model, dtype=torch.float64) * 0.3
+
+    ev_original = _explained_variance([x], [x_hat])
+
+    bias = torch.full((d_model,), 100.0, dtype=torch.float64)
+    ev_biased = _explained_variance([x + bias], [x_hat + bias])
+
+    assert ev_biased == pytest.approx(ev_original, rel=1e-10)
+
+
+def test_explained_variance_zero_total_variance():
+    d_model = 4
+    n_samples = 100
+    x = torch.full((n_samples, d_model), 5.0)
+
+    # Constant input, perfect reconstruction -> 1.0
+    assert _explained_variance([x], [x]) == 1.0
+
+    # Constant input, nonzero residual -> 0.0
+    x_hat = x + 0.5
+    assert _explained_variance([x], [x_hat]) == 0.0
+
+
+def test_explained_variance_with_no_samples_returns_zero():
+    assert ExplainedVarianceCalculator().compute() == 0.0
+
+
+def test_explained_variance_with_known_noise_level():
+    # x ~ N(0, 1), x_hat = x + N(0, 0.5^2) -> EV = 1 - 0.25/1 = 0.75
+    num_samples = 100000
+    x = torch.randn(num_samples, 1)
+    x_hat = x + 0.5 * torch.randn(num_samples, 1)
+
+    assert _explained_variance([x], [x_hat]) == pytest.approx(0.75, abs=0.02)
 
 
 def test_process_args():

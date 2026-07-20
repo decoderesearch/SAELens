@@ -22,7 +22,8 @@ import torch
 from numpy.typing import NDArray
 from safetensors.torch import load_file, save_file
 from torch import nn
-from transformer_lens.hook_points import HookedRootModule, HookPoint
+from transformer_lens.hook_points import HookPoint
+from transformer_lens.HookedTransformer import HookedRootModule
 from typing_extensions import deprecated, overload, override
 
 from sae_lens import __version__
@@ -154,9 +155,11 @@ class SAEConfig(ABC):
     dtype: str = "float32"
     device: str = "cpu"
     apply_b_dec_to_input: bool = True
-    normalize_activations: Literal["none", "expected_average_only_in", "layer_norm"] = (
-        "none"  # none, expected_average_only_in (Anthropic April Update)
-    )
+    normalize_activations: Literal[
+        "none",
+        "expected_average_only_in",  # (Anthropic April 2024 Update)
+        "layer_norm",
+    ] = "none"
     reshape_activations: Literal["none", "hook_z"] = "none"
     metadata: SAEMetadata = field(default_factory=SAEMetadata)
 
@@ -347,7 +350,10 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
                 x: torch.Tensor,
                 eps: float = 1e-5,  # noqa: ARG001
             ) -> torch.Tensor:
-                return x * self.ln_std + self.ln_mu  # type: ignore
+                x = x * self.ln_std + self.ln_mu  # type: ignore
+                del self.ln_mu
+                del self.ln_std
+                return x
 
             self.run_time_activation_norm_fn_in = run_time_activation_ln_in
             self.run_time_activation_norm_fn_out = run_time_activation_ln_out
@@ -494,24 +500,35 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         return self.hook_sae_output(sae_out)
 
-    # overwrite this in subclasses to modify the state_dict in-place before saving
+    # override this in subclasses to modify the state_dict in-place before saving
     def process_state_dict_for_saving(self, state_dict: dict[str, Any]) -> None:
         pass
 
-    # overwrite this in subclasses to modify the state_dict in-place after loading
+    # override this in subclasses to modify the state_dict in-place after loading
     def process_state_dict_for_loading(self, state_dict: dict[str, Any]) -> None:
         pass
 
-    @torch.no_grad()
     def fold_W_dec_norm(self):
         """Fold decoder norms into encoder."""
-        W_dec_norms = self.W_dec.norm(dim=-1).clamp(min=1e-8).unsqueeze(1)
-        self.W_dec.data = self.W_dec.data / W_dec_norms
-        self.W_enc.data = self.W_enc.data * W_dec_norms.T
+        self.fold_and_get_W_dec_norm()
+
+    @torch.no_grad()
+    def get_W_dec_norm(self) -> torch.Tensor:
+        """Get decoder norms."""
+        return self.W_dec.norm(dim=-1).clamp(min=1e-8)
+
+    @torch.no_grad()
+    def fold_and_get_W_dec_norm(self) -> torch.Tensor:
+        """Fold decoder norms into encoder and return them."""
+        W_dec_norms = self.get_W_dec_norm()
+        self.W_dec.data = self.W_dec.data / W_dec_norms.unsqueeze(1)
+        self.W_enc.data = self.W_enc.data * W_dec_norms.unsqueeze(1).T
 
         # Only update b_enc if it exists (standard/jumprelu architectures)
         if hasattr(self, "b_enc") and isinstance(self.b_enc, nn.Parameter):
-            self.b_enc.data = self.b_enc.data * W_dec_norms.squeeze()
+            self.b_enc.data = self.b_enc.data * W_dec_norms
+
+        return W_dec_norms
 
     def get_name(self):
         """Generate a name for this SAE."""
@@ -813,13 +830,22 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
 @dataclass(kw_only=True)
 class TrainingSAEConfig(SAEConfig, ABC):
-    # https://transformer-circuits.pub/2024/april-update/index.html#training-saes
-    # 0.1 corresponds to the "heuristic" initialization, use None to disable
+    """
+    Configuration base class for training all SAE architectures.
+
+    Args:
+        decoder_init_norm (float | None): "heuristic" initialization, see Anthropic 2024 Circuits Update. None to disable
+    """
+
     decoder_init_norm: float | None = 0.1
 
     @classmethod
     @abstractmethod
     def architecture(cls) -> str: ...
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.add_training_info_to_metadata()
 
     @classmethod
     def from_sae_runner_config(
@@ -863,7 +889,7 @@ class TrainingSAEConfig(SAEConfig, ABC):
         return {
             **super().to_dict(),
             **asdict(self),
-            "metadata": self.metadata.to_dict(),
+            "metadata": self._metadata_with_training_info(),
             "architecture": self.architecture(),
         }
 
@@ -872,6 +898,35 @@ class TrainingSAEConfig(SAEConfig, ABC):
         Get the architecture for inference.
         """
         return get_sae_class(self.architecture())[1]
+
+    def get_training_architecture_details(self) -> dict[str, Any]:
+        """
+        Return config fields that describe training behavior but are not needed
+        by the inference SAE architecture.
+        """
+        inference_config_field_names = {
+            field.name for field in fields(self.get_inference_config_class())
+        }
+        return {
+            field.name: getattr(self, field.name)
+            for field in fields(self)
+            if field.name not in inference_config_field_names
+            and field.name != "metadata"
+        }
+
+    def _metadata_with_training_info(self) -> dict[str, Any]:
+        metadata = self.metadata.to_dict()
+        metadata["training_architecture"] = self.architecture()
+        metadata["training_architecture_details"] = (
+            self.get_training_architecture_details()
+        )
+        return metadata
+
+    def add_training_info_to_metadata(self) -> None:
+        self.metadata.training_architecture = self.architecture()
+        self.metadata.training_architecture_details = (
+            self.get_training_architecture_details()
+        )
 
     # this needs to exist so we can initialize the parent sae cfg without the training specific
     # parameters. Maybe there's a cleaner way to do this
@@ -887,7 +942,7 @@ class TrainingSAEConfig(SAEConfig, ABC):
             for field_name in base_config_field_names
         }
         result_dict["architecture"] = base_sae_cfg_class.architecture()
-        result_dict["metadata"] = self.metadata.to_dict()
+        result_dict["metadata"] = self._metadata_with_training_info()
         return result_dict
 
 
@@ -895,6 +950,7 @@ class TrainingSAE(SAE[T_TRAINING_SAE_CONFIG], ABC):
     """Abstract base class for training versions of SAEs."""
 
     def __init__(self, cfg: T_TRAINING_SAE_CONFIG, use_error_term: bool = False):
+        cfg.add_training_info_to_metadata()
         super().__init__(cfg, use_error_term)
 
         # Turn off hook_z reshaping for training mode - the activation store
@@ -912,6 +968,7 @@ class TrainingSAE(SAE[T_TRAINING_SAE_CONFIG], ABC):
         """Encode with access to pre-activation values for training."""
         ...
 
+    @override
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         For inference, just encode without returning hidden_pre.
@@ -920,6 +977,7 @@ class TrainingSAE(SAE[T_TRAINING_SAE_CONFIG], ABC):
         feature_acts, _ = self.encode_with_hidden_pre(x)
         return feature_acts
 
+    @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """
         Decodes feature activations back into input space,

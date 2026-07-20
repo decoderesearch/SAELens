@@ -6,7 +6,7 @@ import torch
 from sae_lens.constants import DTYPE_MAP
 from sae_lens.saes.sae import SAE
 from sae_lens.saes.temporal_sae import ManualAttention, TemporalSAE
-from tests.helpers import build_temporal_sae_cfg
+from tests.helpers import assert_close, build_temporal_sae_cfg
 
 
 def test_TemporalSAE_initialization():
@@ -29,8 +29,11 @@ def test_TemporalSAE_initialization():
 
 
 @pytest.mark.parametrize("tied_weights", [True, False])
-def test_TemporalSAE_forward(tied_weights: bool):
-    cfg = build_temporal_sae_cfg(tied_weights=tied_weights)
+@pytest.mark.parametrize("apply_b_dec_to_input", [True, False])
+def test_TemporalSAE_forward(tied_weights: bool, apply_b_dec_to_input: bool):
+    cfg = build_temporal_sae_cfg(
+        tied_weights=tied_weights, apply_b_dec_to_input=apply_b_dec_to_input
+    )
     sae = TemporalSAE.from_dict(cfg.to_dict())
 
     batch_size = 4
@@ -42,10 +45,24 @@ def test_TemporalSAE_forward(tied_weights: bool):
     assert reconstruction.shape == x.shape
 
 
+def test_TemporalSAE_forward_pass_calls_hooks():
+    sae = TemporalSAE(build_temporal_sae_cfg(dtype="float32"))
+    x = torch.randn(4, 16, sae.cfg.d_in)
+    out, cache = sae.run_with_cache(x)
+    assert_close(cache["hook_sae_input"], x)
+    assert "hook_sae_acts_pre" in cache
+    assert_close(cache["hook_sae_acts_post"], sae.encode(x))
+    assert_close(cache["hook_sae_output"], out)
+
+
 @pytest.mark.parametrize("tied_weights", [True, False])
-def test_TemporalSAE_encode(tied_weights: bool):
+@pytest.mark.parametrize("apply_b_dec_to_input", [True, False])
+def test_TemporalSAE_encode(tied_weights: bool, apply_b_dec_to_input: bool):
     cfg = build_temporal_sae_cfg(
-        tied_weights=tied_weights, sae_diff_type="topk", kval_topk=32
+        tied_weights=tied_weights,
+        apply_b_dec_to_input=apply_b_dec_to_input,
+        sae_diff_type="topk",
+        kval_topk=32,
     )
     sae = TemporalSAE.from_dict(cfg.to_dict())
 
@@ -62,8 +79,12 @@ def test_TemporalSAE_encode(tied_weights: bool):
     assert l0 <= cfg.kval_topk
 
 
-def test_TemporalSAE_decode():
-    cfg = build_temporal_sae_cfg()
+@pytest.mark.parametrize("tied_weights", [True, False])
+@pytest.mark.parametrize("apply_b_dec_to_input", [True, False])
+def test_TemporalSAE_decode(tied_weights: bool, apply_b_dec_to_input: bool):
+    cfg = build_temporal_sae_cfg(
+        tied_weights=tied_weights, apply_b_dec_to_input=apply_b_dec_to_input
+    )
     sae = TemporalSAE.from_dict(cfg.to_dict())
 
     batch_size = 4
@@ -75,6 +96,98 @@ def test_TemporalSAE_decode():
     reconstruction = sae.decode(novel_codes)
 
     assert reconstruction.shape == (batch_size, seq_len, cfg.d_in)
+
+
+@pytest.mark.parametrize("tied_weights", [True, False])
+@pytest.mark.parametrize("apply_b_dec_to_input", [True, False])
+def test_TemporalSAE_decode_applies_b_dec_only_when_appropriate(
+    tied_weights: bool, apply_b_dec_to_input: bool
+):
+    cfg = build_temporal_sae_cfg(
+        tied_weights=tied_weights,
+        apply_b_dec_to_input=apply_b_dec_to_input,
+        dtype="float32",
+        normalize_activations="none",
+    )
+    sae = TemporalSAE.from_dict(cfg.to_dict())
+    # b_dec is zero-initialized, so a nonzero value is needed to make whether it
+    # is folded back into the output observable.
+    with torch.no_grad():
+        sae.b_dec.copy_(torch.randn_like(sae.b_dec))
+
+    novel_codes = torch.randn(4, 16, cfg.d_sae).relu()
+    reconstruction = sae.decode(novel_codes)
+    without_bias = novel_codes @ sae.W_dec
+
+    # b_dec is only added back when the weights are untied, or when it was
+    # subtracted from the input at encoding time (apply_b_dec_to_input).
+    if not tied_weights or apply_b_dec_to_input:
+        assert_close(reconstruction, without_bias + sae.b_dec)
+    else:
+        assert_close(reconstruction, without_bias)
+
+
+@pytest.mark.parametrize("tied_weights", [True, False])
+@pytest.mark.parametrize("apply_b_dec_to_input", [True, False])
+def test_TemporalSAE_forward_applies_b_dec_only_when_appropriate(
+    tied_weights: bool, apply_b_dec_to_input: bool
+):
+    cfg = build_temporal_sae_cfg(
+        tied_weights=tied_weights,
+        apply_b_dec_to_input=apply_b_dec_to_input,
+        dtype="float32",
+        normalize_activations="none",
+    )
+    sae = TemporalSAE.from_dict(cfg.to_dict())
+    with torch.no_grad():
+        sae.b_dec.copy_(torch.randn_like(sae.b_dec))
+
+    x = torch.randn(4, 16, cfg.d_in)
+    # encode_with_predictions is deterministic, so recomputing it reproduces the
+    # codes forward() decodes internally.
+    z_novel, z_pred = sae.encode_with_predictions(x)
+    expected = (z_novel + z_pred) @ sae.W_dec
+    if not tied_weights or apply_b_dec_to_input:
+        expected = expected + sae.b_dec
+
+    assert_close(sae.forward(x), expected)
+
+
+def test_TemporalSAE_decode_reverses_hook_z_reshaping():
+    n_heads = 4
+    d_head = 8
+    cfg = build_temporal_sae_cfg(d_in=n_heads * d_head, reshape_activations="hook_z")
+    sae = TemporalSAE.from_dict(cfg.to_dict())
+    assert sae.hook_z_reshaping_mode
+
+    batch_size = 2
+    seq_len = 6
+    x = torch.randn(
+        batch_size, seq_len, n_heads, d_head, dtype=DTYPE_MAP[sae.cfg.dtype]
+    )
+
+    novel_codes = sae.encode(x)
+    reconstruction = sae.decode(novel_codes)
+
+    assert reconstruction.shape == x.shape
+
+
+def test_TemporalSAE_forward_reverses_hook_z_reshaping():
+    n_heads = 4
+    d_head = 8
+    cfg = build_temporal_sae_cfg(d_in=n_heads * d_head, reshape_activations="hook_z")
+    sae = TemporalSAE.from_dict(cfg.to_dict())
+    assert sae.hook_z_reshaping_mode
+
+    batch_size = 2
+    seq_len = 6
+    x = torch.randn(
+        batch_size, seq_len, n_heads, d_head, dtype=DTYPE_MAP[sae.cfg.dtype]
+    )
+
+    reconstruction = sae(x)
+
+    assert reconstruction.shape == x.shape
 
 
 @pytest.mark.parametrize("sae_diff_type", ["relu", "topk"])

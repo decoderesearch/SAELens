@@ -17,6 +17,7 @@ from tests.helpers import (
     assert_not_close,
     build_jumprelu_sae_cfg,
     build_jumprelu_sae_training_cfg,
+    run_training_forward_pass_with_cache,
 )
 
 
@@ -51,14 +52,15 @@ def test_JumpReLUTrainingSAE_training_forward_pass():
     d_in = sae.cfg.d_in
 
     x = torch.randn(batch_size, d_in)
-    train_step_output = sae.training_forward_pass(
-        step_input=TrainStepInput(
-            sae_in=x,
-            coefficients={"l0": sae.cfg.l0_coefficient},
-            dead_neuron_mask=None,
-            n_training_steps=0,
-            is_logging_step=False,
-        ),
+    step_input = TrainStepInput(
+        sae_in=x,
+        coefficients={"l0": sae.cfg.l0_coefficient},
+        dead_neuron_mask=None,
+        n_training_steps=0,
+        is_logging_step=False,
+    )
+    train_step_output, train_cache = run_training_forward_pass_with_cache(
+        sae, step_input
     )
 
     assert train_step_output.sae_out.shape == (batch_size, d_in)
@@ -81,6 +83,19 @@ def test_JumpReLUTrainingSAE_training_forward_pass():
     assert (
         pytest.approx(train_step_output.losses["mse_loss"].item()) == expected_mse_loss  # type: ignore
     )
+
+    assert train_cache["hook_sae_input"].equal(x)
+    assert train_cache["hook_sae_acts_pre"].equal(train_step_output.hidden_pre)
+    assert train_cache["hook_sae_acts_post"].equal(train_step_output.feature_acts)
+    assert train_cache["hook_sae_recons"].equal(train_step_output.sae_out)
+
+    # Verify training output matches a regular run_with_cache forward pass
+    _, cache = sae.run_with_cache(x)
+    assert train_cache["hook_sae_input"].equal(cache["hook_sae_input"])
+    assert train_cache["hook_sae_acts_pre"].equal(cache["hook_sae_acts_pre"])
+    assert train_cache["hook_sae_acts_post"].equal(cache["hook_sae_acts_post"])
+    assert train_cache["hook_sae_recons"].equal(cache["hook_sae_recons"])
+    assert train_cache["hook_sae_recons"].equal(cache["hook_sae_output"])
 
 
 def test_JumpReLUSAE_initialization():
