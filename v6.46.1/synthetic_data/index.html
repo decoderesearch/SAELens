@@ -1,0 +1,1808 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Docs for Sparse Autoencoder Training and Analysis Library">
+      
+      
+        <meta name="author" content="Joseph Bloom">
+      
+      
+        <link rel="canonical" href="https://decoderesearch.github.io/SAELens/v6.46.1/synthetic_data/">
+      
+      
+        <link rel="prev" href="../training_saes/">
+      
+      
+        <link rel="next" href="../custom_saes/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-ProperDocs 1.6.7, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Synthetic Data - SAE Lens</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nunito:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Nunito";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../assets/saetable.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="green" data-md-color-accent="yellow">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#training-saes-on-synthetic-data" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="SAE Lens" class="md-header__button md-logo" aria-label="SAE Lens" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            SAE Lens
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Synthetic Data
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="green" data-md-color-accent="yellow"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="green" data-md-color-accent="yellow"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7M9 21v-1h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1m3-17a5 5 0 0 0-5 5c0 2.05 1.23 3.81 3 4.58V16h4v-2.42c1.77-.77 3-2.53 3-4.58a5 5 0 0 0-5-5"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="http://github.com/decoderesearch/SAELens" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    decoderesearch/SAELens
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="SAE Lens" class="md-nav__button md-logo" aria-label="SAE Lens" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    SAE Lens
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="http://github.com/decoderesearch/SAELens" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    decoderesearch/SAELens
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../training_saes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Training SAEs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Synthetic Data
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Synthetic Data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#core-concepts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Concepts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core Concepts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#feature-dictionary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feature Dictionary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#activation-generator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Activation Generator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#basic-training-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Training Workflow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evaluation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Evaluation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#visualization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visualization
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#realistic-data-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Realistic Data Properties
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Realistic Data Properties">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#firing-probability-distributions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Firing Probability Distributions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#feature-correlations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feature Correlations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hierarchical-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hierarchical Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-topics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced Topics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Advanced Topics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#superposition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Superposition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-activation-modifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom Activation Modifiers
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#large-scale-training-with-syntheticmodel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Large-Scale Training with SyntheticModel
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Large-Scale Training with SyntheticModel">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#syntheticmodel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SyntheticModel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#syntheticmodelconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SyntheticModelConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#automatic-hierarchy-generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automatic Hierarchy Generation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#per-feature-magnitude-distributions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-Feature Magnitude Distributions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#training-with-syntheticsaerunner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Training with SyntheticSAERunner
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Training with SyntheticSAERunner">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#training-on-a-temporary-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Training on a temporary model
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#saving-and-loading-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Saving and Loading Models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#huggingface-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HuggingFace Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-pretrained-synthetic-models-with-runner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using Pretrained Synthetic Models with Runner
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../custom_saes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Custom SAEs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extending_saelens/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending SAELens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../synth_sae_bench/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SynthSAEBench
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../citation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migrating/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migrating to v6
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pretrained_saes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pretrained SAEs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#core-concepts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Concepts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core Concepts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#feature-dictionary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feature Dictionary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#activation-generator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Activation Generator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#basic-training-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Training Workflow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evaluation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Evaluation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#visualization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visualization
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#realistic-data-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Realistic Data Properties
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Realistic Data Properties">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#firing-probability-distributions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Firing Probability Distributions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#feature-correlations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feature Correlations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hierarchical-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hierarchical Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-topics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced Topics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Advanced Topics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#superposition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Superposition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-activation-modifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom Activation Modifiers
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#large-scale-training-with-syntheticmodel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Large-Scale Training with SyntheticModel
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Large-Scale Training with SyntheticModel">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#syntheticmodel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SyntheticModel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#syntheticmodelconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SyntheticModelConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#automatic-hierarchy-generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automatic Hierarchy Generation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#per-feature-magnitude-distributions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-Feature Magnitude Distributions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#training-with-syntheticsaerunner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Training with SyntheticSAERunner
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Training with SyntheticSAERunner">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#training-on-a-temporary-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Training on a temporary model
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#saving-and-loading-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Saving and Loading Models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#huggingface-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HuggingFace Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-pretrained-synthetic-models-with-runner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using Pretrained Synthetic Models with Runner
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="training-saes-on-synthetic-data">Training SAEs on Synthetic Data</h1>
+<p>Training SAEs on synthetic data allows you to work with a known ground truth, enabling precise evaluation of how well your SAE recovers the true underlying features. This is useful for:</p>
+<ul>
+<li><strong>Controlled experiments</strong>: Test SAE architectures and hyperparameters with known feature structures</li>
+<li><strong>Fast iteration</strong>: Train on CPU in under a minute with small models</li>
+<li><strong>Algorithm development</strong>: Benchmark new training methods against ground truth</li>
+</ul>
+<p>For a hands-on walkthrough, see the <a href="https://github.com/decoderesearch/SAELens/blob/main/tutorials/training_saes_on_synthetic_data.ipynb">tutorial notebook</a>
+<a href="https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/training_saes_on_synthetic_data.ipynb"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg"/></a>.</p>
+<!-- prettier-ignore-start -->
+<div class="admonition info">
+<p class="admonition-title">Beta feature</p>
+<p>The synthetic data utilities should be considered in beta, and their API and functionality may change over the next few months. If this is a concern, we recommend pinning your SAELens version to avoid breaking changes.</p>
+</div>
+<!-- prettier-ignore-end -->
+<h2 id="core-concepts">Core Concepts</h2>
+<h3 id="feature-dictionary">Feature Dictionary</h3>
+<p>A <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.FeatureDictionary">FeatureDictionary</a> maps sparse feature activations to dense hidden activations. It stores a matrix of feature vectors and computes <code>hidden = features @ feature_vectors + bias</code>.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-0-1"><a href="#__codelineno-0-1" id="__codelineno-0-1" name="__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureDictionary</span><span class="p">,</span> <span class="n">orthogonal_initializer</span>
+</span><span id="__span-0-2"><a href="#__codelineno-0-2" id="__codelineno-0-2" name="__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a href="#__codelineno-0-3" id="__codelineno-0-3" name="__codelineno-0-3"></a><span class="c1"># Create dictionary with 16 features in 32-dimensional space</span>
+</span><span id="__span-0-4"><a href="#__codelineno-0-4" id="__codelineno-0-4" name="__codelineno-0-4"></a><span class="n">feature_dict</span> <span class="o">=</span> <span class="n">FeatureDictionary</span><span class="p">(</span>
+</span><span id="__span-0-5"><a href="#__codelineno-0-5" id="__codelineno-0-5" name="__codelineno-0-5"></a>    <span class="n">num_features</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+</span><span id="__span-0-6"><a href="#__codelineno-0-6" id="__codelineno-0-6" name="__codelineno-0-6"></a>    <span class="n">hidden_dim</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+</span><span id="__span-0-7"><a href="#__codelineno-0-7" id="__codelineno-0-7" name="__codelineno-0-7"></a>    <span class="n">initializer</span><span class="o">=</span><span class="n">orthogonal_initializer</span><span class="p">(),</span>  <span class="c1"># Makes features orthogonal</span>
+</span><span id="__span-0-8"><a href="#__codelineno-0-8" id="__codelineno-0-8" name="__codelineno-0-8"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>Use <code>orthogonal_initializer()</code> to create features that don't overlap, making it easier to evaluate SAE performance.</p>
+<h3 id="activation-generator">Activation Generator</h3>
+<p>An <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.ActivationGenerator">ActivationGenerator</a> samples sparse feature activations with controlled firing probabilities.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-1-1"><a href="#__codelineno-1-1" id="__codelineno-1-1" name="__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActivationGenerator</span>
+</span><span id="__span-1-2"><a href="#__codelineno-1-2" id="__codelineno-1-2" name="__codelineno-1-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+</span><span id="__span-1-3"><a href="#__codelineno-1-3" id="__codelineno-1-3" name="__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a href="#__codelineno-1-4" id="__codelineno-1-4" name="__codelineno-1-4"></a><span class="n">firing_probs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.25</span>  <span class="c1"># Each feature fires 25% of the time</span>
+</span><span id="__span-1-5"><a href="#__codelineno-1-5" id="__codelineno-1-5" name="__codelineno-1-5"></a>
+</span><span id="__span-1-6"><a href="#__codelineno-1-6" id="__codelineno-1-6" name="__codelineno-1-6"></a><span class="n">activation_gen</span> <span class="o">=</span> <span class="n">ActivationGenerator</span><span class="p">(</span>
+</span><span id="__span-1-7"><a href="#__codelineno-1-7" id="__codelineno-1-7" name="__codelineno-1-7"></a>    <span class="n">num_features</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+</span><span id="__span-1-8"><a href="#__codelineno-1-8" id="__codelineno-1-8" name="__codelineno-1-8"></a>    <span class="n">firing_probabilities</span><span class="o">=</span><span class="n">firing_probs</span><span class="p">,</span>
+</span><span id="__span-1-9"><a href="#__codelineno-1-9" id="__codelineno-1-9" name="__codelineno-1-9"></a><span class="p">)</span>
+</span><span id="__span-1-10"><a href="#__codelineno-1-10" id="__codelineno-1-10" name="__codelineno-1-10"></a>
+</span><span id="__span-1-11"><a href="#__codelineno-1-11" id="__codelineno-1-11" name="__codelineno-1-11"></a><span class="c1"># Sample a batch of sparse feature activations</span>
+</span><span id="__span-1-12"><a href="#__codelineno-1-12" id="__codelineno-1-12" name="__codelineno-1-12"></a><span class="n">feature_activations</span> <span class="o">=</span> <span class="n">activation_gen</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="mi">1024</span><span class="p">)</span>
+</span></code></pre></div>
+<h2 id="basic-training-workflow">Basic Training Workflow</h2>
+<p>Use <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.train_toy_sae">train_toy_sae</a> to train an SAE on synthetic data:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-2-1"><a href="#__codelineno-2-1" id="__codelineno-2-1" name="__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-2-2"><a href="#__codelineno-2-2" id="__codelineno-2-2" name="__codelineno-2-2"></a>    <span class="n">FeatureDictionary</span><span class="p">,</span>
+</span><span id="__span-2-3"><a href="#__codelineno-2-3" id="__codelineno-2-3" name="__codelineno-2-3"></a>    <span class="n">ActivationGenerator</span><span class="p">,</span>
+</span><span id="__span-2-4"><a href="#__codelineno-2-4" id="__codelineno-2-4" name="__codelineno-2-4"></a>    <span class="n">train_toy_sae</span><span class="p">,</span>
+</span><span id="__span-2-5"><a href="#__codelineno-2-5" id="__codelineno-2-5" name="__codelineno-2-5"></a><span class="p">)</span>
+</span><span id="__span-2-6"><a href="#__codelineno-2-6" id="__codelineno-2-6" name="__codelineno-2-6"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="n">StandardTrainingSAE</span><span class="p">,</span> <span class="n">StandardTrainingSAEConfig</span>
+</span><span id="__span-2-7"><a href="#__codelineno-2-7" id="__codelineno-2-7" name="__codelineno-2-7"></a><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+</span><span id="__span-2-8"><a href="#__codelineno-2-8" id="__codelineno-2-8" name="__codelineno-2-8"></a>
+</span><span id="__span-2-9"><a href="#__codelineno-2-9" id="__codelineno-2-9" name="__codelineno-2-9"></a><span class="c1"># 1. Create feature dictionary and activation generator</span>
+</span><span id="__span-2-10"><a href="#__codelineno-2-10" id="__codelineno-2-10" name="__codelineno-2-10"></a><span class="n">feature_dict</span> <span class="o">=</span> <span class="n">FeatureDictionary</span><span class="p">(</span><span class="n">num_features</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">hidden_dim</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+</span><span id="__span-2-11"><a href="#__codelineno-2-11" id="__codelineno-2-11" name="__codelineno-2-11"></a><span class="n">activation_gen</span> <span class="o">=</span> <span class="n">ActivationGenerator</span><span class="p">(</span>
+</span><span id="__span-2-12"><a href="#__codelineno-2-12" id="__codelineno-2-12" name="__codelineno-2-12"></a>    <span class="n">num_features</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+</span><span id="__span-2-13"><a href="#__codelineno-2-13" id="__codelineno-2-13" name="__codelineno-2-13"></a>    <span class="n">firing_probabilities</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.25</span><span class="p">,</span>
+</span><span id="__span-2-14"><a href="#__codelineno-2-14" id="__codelineno-2-14" name="__codelineno-2-14"></a><span class="p">)</span>
+</span><span id="__span-2-15"><a href="#__codelineno-2-15" id="__codelineno-2-15" name="__codelineno-2-15"></a>
+</span><span id="__span-2-16"><a href="#__codelineno-2-16" id="__codelineno-2-16" name="__codelineno-2-16"></a><span class="c1"># 2. Configure SAE</span>
+</span><span id="__span-2-17"><a href="#__codelineno-2-17" id="__codelineno-2-17" name="__codelineno-2-17"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">StandardTrainingSAEConfig</span><span class="p">(</span>
+</span><span id="__span-2-18"><a href="#__codelineno-2-18" id="__codelineno-2-18" name="__codelineno-2-18"></a>    <span class="n">d_in</span><span class="o">=</span><span class="n">feature_dict</span><span class="o">.</span><span class="n">hidden_dim</span><span class="p">,</span>
+</span><span id="__span-2-19"><a href="#__codelineno-2-19" id="__codelineno-2-19" name="__codelineno-2-19"></a>    <span class="n">d_sae</span><span class="o">=</span><span class="n">feature_dict</span><span class="o">.</span><span class="n">num_features</span><span class="p">,</span>
+</span><span id="__span-2-20"><a href="#__codelineno-2-20" id="__codelineno-2-20" name="__codelineno-2-20"></a>    <span class="n">l1_coefficient</span><span class="o">=</span><span class="mf">5e-2</span><span class="p">,</span>
+</span><span id="__span-2-21"><a href="#__codelineno-2-21" id="__codelineno-2-21" name="__codelineno-2-21"></a><span class="p">)</span>
+</span><span id="__span-2-22"><a href="#__codelineno-2-22" id="__codelineno-2-22" name="__codelineno-2-22"></a><span class="n">sae</span> <span class="o">=</span> <span class="n">StandardTrainingSAE</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+</span><span id="__span-2-23"><a href="#__codelineno-2-23" id="__codelineno-2-23" name="__codelineno-2-23"></a>
+</span><span id="__span-2-24"><a href="#__codelineno-2-24" id="__codelineno-2-24" name="__codelineno-2-24"></a><span class="c1"># 3. Train</span>
+</span><span id="__span-2-25"><a href="#__codelineno-2-25" id="__codelineno-2-25" name="__codelineno-2-25"></a><span class="n">train_toy_sae</span><span class="p">(</span><span class="n">sae</span><span class="p">,</span> <span class="n">feature_dict</span><span class="p">,</span> <span class="n">activation_gen</span><span class="p">)</span>
+</span></code></pre></div>
+<h2 id="evaluation">Evaluation</h2>
+<p>Use <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.eval_sae_on_synthetic_data">eval_sae_on_synthetic_data</a> to measure how well the SAE recovers the true features:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-3-1"><a href="#__codelineno-3-1" id="__codelineno-3-1" name="__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">eval_sae_on_synthetic_data</span>
+</span><span id="__span-3-2"><a href="#__codelineno-3-2" id="__codelineno-3-2" name="__codelineno-3-2"></a>
+</span><span id="__span-3-3"><a href="#__codelineno-3-3" id="__codelineno-3-3" name="__codelineno-3-3"></a><span class="n">result</span> <span class="o">=</span> <span class="n">eval_sae_on_synthetic_data</span><span class="p">(</span><span class="n">sae</span><span class="p">,</span> <span class="n">feature_dict</span><span class="p">,</span> <span class="n">activation_gen</span><span class="p">)</span>
+</span><span id="__span-3-4"><a href="#__codelineno-3-4" id="__codelineno-3-4" name="__codelineno-3-4"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"MCC: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">mcc</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>  <span class="c1"># Mean Correlation Coefficient</span>
+</span><span id="__span-3-5"><a href="#__codelineno-3-5" id="__codelineno-3-5" name="__codelineno-3-5"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Explained variance: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">explained_variance</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>  <span class="c1"># R²</span>
+</span><span id="__span-3-6"><a href="#__codelineno-3-6" id="__codelineno-3-6" name="__codelineno-3-6"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Uniqueness: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">uniqueness</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>  <span class="c1"># Fraction of unique latents</span>
+</span><span id="__span-3-7"><a href="#__codelineno-3-7" id="__codelineno-3-7" name="__codelineno-3-7"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"L0: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">sae_l0</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>  <span class="c1"># Average active latents</span>
+</span><span id="__span-3-8"><a href="#__codelineno-3-8" id="__codelineno-3-8" name="__codelineno-3-8"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Dead latents: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">dead_latents</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span><span id="__span-3-9"><a href="#__codelineno-3-9" id="__codelineno-3-9" name="__codelineno-3-9"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Shrinkage: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">shrinkage</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span><span id="__span-3-10"><a href="#__codelineno-3-10" id="__codelineno-3-10" name="__codelineno-3-10"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Precision: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">classification</span><span class="o">.</span><span class="n">precision</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span><span id="__span-3-11"><a href="#__codelineno-3-11" id="__codelineno-3-11" name="__codelineno-3-11"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Recall: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">classification</span><span class="o">.</span><span class="n">recall</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span><span id="__span-3-12"><a href="#__codelineno-3-12" id="__codelineno-3-12" name="__codelineno-3-12"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"F1: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">classification</span><span class="o">.</span><span class="n">f1_score</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="metrics">Metrics</h3>
+<ul>
+<li><strong>MCC (Mean Correlation Coefficient)</strong>: Measures alignment between SAE decoder weights and true feature vectors. Uses the Hungarian algorithm to find the optimal one-to-one matching, then computes mean absolute cosine similarity. Range [0, 1] where 1 = perfect recovery. See the paper <a href="https://arxiv.org/abs/2505.20254">Position: Mechanistic Interpretability Should Prioritize Feature Consistency in SAEs</a> for more details.</li>
+<li><strong>Explained Variance (R²)</strong>: Fraction of input variance explained by the SAE reconstruction. 1.0 = perfect reconstruction.</li>
+<li><strong>Uniqueness</strong>: Fraction of SAE latents that track unique ground-truth features (i.e., no two latents map to the same ground-truth feature). 1.0 = all unique.</li>
+<li><strong>Classification (Precision/Recall/F1)</strong>: Treats each SAE latent as a binary classifier for its best-matching ground-truth feature. Precision = TP/(TP+FP), Recall = TP/(TP+FN), F1 = harmonic mean.</li>
+<li><strong>L0</strong>: Average number of active SAE latents per sample. Compare to <code>true_l0</code> to check if sparsity matches.</li>
+<li><strong>Dead latents</strong>: Number of SAE latents that never activate. High values indicate capacity issues.</li>
+<li><strong>Shrinkage</strong>: Ratio of SAE output norm to input norm. Values below 1.0 indicate the SAE is shrinking reconstructions.</li>
+</ul>
+<h3 id="visualization">Visualization</h3>
+<p>Use <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.plot_sae_feature_similarity">plot_sae_feature_similarity</a> to visualize how SAE features align with ground truth:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-4-1"><a href="#__codelineno-4-1" id="__codelineno-4-1" name="__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_sae_feature_similarity</span>
+</span><span id="__span-4-2"><a href="#__codelineno-4-2" id="__codelineno-4-2" name="__codelineno-4-2"></a>
+</span><span id="__span-4-3"><a href="#__codelineno-4-3" id="__codelineno-4-3" name="__codelineno-4-3"></a><span class="n">plot_sae_feature_similarity</span><span class="p">(</span><span class="n">sae</span><span class="p">,</span> <span class="n">feature_dict</span><span class="p">,</span> <span class="n">reorder_sae_latents</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span></code></pre></div>
+<p>This creates a heatmap showing cosine similarity between each SAE latent and each true feature.</p>
+<h2 id="realistic-data-properties">Realistic Data Properties</h2>
+<h3 id="firing-probability-distributions">Firing Probability Distributions</h3>
+<p>Real neural network features follow power-law distributions where few features fire frequently and most fire rarely. Use <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.zipfian_firing_probabilities">zipfian_firing_probabilities</a>:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-5-1"><a href="#__codelineno-5-1" id="__codelineno-5-1" name="__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">zipfian_firing_probabilities</span>
+</span><span id="__span-5-2"><a href="#__codelineno-5-2" id="__codelineno-5-2" name="__codelineno-5-2"></a>
+</span><span id="__span-5-3"><a href="#__codelineno-5-3" id="__codelineno-5-3" name="__codelineno-5-3"></a><span class="c1"># Power-law distribution: some features common, most rare</span>
+</span><span id="__span-5-4"><a href="#__codelineno-5-4" id="__codelineno-5-4" name="__codelineno-5-4"></a><span class="n">firing_probs</span> <span class="o">=</span> <span class="n">zipfian_firing_probabilities</span><span class="p">(</span>
+</span><span id="__span-5-5"><a href="#__codelineno-5-5" id="__codelineno-5-5" name="__codelineno-5-5"></a>    <span class="n">num_features</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+</span><span id="__span-5-6"><a href="#__codelineno-5-6" id="__codelineno-5-6" name="__codelineno-5-6"></a>    <span class="n">exponent</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+</span><span id="__span-5-7"><a href="#__codelineno-5-7" id="__codelineno-5-7" name="__codelineno-5-7"></a>    <span class="n">max_prob</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+</span><span id="__span-5-8"><a href="#__codelineno-5-8" id="__codelineno-5-8" name="__codelineno-5-8"></a>    <span class="n">min_prob</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+</span><span id="__span-5-9"><a href="#__codelineno-5-9" id="__codelineno-5-9" name="__codelineno-5-9"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>Other options:
+- <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.linear_firing_probabilities">linear_firing_probabilities</a>: Linearly decreasing from max to min
+- <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.random_firing_probabilities">random_firing_probabilities</a>: Uniform random within bounds</p>
+<h3 id="feature-correlations">Feature Correlations</h3>
+<p>Features in real networks often co-occur or anti-occur. Add correlations with <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.generate_random_correlation_matrix">generate_random_correlation_matrix</a>:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-6-1"><a href="#__codelineno-6-1" id="__codelineno-6-1" name="__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">generate_random_correlation_matrix</span>
+</span><span id="__span-6-2"><a href="#__codelineno-6-2" id="__codelineno-6-2" name="__codelineno-6-2"></a>
+</span><span id="__span-6-3"><a href="#__codelineno-6-3" id="__codelineno-6-3" name="__codelineno-6-3"></a><span class="n">correlation_matrix</span> <span class="o">=</span> <span class="n">generate_random_correlation_matrix</span><span class="p">(</span>
+</span><span id="__span-6-4"><a href="#__codelineno-6-4" id="__codelineno-6-4" name="__codelineno-6-4"></a>    <span class="n">num_features</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+</span><span id="__span-6-5"><a href="#__codelineno-6-5" id="__codelineno-6-5" name="__codelineno-6-5"></a>    <span class="n">uncorrelated_ratio</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>        <span class="c1"># 30% of pairs have no correlation</span>
+</span><span id="__span-6-6"><a href="#__codelineno-6-6" id="__codelineno-6-6" name="__codelineno-6-6"></a>    <span class="n">positive_ratio</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span>            <span class="c1"># 70% of correlations are positive</span>
+</span><span id="__span-6-7"><a href="#__codelineno-6-7" id="__codelineno-6-7" name="__codelineno-6-7"></a>    <span class="n">min_correlation_strength</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+</span><span id="__span-6-8"><a href="#__codelineno-6-8" id="__codelineno-6-8" name="__codelineno-6-8"></a>    <span class="n">max_correlation_strength</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+</span><span id="__span-6-9"><a href="#__codelineno-6-9" id="__codelineno-6-9" name="__codelineno-6-9"></a><span class="p">)</span>
+</span><span id="__span-6-10"><a href="#__codelineno-6-10" id="__codelineno-6-10" name="__codelineno-6-10"></a>
+</span><span id="__span-6-11"><a href="#__codelineno-6-11" id="__codelineno-6-11" name="__codelineno-6-11"></a><span class="n">activation_gen</span> <span class="o">=</span> <span class="n">ActivationGenerator</span><span class="p">(</span>
+</span><span id="__span-6-12"><a href="#__codelineno-6-12" id="__codelineno-6-12" name="__codelineno-6-12"></a>    <span class="n">num_features</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+</span><span id="__span-6-13"><a href="#__codelineno-6-13" id="__codelineno-6-13" name="__codelineno-6-13"></a>    <span class="n">firing_probabilities</span><span class="o">=</span><span class="n">firing_probs</span><span class="p">,</span>
+</span><span id="__span-6-14"><a href="#__codelineno-6-14" id="__codelineno-6-14" name="__codelineno-6-14"></a>    <span class="n">correlation_matrix</span><span class="o">=</span><span class="n">correlation_matrix</span><span class="p">,</span>
+</span><span id="__span-6-15"><a href="#__codelineno-6-15" id="__codelineno-6-15" name="__codelineno-6-15"></a><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="hierarchical-features">Hierarchical Features</h3>
+<p>Model parent-child feature relationships where children can only fire when parents are active. Use <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.HierarchyNode">HierarchyNode</a>:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-7-1"><a href="#__codelineno-7-1" id="__codelineno-7-1" name="__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">HierarchyNode</span><span class="p">,</span> <span class="n">hierarchy_modifier</span>
+</span><span id="__span-7-2"><a href="#__codelineno-7-2" id="__codelineno-7-2" name="__codelineno-7-2"></a>
+</span><span id="__span-7-3"><a href="#__codelineno-7-3" id="__codelineno-7-3" name="__codelineno-7-3"></a><span class="c1"># Feature 0 is parent of features 1 and 2</span>
+</span><span id="__span-7-4"><a href="#__codelineno-7-4" id="__codelineno-7-4" name="__codelineno-7-4"></a><span class="c1"># Feature 1 is parent of feature 3</span>
+</span><span id="__span-7-5"><a href="#__codelineno-7-5" id="__codelineno-7-5" name="__codelineno-7-5"></a><span class="n">hierarchy</span> <span class="o">=</span> <span class="n">HierarchyNode</span><span class="o">.</span><span class="n">from_dict</span><span class="p">({</span>
+</span><span id="__span-7-6"><a href="#__codelineno-7-6" id="__codelineno-7-6" name="__codelineno-7-6"></a>    <span class="mi">0</span><span class="p">:</span> <span class="p">{</span>
+</span><span id="__span-7-7"><a href="#__codelineno-7-7" id="__codelineno-7-7" name="__codelineno-7-7"></a>        <span class="mi">1</span><span class="p">:</span> <span class="p">{</span><span class="mi">3</span><span class="p">:</span> <span class="p">{}},</span>
+</span><span id="__span-7-8"><a href="#__codelineno-7-8" id="__codelineno-7-8" name="__codelineno-7-8"></a>        <span class="mi">2</span><span class="p">:</span> <span class="p">{},</span>
+</span><span id="__span-7-9"><a href="#__codelineno-7-9" id="__codelineno-7-9" name="__codelineno-7-9"></a>    <span class="p">}</span>
+</span><span id="__span-7-10"><a href="#__codelineno-7-10" id="__codelineno-7-10" name="__codelineno-7-10"></a><span class="p">})</span>
+</span><span id="__span-7-11"><a href="#__codelineno-7-11" id="__codelineno-7-11" name="__codelineno-7-11"></a>
+</span><span id="__span-7-12"><a href="#__codelineno-7-12" id="__codelineno-7-12" name="__codelineno-7-12"></a><span class="n">modifier</span> <span class="o">=</span> <span class="n">hierarchy_modifier</span><span class="p">(</span><span class="n">hierarchy</span><span class="p">)</span>
+</span><span id="__span-7-13"><a href="#__codelineno-7-13" id="__codelineno-7-13" name="__codelineno-7-13"></a>
+</span><span id="__span-7-14"><a href="#__codelineno-7-14" id="__codelineno-7-14" name="__codelineno-7-14"></a><span class="n">activation_gen</span> <span class="o">=</span> <span class="n">ActivationGenerator</span><span class="p">(</span>
+</span><span id="__span-7-15"><a href="#__codelineno-7-15" id="__codelineno-7-15" name="__codelineno-7-15"></a>    <span class="n">num_features</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+</span><span id="__span-7-16"><a href="#__codelineno-7-16" id="__codelineno-7-16" name="__codelineno-7-16"></a>    <span class="n">firing_probabilities</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.5</span><span class="p">,</span>
+</span><span id="__span-7-17"><a href="#__codelineno-7-17" id="__codelineno-7-17" name="__codelineno-7-17"></a>    <span class="n">modify_activations</span><span class="o">=</span><span class="n">modifier</span><span class="p">,</span>
+</span><span id="__span-7-18"><a href="#__codelineno-7-18" id="__codelineno-7-18" name="__codelineno-7-18"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>With hierarchies, you may observe <strong>feature absorption</strong>: when a child always fires with its parent, the SAE learns to encode both in a single latent.</p>
+<h2 id="advanced-topics">Advanced Topics</h2>
+<h3 id="superposition">Superposition</h3>
+<p>Create superposition by having more features than hidden dimensions:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-8-1"><a href="#__codelineno-8-1" id="__codelineno-8-1" name="__codelineno-8-1"></a><span class="c1"># 32 features in 16-dimensional space = 2x superposition</span>
+</span><span id="__span-8-2"><a href="#__codelineno-8-2" id="__codelineno-8-2" name="__codelineno-8-2"></a><span class="n">feature_dict</span> <span class="o">=</span> <span class="n">FeatureDictionary</span><span class="p">(</span><span class="n">num_features</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">hidden_dim</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+</span></code></pre></div>
+<p>With superposition, features must share directions, making recovery harder. The <code>orthogonal_initializer()</code> can only make features approximately orthogonal when <code>num_features &gt; hidden_dim</code>.</p>
+<h3 id="custom-activation-modifiers">Custom Activation Modifiers</h3>
+<p>Create custom modifiers to implement arbitrary activation transformations. A modifier is a function <code>(activations: torch.Tensor) -&gt; torch.Tensor</code>:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-9-1"><a href="#__codelineno-9-1" id="__codelineno-9-1" name="__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActivationsModifier</span>
+</span><span id="__span-9-2"><a href="#__codelineno-9-2" id="__codelineno-9-2" name="__codelineno-9-2"></a>
+</span><span id="__span-9-3"><a href="#__codelineno-9-3" id="__codelineno-9-3" name="__codelineno-9-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_modifier</span><span class="p">(</span><span class="n">activations</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+</span><span id="__span-9-4"><a href="#__codelineno-9-4" id="__codelineno-9-4" name="__codelineno-9-4"></a>    <span class="c1"># Example: zero out feature 0 when feature 1 is active</span>
+</span><span id="__span-9-5"><a href="#__codelineno-9-5" id="__codelineno-9-5" name="__codelineno-9-5"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">activations</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+</span><span id="__span-9-6"><a href="#__codelineno-9-6" id="__codelineno-9-6" name="__codelineno-9-6"></a>    <span class="n">mask</span> <span class="o">=</span> <span class="n">activations</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span>
+</span><span id="__span-9-7"><a href="#__codelineno-9-7" id="__codelineno-9-7" name="__codelineno-9-7"></a>    <span class="n">result</span><span class="p">[</span><span class="n">mask</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="__span-9-8"><a href="#__codelineno-9-8" id="__codelineno-9-8" name="__codelineno-9-8"></a>    <span class="k">return</span> <span class="n">result</span>
+</span><span id="__span-9-9"><a href="#__codelineno-9-9" id="__codelineno-9-9" name="__codelineno-9-9"></a>
+</span><span id="__span-9-10"><a href="#__codelineno-9-10" id="__codelineno-9-10" name="__codelineno-9-10"></a><span class="n">activation_gen</span> <span class="o">=</span> <span class="n">ActivationGenerator</span><span class="p">(</span>
+</span><span id="__span-9-11"><a href="#__codelineno-9-11" id="__codelineno-9-11" name="__codelineno-9-11"></a>    <span class="n">num_features</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+</span><span id="__span-9-12"><a href="#__codelineno-9-12" id="__codelineno-9-12" name="__codelineno-9-12"></a>    <span class="n">firing_probabilities</span><span class="o">=</span><span class="n">firing_probs</span><span class="p">,</span>
+</span><span id="__span-9-13"><a href="#__codelineno-9-13" id="__codelineno-9-13" name="__codelineno-9-13"></a>    <span class="n">modify_activations</span><span class="o">=</span><span class="n">my_modifier</span><span class="p">,</span>
+</span><span id="__span-9-14"><a href="#__codelineno-9-14" id="__codelineno-9-14" name="__codelineno-9-14"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>Pass a list of modifiers to apply them in sequence.</p>
+<h2 id="large-scale-training-with-syntheticmodel">Large-Scale Training with SyntheticModel</h2>
+<p>For training SAEs on larger synthetic datasets with features like checkpointing, wandb logging, and HuggingFace integration, use <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.SyntheticModel">SyntheticModel</a> and <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.SyntheticSAERunner">SyntheticSAERunner</a>.</p>
+<h3 id="syntheticmodel">SyntheticModel</h3>
+<p><a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.SyntheticModel">SyntheticModel</a> combines all synthetic data components into a single, configurable model:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-10-1"><a href="#__codelineno-10-1" id="__codelineno-10-1" name="__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyntheticModel</span><span class="p">,</span> <span class="n">SyntheticModelConfig</span>
+</span><span id="__span-10-2"><a href="#__codelineno-10-2" id="__codelineno-10-2" name="__codelineno-10-2"></a>
+</span><span id="__span-10-3"><a href="#__codelineno-10-3" id="__codelineno-10-3" name="__codelineno-10-3"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">SyntheticModelConfig</span><span class="p">(</span>
+</span><span id="__span-10-4"><a href="#__codelineno-10-4" id="__codelineno-10-4" name="__codelineno-10-4"></a>    <span class="n">num_features</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span>
+</span><span id="__span-10-5"><a href="#__codelineno-10-5" id="__codelineno-10-5" name="__codelineno-10-5"></a>    <span class="n">hidden_dim</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
+</span><span id="__span-10-6"><a href="#__codelineno-10-6" id="__codelineno-10-6" name="__codelineno-10-6"></a><span class="p">)</span>
+</span><span id="__span-10-7"><a href="#__codelineno-10-7" id="__codelineno-10-7" name="__codelineno-10-7"></a><span class="n">model</span> <span class="o">=</span> <span class="n">SyntheticModel</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+</span><span id="__span-10-8"><a href="#__codelineno-10-8" id="__codelineno-10-8" name="__codelineno-10-8"></a>
+</span><span id="__span-10-9"><a href="#__codelineno-10-9" id="__codelineno-10-9" name="__codelineno-10-9"></a><span class="c1"># Generate training data</span>
+</span><span id="__span-10-10"><a href="#__codelineno-10-10" id="__codelineno-10-10" name="__codelineno-10-10"></a><span class="n">hidden_activations</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="mi">1024</span><span class="p">)</span>
+</span><span id="__span-10-11"><a href="#__codelineno-10-11" id="__codelineno-10-11" name="__codelineno-10-11"></a>
+</span><span id="__span-10-12"><a href="#__codelineno-10-12" id="__codelineno-10-12" name="__codelineno-10-12"></a><span class="c1"># Or get both hidden activations and ground-truth features</span>
+</span><span id="__span-10-13"><a href="#__codelineno-10-13" id="__codelineno-10-13" name="__codelineno-10-13"></a><span class="n">hidden_acts</span><span class="p">,</span> <span class="n">feature_acts</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">sample_with_features</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="mi">1024</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="syntheticmodelconfig">SyntheticModelConfig</h3>
+<p><a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.SyntheticModelConfig">SyntheticModelConfig</a> provides declarative configuration for all model properties:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-11-1"><a href="#__codelineno-11-1" id="__codelineno-11-1" name="__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-11-2"><a href="#__codelineno-11-2" id="__codelineno-11-2" name="__codelineno-11-2"></a>    <span class="n">SyntheticModelConfig</span><span class="p">,</span>
+</span><span id="__span-11-3"><a href="#__codelineno-11-3" id="__codelineno-11-3" name="__codelineno-11-3"></a>    <span class="n">ZipfianFiringProbabilityConfig</span><span class="p">,</span>
+</span><span id="__span-11-4"><a href="#__codelineno-11-4" id="__codelineno-11-4" name="__codelineno-11-4"></a>    <span class="n">HierarchyConfig</span><span class="p">,</span>
+</span><span id="__span-11-5"><a href="#__codelineno-11-5" id="__codelineno-11-5" name="__codelineno-11-5"></a>    <span class="n">OrthogonalizationConfig</span><span class="p">,</span>
+</span><span id="__span-11-6"><a href="#__codelineno-11-6" id="__codelineno-11-6" name="__codelineno-11-6"></a>    <span class="n">LowRankCorrelationConfig</span><span class="p">,</span>
+</span><span id="__span-11-7"><a href="#__codelineno-11-7" id="__codelineno-11-7" name="__codelineno-11-7"></a>    <span class="n">LinearMagnitudeConfig</span><span class="p">,</span>
+</span><span id="__span-11-8"><a href="#__codelineno-11-8" id="__codelineno-11-8" name="__codelineno-11-8"></a>    <span class="n">FoldedNormalMagnitudeConfig</span><span class="p">,</span>
+</span><span id="__span-11-9"><a href="#__codelineno-11-9" id="__codelineno-11-9" name="__codelineno-11-9"></a><span class="p">)</span>
+</span><span id="__span-11-10"><a href="#__codelineno-11-10" id="__codelineno-11-10" name="__codelineno-11-10"></a>
+</span><span id="__span-11-11"><a href="#__codelineno-11-11" id="__codelineno-11-11" name="__codelineno-11-11"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">SyntheticModelConfig</span><span class="p">(</span>
+</span><span id="__span-11-12"><a href="#__codelineno-11-12" id="__codelineno-11-12" name="__codelineno-11-12"></a>    <span class="n">num_features</span><span class="o">=</span><span class="mi">16_384</span><span class="p">,</span>
+</span><span id="__span-11-13"><a href="#__codelineno-11-13" id="__codelineno-11-13" name="__codelineno-11-13"></a>    <span class="n">hidden_dim</span><span class="o">=</span><span class="mi">768</span><span class="p">,</span>
+</span><span id="__span-11-14"><a href="#__codelineno-11-14" id="__codelineno-11-14" name="__codelineno-11-14"></a>
+</span><span id="__span-11-15"><a href="#__codelineno-11-15" id="__codelineno-11-15" name="__codelineno-11-15"></a>    <span class="c1"># Zipfian firing probabilities: few features fire often, most are rare</span>
+</span><span id="__span-11-16"><a href="#__codelineno-11-16" id="__codelineno-11-16" name="__codelineno-11-16"></a>    <span class="n">firing_probability</span><span class="o">=</span><span class="n">ZipfianFiringProbabilityConfig</span><span class="p">(</span>
+</span><span id="__span-11-17"><a href="#__codelineno-11-17" id="__codelineno-11-17" name="__codelineno-11-17"></a>        <span class="n">exponent</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+</span><span id="__span-11-18"><a href="#__codelineno-11-18" id="__codelineno-11-18" name="__codelineno-11-18"></a>        <span class="n">max_prob</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span>
+</span><span id="__span-11-19"><a href="#__codelineno-11-19" id="__codelineno-11-19" name="__codelineno-11-19"></a>        <span class="n">min_prob</span><span class="o">=</span><span class="mf">5e-4</span><span class="p">,</span>
+</span><span id="__span-11-20"><a href="#__codelineno-11-20" id="__codelineno-11-20" name="__codelineno-11-20"></a>    <span class="p">),</span>
+</span><span id="__span-11-21"><a href="#__codelineno-11-21" id="__codelineno-11-21" name="__codelineno-11-21"></a>
+</span><span id="__span-11-22"><a href="#__codelineno-11-22" id="__codelineno-11-22" name="__codelineno-11-22"></a>    <span class="c1"># Hierarchical features with mutual exclusion</span>
+</span><span id="__span-11-23"><a href="#__codelineno-11-23" id="__codelineno-11-23" name="__codelineno-11-23"></a>    <span class="n">hierarchy</span><span class="o">=</span><span class="n">HierarchyConfig</span><span class="p">(</span>
+</span><span id="__span-11-24"><a href="#__codelineno-11-24" id="__codelineno-11-24" name="__codelineno-11-24"></a>        <span class="n">total_root_nodes</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
+</span><span id="__span-11-25"><a href="#__codelineno-11-25" id="__codelineno-11-25" name="__codelineno-11-25"></a>        <span class="n">branching_factor</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+</span><span id="__span-11-26"><a href="#__codelineno-11-26" id="__codelineno-11-26" name="__codelineno-11-26"></a>        <span class="n">max_depth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+</span><span id="__span-11-27"><a href="#__codelineno-11-27" id="__codelineno-11-27" name="__codelineno-11-27"></a>        <span class="n">mutually_exclusive_portion</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>  <span class="c1"># All children are mutually exclusive</span>
+</span><span id="__span-11-28"><a href="#__codelineno-11-28" id="__codelineno-11-28" name="__codelineno-11-28"></a>        <span class="n">mutually_exclusive_min_depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>  <span class="c1"># Apply ME starting from root nodes</span>
+</span><span id="__span-11-29"><a href="#__codelineno-11-29" id="__codelineno-11-29" name="__codelineno-11-29"></a>        <span class="n">compensate_probabilities</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Try to compensate firing probabilities for hierarchy effects</span>
+</span><span id="__span-11-30"><a href="#__codelineno-11-30" id="__codelineno-11-30" name="__codelineno-11-30"></a>        <span class="n">scale_children_by_parent</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Scale child activations by parent activation / parent mean</span>
+</span><span id="__span-11-31"><a href="#__codelineno-11-31" id="__codelineno-11-31" name="__codelineno-11-31"></a>    <span class="p">),</span>
+</span><span id="__span-11-32"><a href="#__codelineno-11-32" id="__codelineno-11-32" name="__codelineno-11-32"></a>
+</span><span id="__span-11-33"><a href="#__codelineno-11-33" id="__codelineno-11-33" name="__codelineno-11-33"></a>    <span class="c1"># Orthogonalize feature vectors to reduce overlap</span>
+</span><span id="__span-11-34"><a href="#__codelineno-11-34" id="__codelineno-11-34" name="__codelineno-11-34"></a>    <span class="n">orthogonalization</span><span class="o">=</span><span class="n">OrthogonalizationConfig</span><span class="p">(</span>
+</span><span id="__span-11-35"><a href="#__codelineno-11-35" id="__codelineno-11-35" name="__codelineno-11-35"></a>        <span class="n">num_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+</span><span id="__span-11-36"><a href="#__codelineno-11-36" id="__codelineno-11-36" name="__codelineno-11-36"></a>        <span class="n">lr</span><span class="o">=</span><span class="mf">3e-4</span><span class="p">,</span>
+</span><span id="__span-11-37"><a href="#__codelineno-11-37" id="__codelineno-11-37" name="__codelineno-11-37"></a>    <span class="p">),</span>
+</span><span id="__span-11-38"><a href="#__codelineno-11-38" id="__codelineno-11-38" name="__codelineno-11-38"></a>
+</span><span id="__span-11-39"><a href="#__codelineno-11-39" id="__codelineno-11-39" name="__codelineno-11-39"></a>    <span class="c1"># Low-rank feature correlations</span>
+</span><span id="__span-11-40"><a href="#__codelineno-11-40" id="__codelineno-11-40" name="__codelineno-11-40"></a>    <span class="n">correlation</span><span class="o">=</span><span class="n">LowRankCorrelationConfig</span><span class="p">(</span>
+</span><span id="__span-11-41"><a href="#__codelineno-11-41" id="__codelineno-11-41" name="__codelineno-11-41"></a>        <span class="n">rank</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+</span><span id="__span-11-42"><a href="#__codelineno-11-42" id="__codelineno-11-42" name="__codelineno-11-42"></a>        <span class="n">correlation_scale</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+</span><span id="__span-11-43"><a href="#__codelineno-11-43" id="__codelineno-11-43" name="__codelineno-11-43"></a>    <span class="p">),</span>
+</span><span id="__span-11-44"><a href="#__codelineno-11-44" id="__codelineno-11-44" name="__codelineno-11-44"></a>
+</span><span id="__span-11-45"><a href="#__codelineno-11-45" id="__codelineno-11-45" name="__codelineno-11-45"></a>    <span class="c1"># Per-feature magnitude variation</span>
+</span><span id="__span-11-46"><a href="#__codelineno-11-46" id="__codelineno-11-46" name="__codelineno-11-46"></a>    <span class="n">mean_firing_magnitudes</span><span class="o">=</span><span class="n">LinearMagnitudeConfig</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mf">4.0</span><span class="p">),</span>
+</span><span id="__span-11-47"><a href="#__codelineno-11-47" id="__codelineno-11-47" name="__codelineno-11-47"></a>    <span class="n">std_firing_magnitudes</span><span class="o">=</span><span class="n">FoldedNormalMagnitudeConfig</span><span class="p">(</span><span class="n">mean</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">std</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span>
+</span><span id="__span-11-48"><a href="#__codelineno-11-48" id="__codelineno-11-48" name="__codelineno-11-48"></a>
+</span><span id="__span-11-49"><a href="#__codelineno-11-49" id="__codelineno-11-49" name="__codelineno-11-49"></a>    <span class="n">bias</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+</span><span id="__span-11-50"><a href="#__codelineno-11-50" id="__codelineno-11-50" name="__codelineno-11-50"></a>    <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+</span><span id="__span-11-51"><a href="#__codelineno-11-51" id="__codelineno-11-51" name="__codelineno-11-51"></a><span class="p">)</span>
+</span><span id="__span-11-52"><a href="#__codelineno-11-52" id="__codelineno-11-52" name="__codelineno-11-52"></a>
+</span><span id="__span-11-53"><a href="#__codelineno-11-53" id="__codelineno-11-53" name="__codelineno-11-53"></a><span class="n">model</span> <span class="o">=</span> <span class="n">SyntheticModel</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
+</span></code></pre></div>
+<p>This configuration is similar to <a href="../synth_sae_bench/">SynthSAEBench-16k</a>, which provides a standardized benchmark model for SAE evaluation.</p>
+<h3 id="automatic-hierarchy-generation">Automatic Hierarchy Generation</h3>
+<p>Use <a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.HierarchyConfig">HierarchyConfig</a> to automatically generate hierarchical feature structures:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-12-1"><a href="#__codelineno-12-1" id="__codelineno-12-1" name="__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">HierarchyConfig</span>
+</span><span id="__span-12-2"><a href="#__codelineno-12-2" id="__codelineno-12-2" name="__codelineno-12-2"></a>
+</span><span id="__span-12-3"><a href="#__codelineno-12-3" id="__codelineno-12-3" name="__codelineno-12-3"></a><span class="n">hierarchy_cfg</span> <span class="o">=</span> <span class="n">HierarchyConfig</span><span class="p">(</span>
+</span><span id="__span-12-4"><a href="#__codelineno-12-4" id="__codelineno-12-4" name="__codelineno-12-4"></a>    <span class="n">total_root_nodes</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>           <span class="c1"># Number of root features</span>
+</span><span id="__span-12-5"><a href="#__codelineno-12-5" id="__codelineno-12-5" name="__codelineno-12-5"></a>    <span class="n">branching_factor</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>            <span class="c1"># Children per parent (or tuple for range)</span>
+</span><span id="__span-12-6"><a href="#__codelineno-12-6" id="__codelineno-12-6" name="__codelineno-12-6"></a>    <span class="n">max_depth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>                    <span class="c1"># Maximum tree depth</span>
+</span><span id="__span-12-7"><a href="#__codelineno-12-7" id="__codelineno-12-7" name="__codelineno-12-7"></a>    <span class="n">mutually_exclusive_portion</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="c1"># Fraction of parents with ME children</span>
+</span><span id="__span-12-8"><a href="#__codelineno-12-8" id="__codelineno-12-8" name="__codelineno-12-8"></a>    <span class="n">mutually_exclusive_min_depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="c1"># Minimum depth for ME</span>
+</span><span id="__span-12-9"><a href="#__codelineno-12-9" id="__codelineno-12-9" name="__codelineno-12-9"></a>    <span class="n">mutually_exclusive_max_depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="c1"># Maximum depth for ME</span>
+</span><span id="__span-12-10"><a href="#__codelineno-12-10" id="__codelineno-12-10" name="__codelineno-12-10"></a>    <span class="n">compensate_probabilities</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># Adjust probs for hierarchy effects</span>
+</span><span id="__span-12-11"><a href="#__codelineno-12-11" id="__codelineno-12-11" name="__codelineno-12-11"></a>    <span class="n">scale_children_by_parent</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="c1"># Scale child activations by parent activation / parent mean</span>
+</span><span id="__span-12-12"><a href="#__codelineno-12-12" id="__codelineno-12-12" name="__codelineno-12-12"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>With <code>compensate_probabilities=True</code>, firing probabilities are scaled up to compensate for the reduction to base firing probabilities caused by hierarchy constraints (children only fire when parents fire). Hierarchy works by disabling child features when their parent features are not active, which reduces the effective firing probability of the child features.</p>
+<p>This setting likely only makes sense when using a Zipfian firing probability distribution, and it may be impossible to fully compensate probabilities, especially with mutually exclusive children. If you don't care about each feature's individual firing probability roughly matching the value you set for <code>firing_probability</code>, you can just set this to False.</p>
+<p>With <code>scale_children_by_parent=True</code>, child activations are scaled by parent activation / parent mean. The intuition is that if a parent feature like "dog" is active much more strongly (or weakly) than usual, then a child feature like "Golden Retriever" should also have its activation scaled up (or down) proportionally. Setting this to True effectively makes the firing magnitudes of the parent/child features more correlated.</p>
+<h3 id="per-feature-magnitude-distributions">Per-Feature Magnitude Distributions</h3>
+<p>Configure how firing magnitudes vary across features:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-13-1"><a href="#__codelineno-13-1" id="__codelineno-13-1" name="__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-13-2"><a href="#__codelineno-13-2" id="__codelineno-13-2" name="__codelineno-13-2"></a>    <span class="n">ConstantMagnitudeConfig</span><span class="p">,</span>
+</span><span id="__span-13-3"><a href="#__codelineno-13-3" id="__codelineno-13-3" name="__codelineno-13-3"></a>    <span class="n">LinearMagnitudeConfig</span><span class="p">,</span>
+</span><span id="__span-13-4"><a href="#__codelineno-13-4" id="__codelineno-13-4" name="__codelineno-13-4"></a>    <span class="n">ExponentialMagnitudeConfig</span><span class="p">,</span>
+</span><span id="__span-13-5"><a href="#__codelineno-13-5" id="__codelineno-13-5" name="__codelineno-13-5"></a>    <span class="n">FoldedNormalMagnitudeConfig</span><span class="p">,</span>
+</span><span id="__span-13-6"><a href="#__codelineno-13-6" id="__codelineno-13-6" name="__codelineno-13-6"></a><span class="p">)</span>
+</span><span id="__span-13-7"><a href="#__codelineno-13-7" id="__codelineno-13-7" name="__codelineno-13-7"></a>
+</span><span id="__span-13-8"><a href="#__codelineno-13-8" id="__codelineno-13-8" name="__codelineno-13-8"></a><span class="c1"># All features have magnitude 1.0</span>
+</span><span id="__span-13-9"><a href="#__codelineno-13-9" id="__codelineno-13-9" name="__codelineno-13-9"></a><span class="n">constant</span> <span class="o">=</span> <span class="n">ConstantMagnitudeConfig</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+</span><span id="__span-13-10"><a href="#__codelineno-13-10" id="__codelineno-13-10" name="__codelineno-13-10"></a>
+</span><span id="__span-13-11"><a href="#__codelineno-13-11" id="__codelineno-13-11" name="__codelineno-13-11"></a><span class="c1"># Linear interpolation from 0.5 to 2.0 across features</span>
+</span><span id="__span-13-12"><a href="#__codelineno-13-12" id="__codelineno-13-12" name="__codelineno-13-12"></a><span class="n">linear</span> <span class="o">=</span> <span class="n">LinearMagnitudeConfig</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+</span><span id="__span-13-13"><a href="#__codelineno-13-13" id="__codelineno-13-13" name="__codelineno-13-13"></a>
+</span><span id="__span-13-14"><a href="#__codelineno-13-14" id="__codelineno-13-14" name="__codelineno-13-14"></a><span class="c1"># Exponential interpolation</span>
+</span><span id="__span-13-15"><a href="#__codelineno-13-15" id="__codelineno-13-15" name="__codelineno-13-15"></a><span class="n">exponential</span> <span class="o">=</span> <span class="n">ExponentialMagnitudeConfig</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)</span>
+</span><span id="__span-13-16"><a href="#__codelineno-13-16" id="__codelineno-13-16" name="__codelineno-13-16"></a>
+</span><span id="__span-13-17"><a href="#__codelineno-13-17" id="__codelineno-13-17" name="__codelineno-13-17"></a><span class="c1"># Random magnitudes from folded normal distribution</span>
+</span><span id="__span-13-18"><a href="#__codelineno-13-18" id="__codelineno-13-18" name="__codelineno-13-18"></a><span class="n">random</span> <span class="o">=</span> <span class="n">FoldedNormalMagnitudeConfig</span><span class="p">(</span><span class="n">mean</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">std</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="training-with-syntheticsaerunner">Training with SyntheticSAERunner</h3>
+<p><a class="autorefs autorefs-internal" href="../api/#sae_lens.synthetic.SyntheticSAERunner">SyntheticSAERunner</a> provides full training infrastructure:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-14-1"><a href="#__codelineno-14-1" id="__codelineno-14-1" name="__codelineno-14-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyntheticSAERunner</span><span class="p">,</span> <span class="n">SyntheticSAERunnerConfig</span>
+</span><span id="__span-14-2"><a href="#__codelineno-14-2" id="__codelineno-14-2" name="__codelineno-14-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchTopKTrainingSAEConfig</span><span class="p">,</span> <span class="n">LoggingConfig</span>
+</span><span id="__span-14-3"><a href="#__codelineno-14-3" id="__codelineno-14-3" name="__codelineno-14-3"></a>
+</span><span id="__span-14-4"><a href="#__codelineno-14-4" id="__codelineno-14-4" name="__codelineno-14-4"></a><span class="n">runner_cfg</span> <span class="o">=</span> <span class="n">SyntheticSAERunnerConfig</span><span class="p">(</span>
+</span><span id="__span-14-5"><a href="#__codelineno-14-5" id="__codelineno-14-5" name="__codelineno-14-5"></a>    <span class="c1"># Load a pretrained synthetic model from HuggingFace</span>
+</span><span id="__span-14-6"><a href="#__codelineno-14-6" id="__codelineno-14-6" name="__codelineno-14-6"></a>    <span class="n">synthetic_model</span><span class="o">=</span><span class="s2">"decoderesearch/synth-sae-bench-16k-v1"</span><span class="p">,</span>
+</span><span id="__span-14-7"><a href="#__codelineno-14-7" id="__codelineno-14-7" name="__codelineno-14-7"></a>
+</span><span id="__span-14-8"><a href="#__codelineno-14-8" id="__codelineno-14-8" name="__codelineno-14-8"></a>    <span class="n">sae</span><span class="o">=</span><span class="n">BatchTopKTrainingSAEConfig</span><span class="p">(</span>
+</span><span id="__span-14-9"><a href="#__codelineno-14-9" id="__codelineno-14-9" name="__codelineno-14-9"></a>        <span class="n">d_in</span><span class="o">=</span><span class="mi">768</span><span class="p">,</span>   <span class="c1"># Must match hidden_dim of the synthetic model</span>
+</span><span id="__span-14-10"><a href="#__codelineno-14-10" id="__codelineno-14-10" name="__codelineno-14-10"></a>        <span class="n">d_sae</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
+</span><span id="__span-14-11"><a href="#__codelineno-14-11" id="__codelineno-14-11" name="__codelineno-14-11"></a>        <span class="n">k</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+</span><span id="__span-14-12"><a href="#__codelineno-14-12" id="__codelineno-14-12" name="__codelineno-14-12"></a>    <span class="p">),</span>
+</span><span id="__span-14-13"><a href="#__codelineno-14-13" id="__codelineno-14-13" name="__codelineno-14-13"></a>
+</span><span id="__span-14-14"><a href="#__codelineno-14-14" id="__codelineno-14-14" name="__codelineno-14-14"></a>    <span class="c1"># Training parameters</span>
+</span><span id="__span-14-15"><a href="#__codelineno-14-15" id="__codelineno-14-15" name="__codelineno-14-15"></a>    <span class="n">training_samples</span><span class="o">=</span><span class="mi">200_000_000</span><span class="p">,</span>
+</span><span id="__span-14-16"><a href="#__codelineno-14-16" id="__codelineno-14-16" name="__codelineno-14-16"></a>    <span class="n">batch_size</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
+</span><span id="__span-14-17"><a href="#__codelineno-14-17" id="__codelineno-14-17" name="__codelineno-14-17"></a>    <span class="n">lr</span><span class="o">=</span><span class="mf">3e-4</span><span class="p">,</span>
+</span><span id="__span-14-18"><a href="#__codelineno-14-18" id="__codelineno-14-18" name="__codelineno-14-18"></a>
+</span><span id="__span-14-19"><a href="#__codelineno-14-19" id="__codelineno-14-19" name="__codelineno-14-19"></a>    <span class="c1"># Output</span>
+</span><span id="__span-14-20"><a href="#__codelineno-14-20" id="__codelineno-14-20" name="__codelineno-14-20"></a>    <span class="n">output_path</span><span class="o">=</span><span class="s2">"output"</span><span class="p">,</span>
+</span><span id="__span-14-21"><a href="#__codelineno-14-21" id="__codelineno-14-21" name="__codelineno-14-21"></a>
+</span><span id="__span-14-22"><a href="#__codelineno-14-22" id="__codelineno-14-22" name="__codelineno-14-22"></a>    <span class="c1"># Evaluation</span>
+</span><span id="__span-14-23"><a href="#__codelineno-14-23" id="__codelineno-14-23" name="__codelineno-14-23"></a>    <span class="n">eval_frequency</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>  <span class="c1"># Evaluate metrics every N steps</span>
+</span><span id="__span-14-24"><a href="#__codelineno-14-24" id="__codelineno-14-24" name="__codelineno-14-24"></a>    <span class="n">eval_samples</span><span class="o">=</span><span class="mi">500_000</span><span class="p">,</span>
+</span><span id="__span-14-25"><a href="#__codelineno-14-25" id="__codelineno-14-25" name="__codelineno-14-25"></a>
+</span><span id="__span-14-26"><a href="#__codelineno-14-26" id="__codelineno-14-26" name="__codelineno-14-26"></a>    <span class="c1"># Performance (recommended for modern GPUs)</span>
+</span><span id="__span-14-27"><a href="#__codelineno-14-27" id="__codelineno-14-27" name="__codelineno-14-27"></a>    <span class="n">autocast_sae</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-14-28"><a href="#__codelineno-14-28" id="__codelineno-14-28" name="__codelineno-14-28"></a>    <span class="n">autocast_data</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-14-29"><a href="#__codelineno-14-29" id="__codelineno-14-29" name="__codelineno-14-29"></a>
+</span><span id="__span-14-30"><a href="#__codelineno-14-30" id="__codelineno-14-30" name="__codelineno-14-30"></a>    <span class="c1"># Logging</span>
+</span><span id="__span-14-31"><a href="#__codelineno-14-31" id="__codelineno-14-31" name="__codelineno-14-31"></a>    <span class="n">logger</span><span class="o">=</span><span class="n">LoggingConfig</span><span class="p">(</span>
+</span><span id="__span-14-32"><a href="#__codelineno-14-32" id="__codelineno-14-32" name="__codelineno-14-32"></a>        <span class="n">log_to_wandb</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-14-33"><a href="#__codelineno-14-33" id="__codelineno-14-33" name="__codelineno-14-33"></a>        <span class="n">wandb_project</span><span class="o">=</span><span class="s2">"my_project"</span><span class="p">,</span>
+</span><span id="__span-14-34"><a href="#__codelineno-14-34" id="__codelineno-14-34" name="__codelineno-14-34"></a>        <span class="n">wandb_entity</span><span class="o">=</span><span class="s2">"my_team"</span><span class="p">,</span>  <span class="c1"># Optional</span>
+</span><span id="__span-14-35"><a href="#__codelineno-14-35" id="__codelineno-14-35" name="__codelineno-14-35"></a>        <span class="n">run_name</span><span class="o">=</span><span class="s2">"my-run"</span><span class="p">,</span>       <span class="c1"># Auto-generated if not set</span>
+</span><span id="__span-14-36"><a href="#__codelineno-14-36" id="__codelineno-14-36" name="__codelineno-14-36"></a>        <span class="n">wandb_log_frequency</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>  <span class="c1"># Log metrics every N training steps</span>
+</span><span id="__span-14-37"><a href="#__codelineno-14-37" id="__codelineno-14-37" name="__codelineno-14-37"></a>    <span class="p">),</span>
+</span><span id="__span-14-38"><a href="#__codelineno-14-38" id="__codelineno-14-38" name="__codelineno-14-38"></a>
+</span><span id="__span-14-39"><a href="#__codelineno-14-39" id="__codelineno-14-39" name="__codelineno-14-39"></a>    <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">,</span>
+</span><span id="__span-14-40"><a href="#__codelineno-14-40" id="__codelineno-14-40" name="__codelineno-14-40"></a><span class="p">)</span>
+</span><span id="__span-14-41"><a href="#__codelineno-14-41" id="__codelineno-14-41" name="__codelineno-14-41"></a>
+</span><span id="__span-14-42"><a href="#__codelineno-14-42" id="__codelineno-14-42" name="__codelineno-14-42"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SyntheticSAERunner</span><span class="p">(</span><span class="n">runner_cfg</span><span class="p">)</span>
+</span><span id="__span-14-43"><a href="#__codelineno-14-43" id="__codelineno-14-43" name="__codelineno-14-43"></a><span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</span><span id="__span-14-44"><a href="#__codelineno-14-44" id="__codelineno-14-44" name="__codelineno-14-44"></a>
+</span><span id="__span-14-45"><a href="#__codelineno-14-45" id="__codelineno-14-45" name="__codelineno-14-45"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Final MCC: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">final_eval</span><span class="o">.</span><span class="n">mcc</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span><span id="__span-14-46"><a href="#__codelineno-14-46" id="__codelineno-14-46" name="__codelineno-14-46"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Final explained variance: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">final_eval</span><span class="o">.</span><span class="n">explained_variance</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span></code></pre></div>
+<p>The <code>logger</code> parameter accepts a [LoggingConfig][sae_lens.config.LoggingConfig] that controls Weights &amp; Biases integration, same as for the <a class="autorefs autorefs-internal" href="../api/#sae_lens.LanguageModelSAERunnerConfig">LanguageModelSAERunnerConfig</a>.</p>
+<p>See <a href="../synth_sae_bench/">SynthSAEBench</a> for a standardized benchmark workflow and examples with other SAE architectures.</p>
+<h4 id="training-on-a-temporary-model">Training on a temporary model</h4>
+<p>You can also pass in a SyntheticModelConfig directly to the runner, which will create a temporary model just for the training run.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-15-1"><a href="#__codelineno-15-1" id="__codelineno-15-1" name="__codelineno-15-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyntheticSAERunner</span><span class="p">,</span> <span class="n">SyntheticSAERunnerConfig</span>
+</span><span id="__span-15-2"><a href="#__codelineno-15-2" id="__codelineno-15-2" name="__codelineno-15-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchTopKTrainingSAEConfig</span><span class="p">,</span> <span class="n">LoggingConfig</span>
+</span><span id="__span-15-3"><a href="#__codelineno-15-3" id="__codelineno-15-3" name="__codelineno-15-3"></a>
+</span><span id="__span-15-4"><a href="#__codelineno-15-4" id="__codelineno-15-4" name="__codelineno-15-4"></a><span class="n">runner_cfg</span> <span class="o">=</span> <span class="n">SyntheticSAERunnerConfig</span><span class="p">(</span>
+</span><span id="__span-15-5"><a href="#__codelineno-15-5" id="__codelineno-15-5" name="__codelineno-15-5"></a>    <span class="c1"># Create a temporary synthetic model from config</span>
+</span><span id="__span-15-6"><a href="#__codelineno-15-6" id="__codelineno-15-6" name="__codelineno-15-6"></a>    <span class="n">synthetic_model</span><span class="o">=</span><span class="n">SyntheticModelConfig</span><span class="p">(</span>
+</span><span id="__span-15-7"><a href="#__codelineno-15-7" id="__codelineno-15-7" name="__codelineno-15-7"></a>        <span class="n">num_features</span><span class="o">=</span><span class="mi">16_384</span><span class="p">,</span>
+</span><span id="__span-15-8"><a href="#__codelineno-15-8" id="__codelineno-15-8" name="__codelineno-15-8"></a>        <span class="n">hidden_dim</span><span class="o">=</span><span class="mi">768</span><span class="p">,</span>
+</span><span id="__span-15-9"><a href="#__codelineno-15-9" id="__codelineno-15-9" name="__codelineno-15-9"></a>        <span class="c1"># ... other config fields ...</span>
+</span><span id="__span-15-10"><a href="#__codelineno-15-10" id="__codelineno-15-10" name="__codelineno-15-10"></a>    <span class="p">),</span>
+</span><span id="__span-15-11"><a href="#__codelineno-15-11" id="__codelineno-15-11" name="__codelineno-15-11"></a>
+</span><span id="__span-15-12"><a href="#__codelineno-15-12" id="__codelineno-15-12" name="__codelineno-15-12"></a>    <span class="n">sae</span><span class="o">=</span><span class="n">BatchTopKTrainingSAEConfig</span><span class="p">(</span>
+</span><span id="__span-15-13"><a href="#__codelineno-15-13" id="__codelineno-15-13" name="__codelineno-15-13"></a>        <span class="n">d_in</span><span class="o">=</span><span class="mi">768</span><span class="p">,</span>
+</span><span id="__span-15-14"><a href="#__codelineno-15-14" id="__codelineno-15-14" name="__codelineno-15-14"></a>        <span class="n">d_sae</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
+</span><span id="__span-15-15"><a href="#__codelineno-15-15" id="__codelineno-15-15" name="__codelineno-15-15"></a>        <span class="n">k</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+</span><span id="__span-15-16"><a href="#__codelineno-15-16" id="__codelineno-15-16" name="__codelineno-15-16"></a>    <span class="p">),</span>
+</span><span id="__span-15-17"><a href="#__codelineno-15-17" id="__codelineno-15-17" name="__codelineno-15-17"></a>
+</span><span id="__span-15-18"><a href="#__codelineno-15-18" id="__codelineno-15-18" name="__codelineno-15-18"></a>    <span class="c1"># Training parameters</span>
+</span><span id="__span-15-19"><a href="#__codelineno-15-19" id="__codelineno-15-19" name="__codelineno-15-19"></a>    <span class="n">training_samples</span><span class="o">=</span><span class="mi">200_000_000</span><span class="p">,</span>
+</span><span id="__span-15-20"><a href="#__codelineno-15-20" id="__codelineno-15-20" name="__codelineno-15-20"></a>    <span class="n">batch_size</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
+</span><span id="__span-15-21"><a href="#__codelineno-15-21" id="__codelineno-15-21" name="__codelineno-15-21"></a>    <span class="n">lr</span><span class="o">=</span><span class="mf">3e-4</span><span class="p">,</span>
+</span><span id="__span-15-22"><a href="#__codelineno-15-22" id="__codelineno-15-22" name="__codelineno-15-22"></a><span class="p">)</span>
+</span><span id="__span-15-23"><a href="#__codelineno-15-23" id="__codelineno-15-23" name="__codelineno-15-23"></a>
+</span><span id="__span-15-24"><a href="#__codelineno-15-24" id="__codelineno-15-24" name="__codelineno-15-24"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">SyntheticSAERunner</span><span class="p">(</span><span class="n">runner_cfg</span><span class="p">)</span>
+</span><span id="__span-15-25"><a href="#__codelineno-15-25" id="__codelineno-15-25" name="__codelineno-15-25"></a><span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</span></code></pre></div>
+<h3 id="saving-and-loading-models">Saving and Loading Models</h3>
+<p>Save and load synthetic models for reproducibility:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-16-1"><a href="#__codelineno-16-1" id="__codelineno-16-1" name="__codelineno-16-1"></a><span class="c1"># Save to disk</span>
+</span><span id="__span-16-2"><a href="#__codelineno-16-2" id="__codelineno-16-2" name="__codelineno-16-2"></a><span class="n">model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"./my_synthetic_model"</span><span class="p">)</span>
+</span><span id="__span-16-3"><a href="#__codelineno-16-3" id="__codelineno-16-3" name="__codelineno-16-3"></a>
+</span><span id="__span-16-4"><a href="#__codelineno-16-4" id="__codelineno-16-4" name="__codelineno-16-4"></a><span class="c1"># Load from disk</span>
+</span><span id="__span-16-5"><a href="#__codelineno-16-5" id="__codelineno-16-5" name="__codelineno-16-5"></a><span class="n">model</span> <span class="o">=</span> <span class="n">SyntheticModel</span><span class="o">.</span><span class="n">load_from_disk</span><span class="p">(</span><span class="s2">"./my_synthetic_model"</span><span class="p">)</span>
+</span><span id="__span-16-6"><a href="#__codelineno-16-6" id="__codelineno-16-6" name="__codelineno-16-6"></a>
+</span><span id="__span-16-7"><a href="#__codelineno-16-7" id="__codelineno-16-7" name="__codelineno-16-7"></a><span class="c1"># Smart loading from various sources</span>
+</span><span id="__span-16-8"><a href="#__codelineno-16-8" id="__codelineno-16-8" name="__codelineno-16-8"></a><span class="n">model</span> <span class="o">=</span> <span class="n">SyntheticModel</span><span class="o">.</span><span class="n">load_from_source</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>  <span class="c1"># From config</span>
+</span><span id="__span-16-9"><a href="#__codelineno-16-9" id="__codelineno-16-9" name="__codelineno-16-9"></a><span class="n">model</span> <span class="o">=</span> <span class="n">SyntheticModel</span><span class="o">.</span><span class="n">load_from_source</span><span class="p">(</span><span class="s2">"./path"</span><span class="p">)</span>  <span class="c1"># From disk</span>
+</span><span id="__span-16-10"><a href="#__codelineno-16-10" id="__codelineno-16-10" name="__codelineno-16-10"></a><span class="n">model</span> <span class="o">=</span> <span class="n">SyntheticModel</span><span class="o">.</span><span class="n">load_from_source</span><span class="p">(</span><span class="s2">"username/repo"</span><span class="p">)</span>  <span class="c1"># From HuggingFace</span>
+</span></code></pre></div>
+<h3 id="huggingface-integration">HuggingFace Integration</h3>
+<p>Share synthetic models via HuggingFace Hub:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-17-1"><a href="#__codelineno-17-1" id="__codelineno-17-1" name="__codelineno-17-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-17-2"><a href="#__codelineno-17-2" id="__codelineno-17-2" name="__codelineno-17-2"></a>    <span class="n">SyntheticModel</span><span class="p">,</span>
+</span><span id="__span-17-3"><a href="#__codelineno-17-3" id="__codelineno-17-3" name="__codelineno-17-3"></a>    <span class="n">upload_synthetic_model_to_huggingface</span><span class="p">,</span>
+</span><span id="__span-17-4"><a href="#__codelineno-17-4" id="__codelineno-17-4" name="__codelineno-17-4"></a><span class="p">)</span>
+</span><span id="__span-17-5"><a href="#__codelineno-17-5" id="__codelineno-17-5" name="__codelineno-17-5"></a>
+</span><span id="__span-17-6"><a href="#__codelineno-17-6" id="__codelineno-17-6" name="__codelineno-17-6"></a><span class="c1"># Upload a model</span>
+</span><span id="__span-17-7"><a href="#__codelineno-17-7" id="__codelineno-17-7" name="__codelineno-17-7"></a><span class="n">upload_synthetic_model_to_huggingface</span><span class="p">(</span>
+</span><span id="__span-17-8"><a href="#__codelineno-17-8" id="__codelineno-17-8" name="__codelineno-17-8"></a>    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>  <span class="c1"># Or path to saved model</span>
+</span><span id="__span-17-9"><a href="#__codelineno-17-9" id="__codelineno-17-9" name="__codelineno-17-9"></a>    <span class="n">hf_repo_id</span><span class="o">=</span><span class="s2">"username/my-synthetic-model"</span><span class="p">,</span>
+</span><span id="__span-17-10"><a href="#__codelineno-17-10" id="__codelineno-17-10" name="__codelineno-17-10"></a><span class="p">)</span>
+</span><span id="__span-17-11"><a href="#__codelineno-17-11" id="__codelineno-17-11" name="__codelineno-17-11"></a>
+</span><span id="__span-17-12"><a href="#__codelineno-17-12" id="__codelineno-17-12" name="__codelineno-17-12"></a><span class="c1"># Load from HuggingFace</span>
+</span><span id="__span-17-13"><a href="#__codelineno-17-13" id="__codelineno-17-13" name="__codelineno-17-13"></a><span class="n">model</span> <span class="o">=</span> <span class="n">SyntheticModel</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">"username/my-synthetic-model"</span><span class="p">)</span>
+</span><span id="__span-17-14"><a href="#__codelineno-17-14" id="__codelineno-17-14" name="__codelineno-17-14"></a>
+</span><span id="__span-17-15"><a href="#__codelineno-17-15" id="__codelineno-17-15" name="__codelineno-17-15"></a><span class="c1"># Load from a subfolder in a repo</span>
+</span><span id="__span-17-16"><a href="#__codelineno-17-16" id="__codelineno-17-16" name="__codelineno-17-16"></a><span class="n">model</span> <span class="o">=</span> <span class="n">SyntheticModel</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
+</span><span id="__span-17-17"><a href="#__codelineno-17-17" id="__codelineno-17-17" name="__codelineno-17-17"></a>    <span class="s2">"username/repo"</span><span class="p">,</span>
+</span><span id="__span-17-18"><a href="#__codelineno-17-18" id="__codelineno-17-18" name="__codelineno-17-18"></a>    <span class="n">model_path</span><span class="o">=</span><span class="s2">"models/large"</span><span class="p">,</span>
+</span><span id="__span-17-19"><a href="#__codelineno-17-19" id="__codelineno-17-19" name="__codelineno-17-19"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>An example of this is the <a href="../synth_sae_bench/">SynthSAEBench-16k</a> model, which is uploaded to HuggingFace Hub.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-18-1"><a href="#__codelineno-18-1" id="__codelineno-18-1" name="__codelineno-18-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.synthetic</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyntheticModel</span>
+</span><span id="__span-18-2"><a href="#__codelineno-18-2" id="__codelineno-18-2" name="__codelineno-18-2"></a>
+</span><span id="__span-18-3"><a href="#__codelineno-18-3" id="__codelineno-18-3" name="__codelineno-18-3"></a><span class="n">model</span> <span class="o">=</span> <span class="n">SyntheticModel</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">"decoderesearch/synth-sae-bench-16k-v1"</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="using-pretrained-synthetic-models-with-runner">Using Pretrained Synthetic Models with Runner</h3>
+<p>Load a pretrained synthetic model for training:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-19-1"><a href="#__codelineno-19-1" id="__codelineno-19-1" name="__codelineno-19-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchTopKTrainingSAEConfig</span>
+</span><span id="__span-19-2"><a href="#__codelineno-19-2" id="__codelineno-19-2" name="__codelineno-19-2"></a>
+</span><span id="__span-19-3"><a href="#__codelineno-19-3" id="__codelineno-19-3" name="__codelineno-19-3"></a><span class="n">runner_cfg</span> <span class="o">=</span> <span class="n">SyntheticSAERunnerConfig</span><span class="p">(</span>
+</span><span id="__span-19-4"><a href="#__codelineno-19-4" id="__codelineno-19-4" name="__codelineno-19-4"></a>    <span class="c1"># Load from HuggingFace</span>
+</span><span id="__span-19-5"><a href="#__codelineno-19-5" id="__codelineno-19-5" name="__codelineno-19-5"></a>    <span class="n">synthetic_model</span><span class="o">=</span><span class="s2">"username/my-synthetic-model"</span><span class="p">,</span>
+</span><span id="__span-19-6"><a href="#__codelineno-19-6" id="__codelineno-19-6" name="__codelineno-19-6"></a>
+</span><span id="__span-19-7"><a href="#__codelineno-19-7" id="__codelineno-19-7" name="__codelineno-19-7"></a>    <span class="c1"># Or from disk</span>
+</span><span id="__span-19-8"><a href="#__codelineno-19-8" id="__codelineno-19-8" name="__codelineno-19-8"></a>    <span class="c1"># synthetic_model="./path/to/model",</span>
+</span><span id="__span-19-9"><a href="#__codelineno-19-9" id="__codelineno-19-9" name="__codelineno-19-9"></a>
+</span><span id="__span-19-10"><a href="#__codelineno-19-10" id="__codelineno-19-10" name="__codelineno-19-10"></a>    <span class="n">sae</span><span class="o">=</span><span class="n">BatchTopKTrainingSAEConfig</span><span class="p">(</span>
+</span><span id="__span-19-11"><a href="#__codelineno-19-11" id="__codelineno-19-11" name="__codelineno-19-11"></a>        <span class="n">d_in</span><span class="o">=</span><span class="mi">768</span><span class="p">,</span>
+</span><span id="__span-19-12"><a href="#__codelineno-19-12" id="__codelineno-19-12" name="__codelineno-19-12"></a>        <span class="n">d_sae</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
+</span><span id="__span-19-13"><a href="#__codelineno-19-13" id="__codelineno-19-13" name="__codelineno-19-13"></a>        <span class="n">k</span><span class="o">=</span><span class="mi">34</span><span class="p">,</span>
+</span><span id="__span-19-14"><a href="#__codelineno-19-14" id="__codelineno-19-14" name="__codelineno-19-14"></a>    <span class="p">),</span>
+</span><span id="__span-19-15"><a href="#__codelineno-19-15" id="__codelineno-19-15" name="__codelineno-19-15"></a>    <span class="n">training_samples</span><span class="o">=</span><span class="mi">200_000_000</span><span class="p">,</span>
+</span><span id="__span-19-16"><a href="#__codelineno-19-16" id="__codelineno-19-16" name="__codelineno-19-16"></a><span class="p">)</span>
+</span></code></pre></div>
+<h2 id="next-steps">Next Steps</h2>
+<p>For a standardized benchmark workflow using pretrained synthetic models, see the <a href="../synth_sae_bench/">SynthSAEBench</a> page. SynthSAEBench provides a reproducible evaluation framework for comparing SAE architectures at scale.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.path"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../assets/saetable.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
