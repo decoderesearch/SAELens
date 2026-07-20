@@ -955,7 +955,6 @@ class TestResumeFromCheckpoint:
 
     def test_activations_store_load_method(
         self,
-        tmp_path: Path,
         small_training_cfg: LanguageModelSAERunnerConfig[StandardTrainingSAEConfig],
     ):
         """Test that the ActivationsStore load method works correctly."""

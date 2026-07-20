@@ -161,7 +161,11 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
 
     def fit(self) -> T_TRAINING_SAE:
         self.sae.to(self.cfg.device)
-        pbar = tqdm(total=self.cfg.total_training_samples, desc="Training SAE")
+        pbar = tqdm(
+            total=self.cfg.total_training_samples,
+            initial=self.n_training_samples,
+            desc="Training SAE",
+        )
 
         if self.sae.cfg.normalize_activations == "expected_average_only_in":
             self.activation_scaler.estimate_scaling_factor(
