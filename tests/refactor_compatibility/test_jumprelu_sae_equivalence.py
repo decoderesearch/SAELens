@@ -89,13 +89,26 @@ def make_new_jumprelu_sae(
     return JumpReLUSAE(new_cfg, use_error_term=use_error_term)
 
 
+def old_params_as_new(old_sae: OldSAE | OldTrainingSAE) -> dict[str, torch.Tensor]:
+    """
+    The old training SAE stored the JumpReLU threshold as log_threshold, while the new
+    one parameterizes it directly, so translate the name and value to compare them.
+    """
+    return {
+        ("threshold" if k == "log_threshold" else k): (
+            torch.exp(v) if k == "log_threshold" else v
+        )
+        for k, v in old_sae.named_parameters()
+    }
+
+
 def compare_params(
     old_sae: OldSAE | OldTrainingSAE, new_sae: JumpReLUSAE | JumpReLUTrainingSAE
 ):  # Updated types
     """
     Compare parameter names and shapes between the old JumpReLU SAE and the new JumpReLUSAE.
     """
-    old_params = dict(old_sae.named_parameters())
+    old_params = old_params_as_new(old_sae)
     new_params = dict(new_sae.named_parameters())
     old_keys = sorted(old_params.keys())
     new_keys = sorted(new_params.keys())
@@ -348,7 +361,7 @@ def test_jumprelu_training_equivalence():  # type: ignore # Kept ignore as retur
 
     # Ensure parameters are identical before comparing outputs
     with torch.no_grad():
-        old_params = dict(old_sae.named_parameters())
+        old_params = old_params_as_new(old_sae)
         new_params = dict(new_sae.named_parameters())
         for k in sorted(old_params.keys()):
             new_params[k].copy_(old_params[k])
