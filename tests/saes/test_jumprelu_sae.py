@@ -485,3 +485,80 @@ def test_JumpReLUTrainingSAE_errors_on_invalid_sparsity_loss_mode():
                 is_logging_step=False,
             ),
         )
+
+
+def test_JumpReLUTrainingSAE_warns_when_threshold_is_rail_limited():
+    init_threshold = 0.01
+    cfg = build_jumprelu_sae_training_cfg(
+        jumprelu_init_threshold=init_threshold, l0_coefficient=1.0
+    )
+    sae = JumpReLUTrainingSAE(cfg)
+    lr_budget = 0.6  # e.g. lr=3e-4 over 2000 steps
+
+    # threshold travelled 95% of what Adam allows: it was still moving at the ceiling
+    sae.threshold.data.fill_(init_threshold + 0.95 * lr_budget)
+
+    warning = sae.training_convergence_warning(lr_budget)
+
+    assert warning is not None
+    assert "l0_coefficient" in warning
+
+
+def test_JumpReLUTrainingSAE_no_convergence_warning_when_threshold_settles():
+    init_threshold = 0.01
+    cfg = build_jumprelu_sae_training_cfg(
+        jumprelu_init_threshold=init_threshold, l0_coefficient=1.0
+    )
+    sae = JumpReLUTrainingSAE(cfg)
+    lr_budget = 0.6
+
+    # threshold used only a third of the available travel, so it reached equilibrium
+    sae.threshold.data.fill_(init_threshold + 0.33 * lr_budget)
+
+    assert sae.training_convergence_warning(lr_budget) is None
+
+
+def test_JumpReLUTrainingSAE_no_convergence_warning_without_lr_budget():
+    sae = JumpReLUTrainingSAE(build_jumprelu_sae_training_cfg())
+
+    assert sae.training_convergence_warning(0.0) is None
+
+
+def test_JumpReLUTrainingSAE_l0_coefficient_saturates_threshold_gradient_direction():
+    """
+    Characterizes the behaviour behind #719: because the threshold receives
+    c * g_l0 + g_mse and Adam fixes the step magnitude at ~lr, the coefficient only
+    controls the *direction* of the update. Once the l0 term dominates, that direction
+    stops changing and the coefficient stops having any effect.
+    """
+    cfg = build_jumprelu_sae_training_cfg(l0_coefficient=1.0)
+    sae = JumpReLUTrainingSAE(cfg)
+    x = torch.randn(512, cfg.d_in, generator=torch.Generator().manual_seed(0))
+
+    def threshold_grad(coefficient: float) -> torch.Tensor:
+        sae.zero_grad()
+        output = sae.training_forward_pass(
+            step_input=TrainStepInput(
+                sae_in=x,
+                coefficients={"l0": coefficient},
+                dead_neuron_mask=None,
+                n_training_steps=0,
+                is_logging_step=False,
+            ),
+        )
+        output.loss.backward()
+        assert sae.threshold.grad is not None
+        grad = sae.threshold.grad.detach().clone()
+        sae.zero_grad()
+        return grad
+
+    saturated = torch.nn.functional.cosine_similarity(
+        threshold_grad(1.0), threshold_grad(100.0), dim=0
+    )
+    assert saturated > 0.999
+
+    # far below saturation the coefficient still changes the update direction
+    unsaturated = torch.nn.functional.cosine_similarity(
+        threshold_grad(0.0), threshold_grad(1.0), dim=0
+    )
+    assert unsaturated < 0.999

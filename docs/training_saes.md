@@ -147,6 +147,32 @@ sparse_autoencoder = LanguageModelSAETrainingRunner(cfg).run()
 
 [JumpReLU SAEs](https://arxiv.org/abs/2407.14435) are a state-of-the-art SAE architecture. To train one, provide a `JumpReLUTrainingSAEConfig` to the `sae` field. JumpReLU SAEs use a sparsity penalty controlled by the `l0_coefficient` parameter. The `JumpReLUTrainingSAEConfig` also has parameters `jumprelu_bandwidth` and `jumprelu_init_threshold` which affect the learning of the thresholds.
 
+<!-- prettier-ignore-start -->
+!!! warning "Choosing `l0_coefficient` in the default `step` mode"
+
+    In the default `jumprelu_sparsity_loss_mode="step"`, the sparsity penalty reaches the
+    model only through the threshold. Adam caps the threshold's movement at roughly `lr`
+    per step regardless of gradient magnitude, so `l0_coefficient` does not set the
+    sparsity level directly — it sets the *direction* of the threshold's update, while
+    `lr * n_steps` sets how far the threshold can travel in total.
+
+    The practical consequence is that `l0_coefficient` **saturates**. Above some value the
+    sparsity gradient already dominates the threshold's update completely, and raising it
+    further changes nothing; in one controlled sweep at 2k steps, L0 moved 10x over
+    `l0_coefficient` in `[1e-3, 1e-1]` and was flat from `1` to `100`. The saturation point
+    is not universal — it depends on activation scale, `jumprelu_bandwidth`, `d_sae`, batch
+    size, and the number of training steps — so it must be found per setup rather than
+    copied. If your sparsity sweep barely moves L0, sweep *downward* by orders of magnitude
+    rather than upward.
+
+    SAELens warns at the end of training when the threshold was still moving at the
+    optimizer's step ceiling, which is the signal that this is happening. See
+    [issue #719](https://github.com/decoderesearch/SAELens/issues/719).
+
+    This applies to `step` mode only. In `tanh` mode the penalty also back-propagates
+    through the encoder and decoder weights, and `l0_coefficient` behaves normally.
+<!-- prettier-ignore-end -->
+
 We support both the original JumpReLU sparsity loss and the more modern [tanh sparsity loss](https://transformer-circuits.pub/2025/january-update/index.html) variant from Anthropic. To use the tanh sparsity loss, set `jumprelu_sparsity_loss_mode="tanh"`. The tanh sparsity loss variant is a bit easier to train, but has more hyperparameters. We recommend using the tanh with `normalize_activations="expected_average_only_in"` to match Anthropic's setup. We also recommend enabling the pre-act loss by setting `pre_act_loss_coefficient` to match Anthropic's setup. An example of this is below:
 
 ```python
@@ -184,7 +210,9 @@ from sae_lens import LanguageModelSAERunnerConfig, LanguageModelSAETrainingRunne
 cfg = LanguageModelSAERunnerConfig( # Full config would be defined here
     # ... other LanguageModelSAERunnerConfig parameters ...
     sae=JumpReLUTrainingSAEConfig(
-        l0_coefficient=5.0, # Sparsity penalty coefficient
+        l0_coefficient=5.0, # Sparsity penalty coefficient; see the warning above -- in
+                            # "step" mode this saturates, so sweep it downward by orders
+                            # of magnitude if L0 barely responds.
         jumprelu_bandwidth=0.01,
         jumprelu_init_threshold=0.01,
         d_in=1024, # must match your hook point

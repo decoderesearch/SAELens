@@ -10,7 +10,7 @@ from safetensors.torch import save_file
 from torch.optim import Adam
 from tqdm.auto import tqdm
 
-from sae_lens import __version__
+from sae_lens import __version__, logger
 from sae_lens.config import SAETrainerConfig
 from sae_lens.constants import (
     ACTIVATION_SCALER_CFG_FILENAME,
@@ -102,6 +102,7 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
             sae.cfg.d_sae, device=cfg.device
         )
         self.n_frac_active_samples = 0
+        self.lr_budget = 0.0
 
         self.optimizer = Adam(
             sae.parameters(),
@@ -162,6 +163,9 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
     def fit(self) -> T_TRAINING_SAE:
         self.sae.to(self.cfg.device)
         pbar = tqdm(total=self.cfg.total_training_samples, desc="Training SAE")
+        # The convergence check below measures parameter travel from initialization,
+        # so it is only meaningful for a run that starts from scratch.
+        started_from_scratch = self.n_training_steps == 0
 
         if self.sae.cfg.normalize_activations == "expected_average_only_in":
             self.activation_scaler.estimate_scaling_factor(
@@ -192,6 +196,11 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
                 self.activation_scaler.scaling_factor
             )
             self.activation_scaler.scaling_factor = None
+
+        if started_from_scratch:
+            convergence_warning = self.sae.training_convergence_warning(self.lr_budget)
+            if convergence_warning is not None:
+                logger.warning(convergence_warning)
 
         if self.cfg.save_final_checkpoint:
             self.save_checkpoint(checkpoint_name=f"final_{self.n_training_samples}")
@@ -349,6 +358,10 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
         self.grad_scaler.update()
 
         self.optimizer.zero_grad()
+        # Adam moves a parameter by at most ~lr per step, so the running sum of lr
+        # bounds how far any parameter can have travelled. Used by
+        # TrainingSAE.training_convergence_warning().
+        self.lr_budget += self.optimizer.param_groups[0]["lr"]
         self.lr_scheduler.step()
         for scheduler in self.coefficient_schedulers.values():
             scheduler.step()

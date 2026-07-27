@@ -14,6 +14,12 @@ from sae_lens.saes.sae import (
     TrainStepInput,
 )
 
+# Adam caps per-step parameter movement at ~lr, so the threshold can travel at most
+# sum(lr) over training. If it travels nearly that far it was moving at the ceiling in
+# one direction the whole run and never reached equilibrium, which is the regime where
+# l0_coefficient stops affecting the final L0 (issue #719).
+RAIL_LIMITED_TRAVEL_FRAC = 0.9
+
 
 def rectangle(x: torch.Tensor) -> torch.Tensor:
     return ((x > -0.5) & (x < 0.5)).to(x)
@@ -187,7 +193,13 @@ class JumpReLUTrainingSAEConfig(TrainingSAEConfig):
         jumprelu_init_threshold: initial threshold for the JumpReLU activation
         jumprelu_bandwidth: bandwidth for the JumpReLU activation
         jumprelu_sparsity_loss_mode: mode for the sparsity loss, either "step" or "tanh". "step" is Google Deepmind's L0 loss, "tanh" is Anthropic's sparsity loss.
-        l0_coefficient: coefficient for the l0 sparsity loss
+        l0_coefficient: coefficient for the l0 sparsity loss. In "step" mode this
+            saturates: the penalty reaches the model only through the threshold, whose
+            movement Adam caps at ~lr per step, so past some value raising it further has
+            no effect and lr * n_steps sets the final L0 instead. The saturation point
+            depends on activation scale, bandwidth, d_sae, batch size and n_steps, so
+            sweep downward by orders of magnitude if L0 does not respond. Behaves normally
+            in "tanh" mode. See https://github.com/decoderesearch/SAELens/issues/719
         l0_warm_up_steps: number of warm-up steps for the l0 sparsity loss
         pre_act_loss_coefficient: coefficient for the pre-activation loss. Set to None to disable. Set to 3e-6 to match Anthropic's setup.
         jumprelu_tanh_scale: scale for the tanh sparsity loss. Only relevant for "tanh" sparsity loss mode.
@@ -349,6 +361,29 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
             log_threshold = state_dict["log_threshold"]
             del state_dict["log_threshold"]
             state_dict["threshold"] = torch.exp(log_threshold).detach().contiguous()
+
+    @override
+    @torch.no_grad()
+    def training_convergence_warning(self, lr_budget: float) -> str | None:
+        if lr_budget <= 0:
+            return None
+        travel = abs(
+            self.threshold.detach().float().mean().item()
+            - self.cfg.jumprelu_init_threshold
+        )
+        if travel < RAIL_LIMITED_TRAVEL_FRAC * lr_budget:
+            return None
+        return (
+            f"The JumpReLU threshold moved {travel:.4g} during training, which is at "
+            f"least {RAIL_LIMITED_TRAVEL_FRAC:.0%} of the {lr_budget:.4g} that Adam "
+            f"permits over this many steps. The threshold was still travelling at the "
+            f"optimizer's step ceiling when training ended, so it never reached the "
+            f"equilibrium where the sparsity and reconstruction gradients balance. In "
+            f"this regime l0_coefficient (={self.cfg.l0_coefficient:g}) has little "
+            f"influence on the final L0, which is set by lr * n_steps instead. Train "
+            f"for more steps or raise the learning rate to put l0_coefficient back in "
+            f"control. See https://github.com/decoderesearch/SAELens/issues/719"
+        )
 
 
 def calculate_pre_act_loss(

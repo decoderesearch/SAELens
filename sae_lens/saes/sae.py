@@ -1092,6 +1092,18 @@ class TrainingSAE(SAE[T_TRAINING_SAE_CONFIG], ABC):
             "weights/W_dec_norms": W_dec_norm_dist,
         }
 
+    @torch.no_grad()
+    def training_convergence_warning(self, lr_budget: float) -> str | None:
+        """
+        Post-training diagnostic, called once at the end of training.
+
+        `lr_budget` is the sum of the learning rate over every training step, which
+        bounds how far an Adam-optimized parameter can travel. Return a warning
+        message if training appears not to have converged, or None. Architectures
+        with no such diagnostic leave this as-is.
+        """
+        return None
+
     @classmethod
     def get_sae_class_for_architecture(
         cls: type[T_TRAINING_SAE], architecture: str

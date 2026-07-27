@@ -1,4 +1,6 @@
 import json
+import logging
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Callable
 
@@ -27,6 +29,7 @@ from tests.helpers import (
     TINYSTORIES_MODEL,
     assert_close,
     build_runner_cfg,
+    build_sae_training_cfg,
     load_model_cached,
 )
 
@@ -667,3 +670,85 @@ def test_sae_trainer_fit_logs_train_eval_and_sparsity_metrics_to_wandb(
     assert "model_performance_preservation" in all_keys
     # the feature_sampling_window=2 sparsity reset emits its own log dict
     assert "metrics/mean_log10_feature_sparsity" in all_keys
+
+
+def _constant_data_provider(d_in: int, batch_size: int) -> Iterator[torch.Tensor]:
+    generator = torch.Generator().manual_seed(0)
+    while True:
+        yield torch.randn(batch_size, d_in, generator=generator)
+
+
+def _build_model_free_trainer(
+    sae: TrainingSAE[Any], **cfg_kwargs: Any
+) -> SAETrainer[Any, Any]:
+    cfg = build_runner_cfg(
+        d_in=sae.cfg.d_in,
+        training_tokens=256,
+        train_batch_size_tokens=64,
+        **cfg_kwargs,
+    ).to_sae_trainer_config()
+    return SAETrainer(
+        cfg=cfg,
+        sae=sae,
+        data_provider=_constant_data_provider(
+            sae.cfg.d_in, cfg.train_batch_size_samples
+        ),
+    )
+
+
+def test_sae_trainer_accumulates_lr_budget_matching_lr_times_steps():
+    sae = StandardTrainingSAE(build_sae_training_cfg(d_in=8, d_sae=16))
+    trainer = _build_model_free_trainer(sae, lr=1e-3, lr_scheduler_name="constant")
+
+    assert trainer.lr_budget == 0.0
+    trainer.fit()
+
+    assert trainer.n_training_steps > 0
+    assert trainer.lr_budget == pytest.approx(1e-3 * trainer.n_training_steps)
+
+
+def test_sae_trainer_logs_the_convergence_warning_returned_by_the_sae(
+    caplog: pytest.LogCaptureFixture,
+):
+    sae = StandardTrainingSAE(build_sae_training_cfg(d_in=8, d_sae=16))
+    seen_budgets: list[float] = []
+
+    def fake_warning(lr_budget: float) -> str:
+        seen_budgets.append(lr_budget)
+        return "l0_coefficient had no influence"
+
+    sae.training_convergence_warning = fake_warning  # type: ignore[method-assign]
+    trainer = _build_model_free_trainer(sae, lr=1e-3, lr_scheduler_name="constant")
+
+    with caplog.at_level(logging.WARNING, logger="sae_lens"):
+        trainer.fit()
+
+    assert "l0_coefficient had no influence" in caplog.text
+    assert seen_budgets == [pytest.approx(1e-3 * trainer.n_training_steps)]
+
+
+def test_sae_trainer_skips_the_convergence_warning_when_resuming(
+    caplog: pytest.LogCaptureFixture,
+):
+    """Travel is measured from initialization, so it is meaningless on resume."""
+    sae = StandardTrainingSAE(build_sae_training_cfg(d_in=8, d_sae=16))
+    sae.training_convergence_warning = lambda _: "should not be logged"  # type: ignore[method-assign]
+    trainer = _build_model_free_trainer(sae, lr=1e-3, lr_scheduler_name="constant")
+    trainer.n_training_steps = 5  # pretend we resumed from a checkpoint
+
+    with caplog.at_level(logging.WARNING, logger="sae_lens"):
+        trainer.fit()
+
+    assert caplog.text == ""
+
+
+def test_sae_trainer_does_not_warn_for_architectures_without_the_diagnostic(
+    caplog: pytest.LogCaptureFixture,
+):
+    sae = StandardTrainingSAE(build_sae_training_cfg(d_in=8, d_sae=16))
+    trainer = _build_model_free_trainer(sae, lr=1e-3, lr_scheduler_name="constant")
+
+    with caplog.at_level(logging.WARNING, logger="sae_lens"):
+        trainer.fit()
+
+    assert caplog.text == ""
