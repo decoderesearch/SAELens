@@ -50,7 +50,7 @@ class ActivationsStore:
     """
 
     model: HookedRootModule
-    dataset: HfDataset
+    dataset: HfDataset | None
     cached_activations_path: str | None
     cached_activation_dataset: Dataset | None = None
     tokens_column: Literal[
@@ -101,7 +101,7 @@ class ActivationsStore:
             # NOOP
             prepend_bos=False,
             hook_head_index=None,
-            dataset=cfg.dataset_path,
+            dataset=None,
             streaming=False,
             model=model,
             normalize_activations="none",
@@ -310,7 +310,7 @@ class ActivationsStore:
     def __init__(
         self,
         model: HookedRootModule,
-        dataset: HfDataset | str,
+        dataset: HfDataset | str | None,
         streaming: bool,
         hook_name: str,
         hook_head_index: int | None,
@@ -385,6 +385,16 @@ class ActivationsStore:
         self._hook_head_indices = {}
 
         self.n_dataset_processed = 0
+
+        # Cached activations are read straight from disk, so there is no dataset to
+        # inspect or iterate and the tokenization checks below don't apply.
+        if self.dataset is None:
+            if self.cached_activations_path is None:
+                raise ValueError(
+                    "Either dataset or cached_activations_path must be provided."
+                )
+            self.cached_activation_dataset = self.load_cached_activation_dataset()
+            return
 
         # Check if dataset is tokenized
         dataset_sample = next(iter(self.dataset))
@@ -468,6 +478,7 @@ class ActivationsStore:
         """
         Helper to iterate over the dataset while incrementing n_dataset_processed
         """
+        assert self.dataset is not None
         for row in self.dataset:
             # typing datasets is difficult
             yield row[self.tokens_column]  # type: ignore
@@ -601,6 +612,7 @@ class ActivationsStore:
         The default buffer_size of 1 means that only the shard will be shuffled; larger buffer sizes will
         additionally shuffle individual elements within the shard.
         """
+        assert self.dataset is not None
         if isinstance(self.dataset, IterableDataset):
             self.dataset = self.dataset.shuffle(seed=seed, buffer_size=buffer_size)
         else:
@@ -611,6 +623,7 @@ class ActivationsStore:
         """
         Resets the input dataset iterator to the beginning.
         """
+        assert self.dataset is not None
         self.iterable_dataset = iter(self.dataset)
 
     def get_batch_tokens(

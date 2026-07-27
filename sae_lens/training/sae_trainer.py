@@ -162,7 +162,11 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
 
     def fit(self) -> T_TRAINING_SAE:
         self.sae.to(self.cfg.device)
-        pbar = tqdm(total=self.cfg.total_training_samples, desc="Training SAE")
+        pbar = tqdm(
+            total=self.cfg.total_training_samples,
+            initial=self.n_training_samples,
+            desc="Training SAE",
+        )
         # The convergence check below measures parameter travel from initialization,
         # so it is only meaningful for a run that starts from scratch.
         started_from_scratch = self.n_training_steps == 0

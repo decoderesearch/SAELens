@@ -1,5 +1,38 @@
 # CHANGELOG
 
+## v6.46.1 (2026-07-20)
+
+### Fix
+
+* fix: initialize resumed training progress bar at restored progress (#682)
+
+* fix: propagate resume_from_checkpoint constructor arg and fix resumed progress bar
+
+The LanguageModelSAETrainingRunner constructor accepted a
+resume_from_checkpoint argument but never assigned it onto the config, so
+run() always saw cfg.resume_from_checkpoint=None and silently trained from
+scratch when the kwarg was used.
+
+Also initialize the training progress bar at the restored n_training_samples
+so a resumed run reflects actual progress instead of appearing to start over.
+
+The existing test only asserted n_training_samples &gt;= total, which passes
+whether or not resume happens. Rewrite it to resume with the total set to the
+checkpoint&#39;s progress so a correct resume runs zero further steps, then assert
+the final weights exactly match the checkpoint.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) &lt;noreply@anthropic.com&gt;
+
+* test: remove unused tmp_path param
+
+Co-Authored-By: Claude Fable 5 &lt;noreply@anthropic.com&gt;
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) &lt;noreply@anthropic.com&gt; ([`4de7704`](https://github.com/decoderesearch/SAELens/commit/4de770410acb4cfbad592e6675e621a7c8281ddd))
+
+* fix: don&#39;t load the dataset when reading cached activations (#716) ([`f34ac82`](https://github.com/decoderesearch/SAELens/commit/f34ac8272aad82cf32e1e7cb206954abfa082452))
+
 ## v6.46.0 (2026-07-13)
 
 ### Chore
