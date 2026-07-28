@@ -6,9 +6,14 @@ import pytest
 import torch
 from datasets import Dataset
 from transformer_lens import HookedTransformer
+from typing_extensions import override
 
 from sae_lens import __version__
-from sae_lens.config import LanguageModelSAERunnerConfig, LoggingConfig
+from sae_lens.config import (
+    LanguageModelSAERunnerConfig,
+    LoggingConfig,
+    SAETrainerConfig,
+)
 from sae_lens.llm_sae_training_runner import (
     LanguageModelSAETrainingRunner,
     LLMSaeEvaluator,
@@ -27,6 +32,7 @@ from tests.helpers import (
     TINYSTORIES_MODEL,
     assert_close,
     build_runner_cfg,
+    build_sae_training_cfg,
     load_model_cached,
 )
 
@@ -533,6 +539,56 @@ def test_set_final_sae_metadata_skips_when_no_samples_seen(
     # an empty sparsity window would make l0 a NaN, so nothing is recorded
     assert trainer.sae.cfg.metadata.l0 is None
     assert trainer.sae.cfg.metadata.num_dead_features is None
+
+
+class FixedSparsityTrainingSAE(StandardTrainingSAE):
+    """
+    Fires exactly `n_active` latents per sample, chosen at random and ignoring
+    the input entirely. The final latent is excluded, so it never fires.
+    """
+
+    n_active = 3
+
+    @override
+    def encode_with_hidden_pre(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        _, hidden_pre = super().encode_with_hidden_pre(x)
+        firing_latents = torch.rand(*hidden_pre.shape[:-1], self.cfg.d_sae - 1).topk(
+            self.n_active, dim=-1
+        )
+        mask = torch.zeros_like(hidden_pre).scatter(-1, firing_latents.indices, 1.0)
+        # +1 keeps the fired latents nonzero while still passing grads to W_enc
+        feature_acts = mask * (hidden_pre.abs() + 1.0)
+        return feature_acts, hidden_pre
+
+
+def test_fit_records_l0_and_dead_latents_matching_actual_sae_firing() -> None:
+    d_in = 4
+    d_sae = 10
+    batch_size = 32
+    n_steps = 10
+    sae = FixedSparsityTrainingSAE(build_sae_training_cfg(d_in=d_in, d_sae=d_sae))
+    trainer = SAETrainer(
+        cfg=SAETrainerConfig(
+            total_training_samples=batch_size * n_steps,
+            train_batch_size_samples=batch_size,
+            lr_end=1e-4,
+            # low enough that the never-firing latent shows up as dead
+            dead_feature_window=n_steps // 2,
+            # don't reset the sparsity window partway through training
+            feature_sampling_window=n_steps * 2,
+        ),
+        sae=sae,
+        data_provider=iter(lambda: torch.randn(batch_size, d_in), None),
+    )
+
+    trainer.fit()
+
+    assert sae.cfg.metadata.l0 == pytest.approx(FixedSparsityTrainingSAE.n_active)
+    assert sae.cfg.metadata.num_dead_features == 1
+    # the dead latent is the excluded one, not a latent that got unlucky
+    assert trainer.dead_neurons.nonzero().flatten().tolist() == [d_sae - 1]
 
 
 def test_sae_trainer_skips_final_checkpoint_when_disabled(
