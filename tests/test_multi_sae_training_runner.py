@@ -180,6 +180,12 @@ def test_multi_sae_runner_trains_two_saes_at_different_hooks(
         saes["topk_mlp"].cfg.metadata.training_architecture_details
         == cfg.saes["topk_mlp"].get_training_architecture_details()
     )
+    assert 0 < saes["resid"].cfg.metadata["l0"] <= 32
+    # topk with k=4 caps the mean l0 at 4
+    assert 0 < saes["topk_mlp"].cfg.metadata["l0"] <= 4
+    # far fewer steps have run than the 1000-step dead feature window
+    assert saes["resid"].cfg.metadata["num_dead_features"] == 0
+    assert saes["topk_mlp"].cfg.metadata["num_dead_features"] == 0
 
 
 def test_multi_sae_runner_resume_from_checkpoint(

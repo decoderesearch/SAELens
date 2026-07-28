@@ -149,6 +149,9 @@ class MultiSAETrainer:
                 )
                 trainer.activation_scaler.scaling_factor = None
 
+        for trainer in self.trainers.values():
+            trainer.set_final_sae_metadata()
+
         if self.cfg.save_final_checkpoint:
             self.save_checkpoint(checkpoint_name=f"final_{self.n_training_samples}")
 
