@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.47.0 (2026-07-28)
+
+### Feature
+
+* feat: record final l0 and num dead features in SAE metadata (#717) ([`073bf9e`](https://github.com/decoderesearch/SAELens/commit/073bf9ec835f2c24af9c0ead40237486fc167150))
+
 ## v6.46.1 (2026-07-20)
 
 ### Fix
