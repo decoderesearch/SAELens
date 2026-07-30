@@ -46,6 +46,24 @@ def test_JumpReLUTrainingSAE_encoding():
     assert_close(feature_acts, expected_feature_acts, atol=1e-6)  # type: ignore
 
 
+def test_JumpReLUTrainingSAE_negative_threshold_is_clamped_to_zero():
+    sae = JumpReLUTrainingSAE(build_jumprelu_sae_training_cfg())
+
+    x = torch.randn(512, sae.cfg.d_in)
+
+    sae.threshold.data = torch.full_like(sae.threshold.data, -0.5)
+    neg_acts, _ = sae.encode_with_hidden_pre(x)
+
+    sae.threshold.data = torch.zeros_like(sae.threshold.data)
+    zero_acts, _ = sae.encode_with_hidden_pre(x)
+
+    # The threshold is clamped with relu(), so a negative threshold behaves
+    # exactly like threshold=0. Without the clamp, JumpReLU (x * (x > threshold))
+    # would let pre-activations in (-0.5, 0] leak through as negative activations.
+    assert (neg_acts < 0).sum() == 0
+    assert_close(neg_acts, zero_acts, atol=1e-6)
+
+
 def test_JumpReLUTrainingSAE_training_forward_pass():
     sae = JumpReLUTrainingSAE(build_jumprelu_sae_training_cfg())
 

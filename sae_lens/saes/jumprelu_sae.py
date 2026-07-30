@@ -143,7 +143,7 @@ class JumpReLUSAE(SAE[JumpReLUSAEConfig]):
 
         # 2) Zero out any unit whose (hidden_pre <= threshold).
         #    We cast the boolean mask to the same dtype for safe multiplication.
-        jump_relu_mask = (hidden_pre > self.threshold).to(base_acts.dtype)
+        jump_relu_mask = (hidden_pre > self.threshold.relu()).to(base_acts.dtype)
 
         # 3) Multiply the normally activated units by that mask.
         return self.hook_sae_acts_post(base_acts * jump_relu_mask)
@@ -225,9 +225,13 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
     under Adam the per-step parameter movement is capped at ~lr regardless of
     gradient magnitude, so a log parameterization moves the effective threshold
     by only ~threshold * lr per step. With a small init this freezes the
-    threshold and the L0 penalty cannot reduce L0 at all (issue #494). The
-    reference implementations (DeepMind's pseudocode, dictionary_learning)
-    parameterize the threshold directly.
+    threshold and the L0 penalty cannot reduce L0 at all (issue #494).
+
+    Note this diverges from DeepMind's JumpReLU (paper appendix J and their
+    colab), which trains log(threshold) to keep the threshold positive.
+    saprmarks/dictionary_learning instead parameterizes the threshold directly
+    and notes poor results with a log threshold, consistent with what we see
+    here.
 
     Methods of interest include:
 
@@ -273,7 +277,7 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
 
         hidden_pre = self.hook_sae_acts_pre(sae_in @ self.W_enc + self.b_enc)
         feature_acts = self.hook_sae_acts_post(
-            JumpReLU.apply(hidden_pre, self.threshold, self.bandwidth)
+            JumpReLU.apply(hidden_pre, self.threshold.relu(), self.bandwidth)
         )
 
         return feature_acts, hidden_pre  # type: ignore
@@ -288,7 +292,9 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
     ) -> dict[str, torch.Tensor]:
         """Calculate architecture-specific auxiliary loss terms."""
 
-        threshold = self.threshold
+        # relu() keeps the threshold >= 0: a negative threshold disables the
+        # gate (see JumpReLUSAE.encode) and counts the latent as always-on in L0.
+        threshold = self.threshold.relu()
         W_dec_norm = self.W_dec.norm(dim=1)
         if self.cfg.jumprelu_sparsity_loss_mode == "step":
             l0 = torch.sum(
