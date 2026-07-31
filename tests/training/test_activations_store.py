@@ -25,6 +25,7 @@ from sae_lens.training.activations_store import (
 from tests.helpers import (
     NEEL_NANDA_C4_10K_DATASET,
     assert_close,
+    assert_not_close,
     build_runner_cfg,
     load_model_cached,
 )
@@ -203,6 +204,27 @@ def test_activations_store__get_activations_head_hook(ts_model: HookedTransforme
         activation_store_head_hook.d_in,
     )
     assert activations.device == activation_store_head_hook.device
+
+
+def test_activations_store__get_activations__autocast_lm_runs_the_llm_in_bfloat16(
+    ts_model: HookedTransformer,
+):
+    dataset = Dataset.from_list([{"text": "hello world"}] * 100)
+    store = ActivationsStore.from_config(
+        ts_model, build_runner_cfg(), override_dataset=dataset
+    )
+    autocast_store = ActivationsStore.from_config(
+        ts_model, build_runner_cfg(autocast_lm=True), override_dataset=dataset
+    )
+    batch = store.get_batch_tokens()
+
+    activations = store.get_activations(batch)
+    autocast_activations = autocast_store.get_activations(batch)
+
+    # autocast must perturb the activations, but only within bfloat16 rounding
+    # of the full-precision ones
+    assert_not_close(autocast_activations, activations)
+    assert_close(autocast_activations, activations, atol=3e-3)
 
 
 def test_activations_store__get_activations__gives_same_results_with_hf_model_and_tlens_model():
