@@ -654,7 +654,7 @@ class ActivationsStore:
     @torch.no_grad()
     def get_activations(self, batch_tokens: torch.Tensor):
         """
-        Returns activations of shape (batches, context, num_layers, d_in)
+        Returns activations of shape (batch_size, context, num_layers, d_in)
 
         d_in may result from a concatenated head dimension.
         """
@@ -677,9 +677,9 @@ class ActivationsStore:
             :, slice(*self.seqpos_slice)
         ]
 
-        n_batches, n_context = layerwise_activations.shape[:2]
+        batch_size, n_context = layerwise_activations.shape[:2]
 
-        stacked_activations = torch.zeros((n_batches, n_context, self.d_in))
+        stacked_activations = torch.zeros((batch_size, n_context, self.d_in))
 
         if self.hook_head_index is not None:
             stacked_activations[:, :] = layerwise_activations[
@@ -688,13 +688,13 @@ class ActivationsStore:
         elif layerwise_activations.ndim > 3:  # if we have a head dimension
             try:
                 stacked_activations[:, :] = layerwise_activations.view(
-                    n_batches, n_context, -1
+                    batch_size, n_context, -1
                 )
             except RuntimeError as e:
                 logger.error(f"Error during view operation: {e}")
                 logger.info("Attempting to use reshape instead...")
                 stacked_activations[:, :] = layerwise_activations.reshape(
-                    n_batches, n_context, -1
+                    batch_size, n_context, -1
                 )
         else:
             stacked_activations[:, :] = layerwise_activations
@@ -834,7 +834,9 @@ class ActivationsStore:
         Return an auto-refilling stream of filtered and mixed activations.
         """
         return mixing_buffer(
-            buffer_size=self.n_batches_in_buffer * self.training_context_size,
+            buffer_size=self.n_batches_in_buffer
+            * self.store_batch_size_prompts
+            * self.training_context_size,
             batch_size=self.train_batch_size_tokens,
             activations_loader=self._iterate_filtered_activations(),
             mix_fraction=self.activations_mixing_fraction,
@@ -956,7 +958,9 @@ class ActivationsStore:
                 "via from_config_multi_hook"
             )
         return multi_hook_concat_split_iter(
-            buffer_size=self.n_batches_in_buffer * self.training_context_size,
+            buffer_size=self.n_batches_in_buffer
+            * self.store_batch_size_prompts
+            * self.training_context_size,
             batch_size=self.train_batch_size_tokens,
             activations_loader=self._iterate_filtered_multi_hook_activations(),
             hook_names=list(self._hook_names),

@@ -186,6 +186,26 @@ def test_activations_store__shapes_look_correct_with_real_models_and_datasets(
     assert tok_batch.device == store.device
 
 
+def test_activations_store__can_train_on_entire_activations_buffer(
+    ts_model: HookedTransformer,
+):
+    n_batches_in_buffer = 4
+    store_batch_size_prompts = 8
+    context_size = 5
+    train_batch_size_tokens = (
+        n_batches_in_buffer * store_batch_size_prompts * context_size
+    )
+    cfg = build_runner_cfg(
+        n_batches_in_buffer=n_batches_in_buffer,
+        store_batch_size_prompts=store_batch_size_prompts,
+        context_size=context_size,
+        train_batch_size_tokens=train_batch_size_tokens,
+    )
+    activation_store = ActivationsStore.from_config(ts_model, cfg)
+    batch = activation_store.next_batch()
+    assert batch.shape[0] == train_batch_size_tokens
+
+
 def test_activations_store__get_activations_head_hook(ts_model: HookedTransformer):
     cfg = build_runner_cfg(
         hook_name="blocks.0.attn.hook_q",
@@ -718,6 +738,7 @@ def test_activations_next_batch_excludes_special_tokens(
         store_batch_size_prompts=2,
         hook_name=hook_name,
         train_batch_size_tokens=5,
+        activations_mixing_fraction=0.0,
     )
     cfg = build_runner_cfg(
         exclude_special_tokens=True,
@@ -725,6 +746,7 @@ def test_activations_next_batch_excludes_special_tokens(
         store_batch_size_prompts=2,
         hook_name=hook_name,
         train_batch_size_tokens=5,
+        activations_mixing_fraction=0.0,
     )
     dataset = Dataset.from_list([{"text": "hello world"}] * 100)
     _, cache = ts_model.run_with_cache(dataset[0]["text"])

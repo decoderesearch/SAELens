@@ -1,10 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 
 import pytest
 import torch
 from transformer_lens import HookedTransformer
 
+from sae_lens.config import LanguageModelSAERunnerConfig
 from sae_lens.util import (
     cosine_similarities,
     dtype_to_str,
@@ -15,6 +16,7 @@ from sae_lens.util import (
     str_to_dtype,
     temporary_seed,
 )
+from tests.helpers import LanguageModelSAERunnerConfigDict
 
 
 @pytest.mark.parametrize(
@@ -362,3 +364,9 @@ def test_temporary_seed_none_is_noop():
     assert not torch.equal(before, after)
     # And we should still get a valid tensor
     assert sample.shape == (1,)
+
+
+def test_language_model_sae_runner_config_dict_matches_config_fields():
+    config_fields = {f.name for f in fields(LanguageModelSAERunnerConfig)}
+    dict_fields = set(LanguageModelSAERunnerConfigDict.__annotations__.keys())
+    assert config_fields == dict_fields

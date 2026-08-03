@@ -63,6 +63,7 @@ class LanguageModelSAERunnerConfigDict(TypedDict, total=False):
     model_name: str
     model_class_name: str
     hook_name: str
+    hook_eval: str
     hook_head_index: int | None
     dataset_path: str
     dataset_trust_remote_code: bool
@@ -76,10 +77,10 @@ class LanguageModelSAERunnerConfigDict(TypedDict, total=False):
     n_batches_in_buffer: int
     training_tokens: int
     store_batch_size_prompts: int
-    normalize_activations: str
     seqpos_slice: tuple[int | None, ...] | Sequence[int | None]
     disable_concat_sequences: bool
     sequence_separator_token: int | Literal["bos", "eos", "sep"] | None
+    activations_mixing_fraction: float
     device: str
     llm_device: str | None
     act_store_device: str | None
@@ -112,12 +113,14 @@ class LanguageModelSAERunnerConfigDict(TypedDict, total=False):
     checkpoint_path: str | None
     save_final_checkpoint: bool
     output_path: str | None
+    resume_from_checkpoint: str | None
     verbose: bool
     model_kwargs: dict[str, Any]
     model_from_pretrained_kwargs: dict[str, Any] | None
     sae_lens_version: str
     sae_lens_training_version: str
     exclude_special_tokens: bool | list[int]
+    n_batches_for_norm_estimate: int
 
 
 # Base TrainingSAEConfig fields + all architecture specific fields
