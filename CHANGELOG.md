@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.47.1 (2026-08-05)
+
+### Fix
+
+* fix: run LLM autocast and the activation buffer on the model&#39;s device (#722) ([`928d44f`](https://github.com/decoderesearch/SAELens/commit/928d44fb5f2b39a5f808b1729c56648d5ce2c38d))
+
 ## v6.47.0 (2026-07-28)
 
 ### Feature
