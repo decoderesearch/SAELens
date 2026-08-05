@@ -659,7 +659,7 @@ class ActivationsStore:
         d_in may result from a concatenated head dimension.
         """
         with torch.autocast(
-            device_type="cuda",
+            device_type=_get_input_token_device(self.model).type,
             dtype=torch.bfloat16,
             enabled=self.autocast_lm,
         ):
@@ -679,7 +679,9 @@ class ActivationsStore:
 
         n_batches, n_context = layerwise_activations.shape[:2]
 
-        stacked_activations = torch.zeros((n_batches, n_context, self.d_in))
+        stacked_activations = torch.zeros(
+            (n_batches, n_context, self.d_in), device=self.device
+        )
 
         if self.hook_head_index is not None:
             stacked_activations[:, :] = layerwise_activations[
