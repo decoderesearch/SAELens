@@ -222,17 +222,23 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
       - A learnable threshold parameter.
       - A specialized auxiliary loss term for sparsity (L0 or similar).
 
-    The threshold is parameterized directly rather than as exp(log_threshold):
-    under Adam the per-step parameter movement is capped at ~lr regardless of
-    gradient magnitude, so a log parameterization moves the effective threshold
-    by only ~threshold * lr per step. With a small init this freezes the
-    threshold and the L0 penalty cannot reduce L0 at all (issue #494).
+    The threshold is parameterized directly rather than as exp(log_threshold).
+    Under Adam a parameter moves by at most ~lr per step regardless of gradient
+    magnitude, so a log parameterization moves the threshold multiplicatively
+    and a direct one moves it additively: growing a small init to a useful
+    threshold costs lr * steps of about ln(target / init) in log space versus
+    about target here. That gap decides whether the L0 penalty can do anything
+    at the run lengths SAELens is typically used for. Training gpt2-small at
+    lr 1e-5, a log threshold barely left its 0.01 init and L0 stayed at
+    3072/3072, while a direct threshold brought L0 below 1000 (issue #494). At
+    lr 3e-4 both reach a comparable solution, so this fixes the small
+    lr * steps regime rather than a defect present at every scale.
 
-    Note this diverges from DeepMind's JumpReLU (paper appendix J and their
-    colab), which trains log(threshold) to keep the threshold positive.
-    saprmarks/dictionary_learning instead parameterizes the threshold directly
-    and notes poor results with a log threshold, consistent with what we see
-    here.
+    This diverges from DeepMind's JumpReLU (paper appendix J and their colab),
+    which trains log(threshold) partly to keep the threshold positive; that is
+    maintained here by projecting the parameter in training_forward_pass.
+    saprmarks/dictionary_learning also parameterizes the threshold directly and
+    notes poor results with a log threshold.
 
     Methods of interest include:
 
