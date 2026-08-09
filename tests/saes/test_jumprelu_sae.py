@@ -3,8 +3,10 @@ from pathlib import Path
 
 import pytest
 import torch
+from safetensors.torch import save_file
 from torch import nn
 
+from sae_lens.constants import SAE_WEIGHTS_FILENAME
 from sae_lens.saes.jumprelu_sae import (
     JumpReLU,
     JumpReLUSAE,
@@ -37,12 +39,47 @@ def test_JumpReLUTrainingSAE_encoding():
     # Check the JumpReLU thresholding
     sae_in = sae.process_sae_in(x)
     expected_hidden_pre = sae_in @ sae.W_enc + sae.b_enc
-    threshold = torch.exp(sae.log_threshold)
     expected_feature_acts = JumpReLU.apply(
-        expected_hidden_pre, threshold, sae.bandwidth
+        expected_hidden_pre, sae.threshold, sae.bandwidth
     )
 
     assert_close(feature_acts, expected_feature_acts, atol=1e-6)  # type: ignore
+
+
+def _jumprelu_step_input(sae: JumpReLUTrainingSAE, batch_size: int) -> TrainStepInput:
+    return TrainStepInput(
+        sae_in=torch.randn(batch_size, sae.cfg.d_in),
+        coefficients={"l0": sae.cfg.l0_coefficient},
+        dead_neuron_mask=None,
+        n_training_steps=0,
+        is_logging_step=False,
+    )
+
+
+def test_JumpReLUTrainingSAE_training_forward_pass_projects_negative_threshold_to_zero():
+    sae = JumpReLUTrainingSAE(build_jumprelu_sae_training_cfg())
+    sae.threshold.data = torch.full_like(sae.threshold.data, -0.5)
+
+    output = sae.training_forward_pass(step_input=_jumprelu_step_input(sae, 512))
+
+    # JumpReLU is x * (x > threshold), so a negative threshold would let
+    # pre-activations in (-0.5, 0] through as negative feature activations.
+    assert_close(sae.threshold.detach(), torch.zeros_like(sae.threshold))
+    assert (output.feature_acts < 0).sum() == 0
+
+
+def test_JumpReLUTrainingSAE_threshold_at_zero_still_receives_gradient():
+    sae = JumpReLUTrainingSAE(build_jumprelu_sae_training_cfg())
+    sae.threshold.data = torch.zeros_like(sae.threshold.data)
+
+    output = sae.training_forward_pass(step_input=_jumprelu_step_input(sae, 512))
+    output.loss.backward()
+
+    # The projection happens on .data, outside the autograd graph. Clamping
+    # inside the graph instead would zero this gradient, pinning any latent that
+    # reaches zero there for the rest of training.
+    assert sae.threshold.grad is not None
+    assert sae.threshold.grad.abs().sum() > 0
 
 
 def test_JumpReLUTrainingSAE_training_forward_pass():
@@ -155,8 +192,8 @@ def test_JumpReLUTrainingSAE_initialization():
 
     assert sae.W_enc.shape == (cfg.d_in, cfg.d_sae)
     assert sae.W_dec.shape == (cfg.d_sae, cfg.d_in)
-    assert isinstance(sae.log_threshold, torch.nn.Parameter)
-    assert sae.log_threshold.shape == (cfg.d_sae,)
+    assert isinstance(sae.threshold, torch.nn.Parameter)
+    assert sae.threshold.shape == (cfg.d_sae,)
     assert sae.b_enc.shape == (cfg.d_sae,)
     assert sae.b_dec.shape == (cfg.d_in,)
     assert isinstance(sae.activation_fn, torch.nn.ReLU)
@@ -188,14 +225,14 @@ def test_JumpReLUTrainingSAE_save_and_load_inference_sae(tmp_path: Path) -> None
     training_sae.W_dec.data = torch.randn_like(training_sae.W_dec.data)
     training_sae.b_enc.data = torch.randn_like(training_sae.b_enc.data)
     training_sae.b_dec.data = torch.randn_like(training_sae.b_dec.data)
-    training_sae.log_threshold.data = torch.randn_like(training_sae.log_threshold.data)
+    training_sae.threshold.data = torch.rand_like(training_sae.threshold.data)
 
     # Save original state for comparison
     original_W_enc = training_sae.W_enc.data.clone()
     original_W_dec = training_sae.W_dec.data.clone()
     original_b_enc = training_sae.b_enc.data.clone()
     original_b_dec = training_sae.b_dec.data.clone()
-    original_threshold = training_sae.threshold.data.clone()  # exp(log_threshold)
+    original_threshold = training_sae.threshold.data.clone()
 
     # Save as inference model
     model_path = str(tmp_path)
@@ -215,7 +252,7 @@ def test_JumpReLUTrainingSAE_save_and_load_inference_sae(tmp_path: Path) -> None
     assert_close(inference_sae.b_enc, original_b_enc)
     assert_close(inference_sae.b_dec, original_b_dec)
 
-    # Most importantly, check that log_threshold was converted to threshold
+    # Most importantly, check that the threshold roundtrips to inference
     assert_close(inference_sae.threshold, original_threshold)
 
     # Verify forward pass gives same results
@@ -371,7 +408,7 @@ def test_JumpReLUTrainingSAE_tanh_scale_increases_l0_loss():
     sae_large.W_dec.data = sae_small.W_dec.data.clone()
     sae_large.b_enc.data = sae_small.b_enc.data.clone()
     sae_large.b_dec.data = sae_small.b_dec.data.clone()
-    sae_large.log_threshold.data = sae_small.log_threshold.data.clone()
+    sae_large.threshold.data = sae_small.threshold.data.clone()
 
     # Use same input for both
     x = torch.randn(batch_size, cfg_small.d_in)
@@ -410,6 +447,57 @@ def test_JumpReLUTrainingSAE_tanh_scale_increases_l0_loss():
     assert_close(
         train_step_output_small.feature_acts, train_step_output_large.feature_acts
     )
+
+
+def test_JumpReLUTrainingSAE_threshold_travels_at_the_adam_step_size():
+    init_threshold = 0.01
+    lr = 1e-3
+    steps = 50
+    cfg = build_jumprelu_sae_training_cfg(
+        jumprelu_init_threshold=init_threshold, l0_coefficient=1.0
+    )
+    sae = JumpReLUTrainingSAE(cfg)
+    optimizer = torch.optim.Adam(sae.parameters(), lr=lr)
+
+    for _ in range(steps):
+        train_step_output = sae.training_forward_pass(
+            step_input=TrainStepInput(
+                sae_in=torch.randn(512, cfg.d_in),
+                coefficients={"l0": 1.0},
+                dead_neuron_mask=None,
+                n_training_steps=0,
+                is_logging_step=False,
+            ),
+        )
+        optimizer.zero_grad()
+        train_step_output.loss.backward()
+        optimizer.step()
+
+    movement = sae.threshold.detach().mean().item() - init_threshold
+    # Adam normalizes by the gradient magnitude, so a step moves a parameter by
+    # at most ~lr. Parameterizing the threshold as exp(log_threshold) therefore
+    # caps its travel at ~init_threshold * lr * steps, which freezes it and
+    # leaves the l0 penalty unable to reduce l0 at all (#494).
+    assert movement > 20 * init_threshold * lr * steps
+    assert movement < lr * steps
+
+
+def test_JumpReLUTrainingSAE_loads_legacy_log_threshold_checkpoint(
+    tmp_path: Path,
+) -> None:
+    cfg = build_jumprelu_sae_training_cfg(device="cpu")
+    sae = JumpReLUTrainingSAE(cfg)
+    sae.threshold.data = torch.rand_like(sae.threshold.data) + 0.1
+    expected_threshold = sae.threshold.data.clone()
+
+    legacy_state_dict = {k: v.clone() for k, v in sae.state_dict().items()}
+    legacy_state_dict["log_threshold"] = torch.log(legacy_state_dict.pop("threshold"))
+    save_file(legacy_state_dict, tmp_path / SAE_WEIGHTS_FILENAME)
+
+    loaded_sae = JumpReLUTrainingSAE(cfg)
+    loaded_sae.load_weights_from_checkpoint(tmp_path)
+
+    assert_close(loaded_sae.threshold, expected_threshold, atol=1e-6)
 
 
 def test_JumpReLUTrainingSAE_errors_on_invalid_sparsity_loss_mode():
