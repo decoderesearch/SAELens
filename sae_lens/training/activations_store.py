@@ -627,7 +627,10 @@ class ActivationsStore:
         self.iterable_dataset = iter(self.dataset)
 
     def get_batch_tokens(
-        self, batch_size: int | None = None, raise_at_epoch_end: bool = False
+        self,
+        batch_size: int | None = None,
+        raise_at_epoch_end: bool = False,
+        move_to_model_device: bool = True,
     ):
         """
         Streams a batch of tokens from a dataset.
@@ -649,7 +652,10 @@ class ActivationsStore:
                     )
                 sequences.append(next(self.iterable_sequences))
 
-        return torch.stack(sequences, dim=0).to(_get_input_token_device(self.model))
+        batch_tokens = torch.stack(sequences, dim=0)
+        if move_to_model_device:
+            return batch_tokens.to(_get_input_token_device(self.model))
+        return batch_tokens
 
     @torch.no_grad()
     def get_activations(self, batch_tokens: torch.Tensor):

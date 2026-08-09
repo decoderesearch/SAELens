@@ -401,6 +401,21 @@ def test_get_input_token_device_returns_input_embedding_device_when_sharded():
     assert next(proxy.parameters()).device == torch.device("cpu")
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="No GPU to test on.")
+def test_get_batch_tokens_can_skip_model_device_transfer(ts_model: HookedTransformer):
+    cfg = build_runner_cfg(act_store_device="cpu", device="cuda:0")
+    activation_store = ActivationsStore.from_config(ts_model.to("cuda:0"), cfg)  # type: ignore
+
+    batch_on_model = activation_store.get_batch_tokens(batch_size=2)
+    batch_on_store = activation_store.get_batch_tokens(
+        batch_size=2,
+        move_to_model_device=False,
+    )
+
+    assert batch_on_model.device == torch.device("cuda:0")
+    assert batch_on_store.device == torch.device("cpu")
+
+
 def test_activations_store___iterate_tokenized_sequences__yields_concat_and_batched_sequences(
     ts_model: HookedTransformer,
 ):
