@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.48.0 (2026-08-09)
+
+### Feature
+
+* feat: parameterize JumpReLU threshold directly instead of log_threshold (#718) ([`c05f339`](https://github.com/decoderesearch/SAELens/commit/c05f339a41a93ea89368b10dd77898fe7575c4c8))
+
 ## v6.47.1 (2026-08-05)
 
 ### Fix
