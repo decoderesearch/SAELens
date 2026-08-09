@@ -40,7 +40,7 @@ def test_JumpReLUTrainingSAE_encoding():
     sae_in = sae.process_sae_in(x)
     expected_hidden_pre = sae_in @ sae.W_enc + sae.b_enc
     expected_feature_acts = JumpReLU.apply(
-        expected_hidden_pre, sae.threshold, sae.bandwidth
+        expected_hidden_pre, sae.threshold, sae.bandwidth, False
     )
 
     assert_close(feature_acts, expected_feature_acts, atol=1e-6)  # type: ignore
@@ -521,3 +521,52 @@ def test_JumpReLUTrainingSAE_errors_on_invalid_sparsity_loss_mode():
                 is_logging_step=False,
             ),
         )
+
+
+@pytest.mark.parametrize("ste_to_input", [True, False])
+def test_JumpReLU_ste_to_input_matches_the_analytic_gradient(ste_to_input: bool):
+    bandwidth = 0.5
+    threshold = torch.full((4,), 1.0, requires_grad=True)
+    # one pre-activation per case: below the window, inside it, above the threshold
+    x = torch.tensor([[0.0, 0.9, 1.05, 3.0]], requires_grad=True)
+
+    out = JumpReLU.apply(x, threshold, bandwidth, ste_to_input)
+    out.sum().backward()  # type: ignore
+    assert x.grad is not None and threshold.grad is not None
+
+    in_window = ((x - threshold).abs() < bandwidth / 2).float()
+    ste = threshold / bandwidth * in_window
+    expected_x_grad = (x > threshold).float() + (ste if ste_to_input else 0.0)
+
+    assert_close(x.grad, expected_x_grad, atol=1e-6)
+    # the threshold gradient is unaffected by where the estimator is routed
+    assert_close(threshold.grad, -ste.squeeze(0), atol=1e-6)
+
+
+def test_JumpReLUTrainingSAE_ste_to_input_reaches_the_encoder_for_gated_off_latents():
+    x = torch.ones(1, 2)
+
+    def encoder_grad(ste_to_input: bool) -> torch.Tensor:
+        sae = JumpReLUTrainingSAE(
+            build_jumprelu_sae_training_cfg(
+                d_in=2,
+                d_sae=2,
+                jumprelu_bandwidth=1.0,
+                jumprelu_init_threshold=1.0,
+                jumprelu_ste_to_input=ste_to_input,
+            )
+        )
+        # pre-activations of 0.8 sit below the threshold of 1.0 but inside the
+        # estimator's window of (0.5, 1.5), so nothing fires and any encoder
+        # gradient can only have arrived through the estimator
+        sae.W_enc.data = 0.8 * torch.eye(2)
+        sae.b_enc.data = torch.zeros(2)
+        feature_acts, _ = sae.encode_with_hidden_pre(x)
+        assert (feature_acts == 0).all()
+        feature_acts.sum().backward()
+        assert sae.W_enc.grad is not None
+        return sae.W_enc.grad
+
+    # estimator value is threshold / bandwidth = 1.0, and x is all ones
+    assert_close(encoder_grad(ste_to_input=True), torch.ones(2, 2), atol=1e-6)
+    assert_close(encoder_grad(ste_to_input=False), torch.zeros(2, 2), atol=1e-6)

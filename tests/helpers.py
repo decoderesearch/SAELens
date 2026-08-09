@@ -143,6 +143,7 @@ class TrainingSAEConfigDict(TypedDict, total=False):
     topk_threshold_lr: float  # For BatchTopK
     jumprelu_sparsity_loss_mode: Literal["step", "tanh"]  # For JumpReLU
     jumprelu_tanh_scale: float  # For JumpReLU
+    jumprelu_ste_to_input: bool  # For JumpReLU
     rescale_acts_by_decoder_norm: bool  # For TopK
     matryoshka_widths: list[int]  # For MatryoshkaBatchTopK
     residual_threshold: float  # for MatchingPursuitSAE
@@ -347,6 +348,7 @@ def build_jumprelu_runner_cfg(
         "decoder_init_norm": 0.1,
         "jumprelu_sparsity_loss_mode": "step",
         "jumprelu_tanh_scale": 4.0,
+        "jumprelu_ste_to_input": False,
         "jumprelu_init_threshold": 0.001,
         "jumprelu_bandwidth": 0.001,
         "l0_coefficient": 0.3,
