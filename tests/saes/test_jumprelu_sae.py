@@ -46,22 +46,40 @@ def test_JumpReLUTrainingSAE_encoding():
     assert_close(feature_acts, expected_feature_acts, atol=1e-6)  # type: ignore
 
 
-def test_JumpReLUTrainingSAE_negative_threshold_is_clamped_to_zero():
+def _jumprelu_step_input(sae: JumpReLUTrainingSAE, batch_size: int) -> TrainStepInput:
+    return TrainStepInput(
+        sae_in=torch.randn(batch_size, sae.cfg.d_in),
+        coefficients={"l0": sae.cfg.l0_coefficient},
+        dead_neuron_mask=None,
+        n_training_steps=0,
+        is_logging_step=False,
+    )
+
+
+def test_JumpReLUTrainingSAE_training_forward_pass_projects_negative_threshold_to_zero():
     sae = JumpReLUTrainingSAE(build_jumprelu_sae_training_cfg())
-
-    x = torch.randn(512, sae.cfg.d_in)
-
     sae.threshold.data = torch.full_like(sae.threshold.data, -0.5)
-    neg_acts, _ = sae.encode_with_hidden_pre(x)
 
+    output = sae.training_forward_pass(step_input=_jumprelu_step_input(sae, 512))
+
+    # JumpReLU is x * (x > threshold), so a negative threshold would let
+    # pre-activations in (-0.5, 0] through as negative feature activations.
+    assert_close(sae.threshold.detach(), torch.zeros_like(sae.threshold))
+    assert (output.feature_acts < 0).sum() == 0
+
+
+def test_JumpReLUTrainingSAE_threshold_at_zero_still_receives_gradient():
+    sae = JumpReLUTrainingSAE(build_jumprelu_sae_training_cfg())
     sae.threshold.data = torch.zeros_like(sae.threshold.data)
-    zero_acts, _ = sae.encode_with_hidden_pre(x)
 
-    # The threshold is clamped with relu(), so a negative threshold behaves
-    # exactly like threshold=0. Without the clamp, JumpReLU (x * (x > threshold))
-    # would let pre-activations in (-0.5, 0] leak through as negative activations.
-    assert (neg_acts < 0).sum() == 0
-    assert_close(neg_acts, zero_acts, atol=1e-6)
+    output = sae.training_forward_pass(step_input=_jumprelu_step_input(sae, 512))
+    output.loss.backward()
+
+    # The projection happens on .data, outside the autograd graph. Clamping
+    # inside the graph instead would zero this gradient, pinning any latent that
+    # reaches zero there for the rest of training.
+    assert sae.threshold.grad is not None
+    assert sae.threshold.grad.abs().sum() > 0
 
 
 def test_JumpReLUTrainingSAE_training_forward_pass():

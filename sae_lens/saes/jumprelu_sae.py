@@ -12,6 +12,7 @@ from sae_lens.saes.sae import (
     TrainingSAE,
     TrainingSAEConfig,
     TrainStepInput,
+    TrainStepOutput,
 )
 
 
@@ -143,7 +144,7 @@ class JumpReLUSAE(SAE[JumpReLUSAEConfig]):
 
         # 2) Zero out any unit whose (hidden_pre <= threshold).
         #    We cast the boolean mask to the same dtype for safe multiplication.
-        jump_relu_mask = (hidden_pre > self.threshold.relu()).to(base_acts.dtype)
+        jump_relu_mask = (hidden_pre > self.threshold).to(base_acts.dtype)
 
         # 3) Multiply the normally activated units by that mask.
         return self.hook_sae_acts_post(base_acts * jump_relu_mask)
@@ -270,6 +271,17 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
         )
 
     @override
+    def training_forward_pass(self, step_input: TrainStepInput) -> TrainStepOutput:
+        # A directly parameterized threshold can be driven below zero, where the
+        # JumpReLU gate would pass negative pre-activations through as negative
+        # feature activations. Project it back onto [0, inf) instead of clamping
+        # inside the graph: clamping in the graph zeroes the threshold's own
+        # gradient, which pins any latent that reaches zero there permanently.
+        with torch.no_grad():
+            self.threshold.data.clamp_(min=0.0)
+        return super().training_forward_pass(step_input)
+
+    @override
     def encode_with_hidden_pre(
         self, x: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -277,7 +289,7 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
 
         hidden_pre = self.hook_sae_acts_pre(sae_in @ self.W_enc + self.b_enc)
         feature_acts = self.hook_sae_acts_post(
-            JumpReLU.apply(hidden_pre, self.threshold.relu(), self.bandwidth)
+            JumpReLU.apply(hidden_pre, self.threshold, self.bandwidth)
         )
 
         return feature_acts, hidden_pre  # type: ignore
@@ -292,9 +304,7 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
     ) -> dict[str, torch.Tensor]:
         """Calculate architecture-specific auxiliary loss terms."""
 
-        # relu() keeps the threshold >= 0: a negative threshold disables the
-        # gate (see JumpReLUSAE.encode) and counts the latent as always-on in L0.
-        threshold = self.threshold.relu()
+        threshold = self.threshold
         W_dec_norm = self.W_dec.norm(dim=1)
         if self.cfg.jumprelu_sparsity_loss_mode == "step":
             l0 = torch.sum(
