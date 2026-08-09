@@ -223,22 +223,11 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
       - A specialized auxiliary loss term for sparsity (L0 or similar).
 
     The threshold is parameterized directly rather than as exp(log_threshold).
-    Under Adam a parameter moves by at most ~lr per step regardless of gradient
-    magnitude, so a log parameterization moves the threshold multiplicatively
-    and a direct one moves it additively: growing a small init to a useful
-    threshold costs lr * steps of about ln(target / init) in log space versus
-    about target here. That gap decides whether the L0 penalty can do anything
-    at the run lengths SAELens is typically used for. Training gpt2-small at
-    lr 1e-5, a log threshold barely left its 0.01 init and L0 stayed at
-    3072/3072, while a direct threshold brought L0 below 1000 (issue #494). At
-    lr 3e-4 both reach a comparable solution, so this fixes the small
-    lr * steps regime rather than a defect present at every scale.
-
-    This diverges from DeepMind's JumpReLU (paper appendix J and their colab),
-    which trains log(threshold) partly to keep the threshold positive; that is
-    maintained here by projecting the parameter in training_forward_pass.
-    saprmarks/dictionary_learning also parameterizes the threshold directly and
-    notes poor results with a log threshold.
+    Adam moves a parameter by at most ~lr per step, so a log parameterization
+    moves the threshold multiplicatively and barely shifts a small init within
+    a typical lr * steps budget (issue #494). This diverges from DeepMind's
+    JumpReLU, which trains log(threshold) partly for positivity; that is kept
+    here by projecting the parameter in training_forward_pass.
 
     Methods of interest include:
 
@@ -278,11 +267,10 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
 
     @override
     def training_forward_pass(self, step_input: TrainStepInput) -> TrainStepOutput:
-        # A directly parameterized threshold can be driven below zero, where the
-        # JumpReLU gate would pass negative pre-activations through as negative
-        # feature activations. Project it back onto [0, inf) instead of clamping
-        # inside the graph: clamping in the graph zeroes the threshold's own
-        # gradient, which pins any latent that reaches zero there permanently.
+        # Keep the threshold non-negative; below zero the gate passes negative
+        # pre-activations through. Projected on .data rather than clamped in the
+        # graph, which would zero the threshold's gradient and pin any latent
+        # that reaches zero there permanently.
         with torch.no_grad():
             self.threshold.data.clamp_(min=0.0)
         return super().training_forward_pass(step_input)
