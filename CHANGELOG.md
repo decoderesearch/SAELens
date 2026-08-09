@@ -1,5 +1,66 @@
 # CHANGELOG
 
+## v6.49.0 (2026-08-09)
+
+### Feature
+
+* feat: Gemma-scope-2 Neuronpedia aliases, in-place decoder-norm fold, and an activations-store device seam (#721)
+
+* Add gemma-scope-2 1b-it transcoder Neuronpedia aliases and source-set metadata
+
+Registers the gemma-3-1b-it gemma-scope-2 transcoder releases (16k and
+262k widths, incl. the transcoder_all layout) with Neuronpedia source-set
+ids/aliases so SAEDashboard/Neuronpedia tooling can resolve them by
+release + source set.
+
+* Make fold_W_dec_norm fold in place to preserve parameter storage
+
+fold_and_get_W_dec_norm now uses in-place div_/mul_ on the existing
+parameter tensors instead of rebinding .data, so external references to
+parameter storage (e.g. device-transfer seams and dashboard runners that
+hold views) stay valid after folding. Numerics are unchanged.
+
+* Add an activations-store device-transfer override and token device seam
+
+Allows overriding the device activations are staged to independently of
+the model device (dashboard generation keeps tokens/acts on the model
+device or a configured staging device), preserving the token device seam
+across store refills.
+
+* Remove stray empty root __init__.py (breaks pytest 8.x conftest resolution)
+
+An empty __init__.py at the repository root (accidentally added in the 2024
+Mamba-support commit) makes pytest&#39;s prepend-import basedir walk continue
+past the repo root, so tests/conftest.py imports as part of a bogus parent
+package and `from tests.helpers import ...` fails with ModuleNotFoundError
+under current pytest resolution (8.4.x). Nothing imports a top-level package
+at the repo root; removing the file restores collection (1631 tests).
+
+* Complete the gemma-scope-2 1b-it 262k Neuronpedia aliases
+
+The 262k transcoder aliases covered layers {0, 1, 10-25} and omitted 2-9 -- the
+set a lexicographic enumeration produces. The 16k transcoders were already fully
+covered at 26/26, and the underlying SAE rows for the missing layers exist, so
+the gap was an oversight rather than a statement about availability.
+
+Both gemma-3-1b-it transcoder source sets are now 26/26.
+
+* fix: restrict Neuronpedia aliases to sources that exist on neuronpedia.org
+
+Reverts the pretrained_saes.yaml changes to a purely additive set of 44
+verified aliases on gemma-scope-2-4b-it-transcoders-all:
+
+- 16k (layers 0-4, 6, 7, 9, 10, 12) -&gt; layer_N_width_16k_l0_small_affine
+- 262k (layers 0-33) -&gt; layer_N_width_262k_l0_small_affine
+
+Each alias was verified against the Neuronpedia page metadata
+(saelensRelease, saelensSaeId, hfFolderId). The gemma-3-1b-it transcoder
+sources and the remaining gemma-3-4b-it 16k layers do not exist on
+neuronpedia.org, so those aliases are dropped. Also restores the 10
+&#34;- id:&#34; lines this branch removed from the 1b-pt and 12b-pt transcoder
+releases, which silently corrupted neighboring entries via duplicate
+YAML keys. ([`3495640`](https://github.com/decoderesearch/SAELens/commit/34956404b23ace2db1b801f4a185fab5de3643bc))
+
 ## v6.48.0 (2026-08-09)
 
 ### Feature
