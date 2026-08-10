@@ -499,8 +499,7 @@ SAE Training best practices are still rapidly evolving, so the default settings 
 
 Some general performance tips:
 
-- If your GPU supports it (most modern nvidia-GPUs do), setting `autocast=True` and `autocast_lm=True` in the config will dramatically speed up training.
-- We find that often SAEs struggle to train well with `dtype="bfloat16"`. We aren't sure why this is, but make sure to compare the SAE quality if you change the dtype.
+- If your GPU supports it (most modern nvidia-GPUs do), setting `autocast=True` and `autocast_lm=True` in the config will dramatically speed up training, or you can set `dtype="bfloat16"` if you're OK with slightly less precision for the SAE weights (this is usually fine).
 - You can try turning on `compile_sae=True` and `compile_llm=True`in the config to see if it makes training faster. Your mileage may vary though, compilation can be finicky.
 
 ## Checkpoints
