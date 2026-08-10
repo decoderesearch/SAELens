@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any, Generic, Protocol
 
 import torch
-import wandb
 from safetensors.torch import save_file
 from torch.optim import Adam
 from tqdm.auto import tqdm
@@ -29,6 +28,7 @@ from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.optim import CoefficientScheduler, get_lr_scheduler
 from sae_lens.training.types import DataProvider
 from sae_lens.util import path_or_tmp_dir
+from sae_lens.wandb_compat import BACKEND, wandb
 
 
 def _log_feature_sparsity(
@@ -452,8 +452,9 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
                 if self.evaluator is not None
                 else {}
             )
-            for key, value in self.sae.log_histograms().items():
-                eval_metrics[key] = wandb.Histogram(value)  # type: ignore
+            if BACKEND != "swanlab":
+                for key, value in self.sae.log_histograms().items():
+                    eval_metrics[key] = wandb.Histogram(value)  # type: ignore
 
             wandb.log(
                 eval_metrics,
@@ -464,13 +465,16 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
     @torch.no_grad()
     def _build_sparsity_log_dict(self) -> dict[str, Any]:
         log_feature_sparsity = _log_feature_sparsity(self.feature_sparsity)
-        wandb_histogram = wandb.Histogram(log_feature_sparsity.numpy())  # type: ignore
-        return {
+        log_dict = {
             "metrics/mean_log10_feature_sparsity": log_feature_sparsity.mean().item(),
-            "plots/feature_density_line_chart": wandb_histogram,
             "sparsity/below_1e-5": (self.feature_sparsity < 1e-5).sum().item(),
             "sparsity/below_1e-6": (self.feature_sparsity < 1e-6).sum().item(),
         }
+        if BACKEND != "swanlab":
+            log_dict["plots/feature_density_line_chart"] = wandb.Histogram(
+                log_feature_sparsity.numpy()
+            )
+        return log_dict
 
     @torch.no_grad()
     def _reset_running_sparsity_stats(self) -> None:

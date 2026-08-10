@@ -3,11 +3,10 @@ import math
 import warnings
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 
 import simple_parsing
 import torch
-import wandb
 from datasets import (
     Dataset,
     DatasetDict,
@@ -25,6 +24,7 @@ from sae_lens.constants import (
 from sae_lens.registry import get_sae_training_class
 from sae_lens.saes.sae import TrainingSAEConfig
 from sae_lens.util import str_to_dtype
+from sae_lens.wandb_compat import BACKEND, generate_id, wandb
 
 if TYPE_CHECKING:
     pass
@@ -98,6 +98,8 @@ class LoggingConfig:
         sparsity_path: Path | str | None,
         wandb_aliases: list[str] | None = None,
     ) -> None:
+        if BACKEND == "swanlab":
+            return
         # Avoid wandb saving errors such as:
         #   ValueError: Artifact name may only contain alphanumeric characters, dashes, underscores, and dots. Invalid name: sae_google/gemma-2b_etc
         sae_name = trainer.sae.get_name().replace("/", "__")
@@ -357,9 +359,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
 
         unique_id = self.logger.wandb_id
         if unique_id is None:
-            unique_id = cast(
-                Any, wandb
-            ).util.generate_id()  # not sure why this type is erroring
+            unique_id = generate_id()
         self.checkpoint_path = f"{self.checkpoint_path}/{unique_id}"
 
         if self.verbose:

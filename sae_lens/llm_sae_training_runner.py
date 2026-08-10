@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, Generic
 
 import torch
-import wandb
 from safetensors.torch import save_file
 from simple_parsing import ArgumentParser, subgroups
 from transformer_lens.HookedTransformer import HookedRootModule
@@ -38,6 +37,7 @@ from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.prefetch import PrefetchingIterator
 from sae_lens.training.sae_trainer import SAETrainer
 from sae_lens.training.types import DataProvider
+from sae_lens.wandb_compat import wandb
 
 
 @dataclass
