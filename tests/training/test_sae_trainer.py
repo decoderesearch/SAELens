@@ -31,6 +31,7 @@ from sae_lens.training.sae_trainer import (
 from tests.helpers import (
     TINYSTORIES_MODEL,
     assert_close,
+    assert_not_close,
     build_runner_cfg,
     build_sae_training_cfg,
     load_model_cached,
@@ -762,3 +763,31 @@ def test_sae_trainer_fit_logs_train_eval_and_sparsity_metrics_to_wandb(
     assert "model_performance_preservation" in all_keys
     # the feature_sampling_window=2 sparsity reset emits its own log dict
     assert "metrics/mean_log10_feature_sparsity" in all_keys
+
+
+@pytest.mark.parametrize("autocast", [True, False])
+def test_train_step_updates_params_and_reduces_loss_with_autocast(
+    autocast: bool,
+) -> None:
+    d_in, d_sae, batch_size = 8, 16, 32
+    sae = StandardTrainingSAE(build_sae_training_cfg(d_in=d_in, d_sae=d_sae))
+    trainer = SAETrainer(
+        cfg=SAETrainerConfig(
+            total_training_samples=batch_size,
+            train_batch_size_samples=batch_size,
+            lr_end=1e-4,
+            autocast=autocast,
+        ),
+        sae=sae,
+        data_provider=iter(lambda: torch.randn(batch_size, d_in), None),
+    )
+    before = sae.W_enc.detach().clone()
+
+    acts = torch.randn(batch_size, d_in)
+    losses = [
+        trainer._train_step(sae=sae, sae_in=acts).loss.item()  # noqa: SLF001
+        for _ in range(5)
+    ]
+
+    assert losses[-1] < losses[0]
+    assert_not_close(sae.W_enc.detach(), before)
