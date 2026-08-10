@@ -131,12 +131,9 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
                 final_value=coeff_cfg.value,
             )
 
-        # Setup autocast if using. autocast/GradScaler want the device *type*
-        # (e.g. "cuda"), not a fully qualified device string like "cuda:1".
+        # Setup autocast if using. autocast wants the device *type* (e.g. "cuda"),
+        # not a fully qualified device string like "cuda:1".
         device_type = torch.device(self.cfg.device).type
-        self.grad_scaler = torch.amp.GradScaler(
-            device=device_type, enabled=self.cfg.autocast
-        )
 
         if self.cfg.autocast:
             self.autocast_if_enabled = torch.autocast(
@@ -360,17 +357,10 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
                 self.act_freq_scores += firing_feats.sum(0)
                 self.n_frac_active_samples += self.cfg.train_batch_size_samples
 
-        # Grad scaler will rescale gradients if autocast is enabled
-        self.grad_scaler.scale(
-            train_step_output.loss
-        ).backward()  # loss.backward() if not autocasting
-        self.grad_scaler.unscale_(self.optimizer)  # needed to clip correctly
+        train_step_output.loss.backward()
         # TODO: Work out if grad norm clipping should be in config / how to test it.
         torch.nn.utils.clip_grad_norm_(sae.parameters(), 1.0)
-        self.grad_scaler.step(
-            self.optimizer
-        )  # just ctx.optimizer.step() if not autocasting
-        self.grad_scaler.update()
+        self.optimizer.step()
 
         self.optimizer.zero_grad()
         self.lr_scheduler.step()
