@@ -260,11 +260,13 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
         # We'll store a bandwidth for the training approach, if needed
         self.bandwidth = cfg.jumprelu_bandwidth
 
+        # Kept in float32 whatever the SAE dtype, since Adam's ~lr sized steps on an
+        # O(1) threshold round away in bfloat16; cast to the compute dtype at use.
         self.threshold = nn.Parameter(
             torch.full(
                 (self.cfg.d_sae,),
                 cfg.jumprelu_init_threshold,
-                dtype=self.dtype,
+                dtype=torch.float32,
                 device=self.device,
             )
         )
@@ -300,7 +302,7 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
         feature_acts = self.hook_sae_acts_post(
             JumpReLU.apply(
                 hidden_pre,
-                self.threshold,
+                self.threshold.to(hidden_pre.dtype),
                 self.bandwidth,
                 self.cfg.jumprelu_ste_to_input,
             )
@@ -318,7 +320,7 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
     ) -> dict[str, torch.Tensor]:
         """Calculate architecture-specific auxiliary loss terms."""
 
-        threshold = self.threshold
+        threshold = self.threshold.to(hidden_pre.dtype)
         W_dec_norm = self.W_dec.norm(dim=1)
         if self.cfg.jumprelu_sparsity_loss_mode == "step":
             l0 = torch.sum(

@@ -570,3 +570,41 @@ def test_JumpReLUTrainingSAE_ste_to_input_reaches_the_encoder_for_gated_off_late
     # estimator value is threshold / bandwidth = 1.0, and x is all ones
     assert_close(encoder_grad(ste_to_input=True), torch.ones(2, 2), atol=1e-6)
     assert_close(encoder_grad(ste_to_input=False), torch.zeros(2, 2), atol=1e-6)
+
+
+def test_JumpReLUTrainingSAE_keeps_threshold_in_float32_for_bfloat16_saes():
+    lr, steps, init = 1e-3, 100, 1.1
+    sae = JumpReLUTrainingSAE(
+        build_jumprelu_sae_training_cfg(
+            d_in=16,
+            d_sae=32,
+            dtype="bfloat16",
+            jumprelu_init_threshold=init,
+            jumprelu_bandwidth=2.0,
+            l0_coefficient=1.0,
+        )
+    )
+    assert sae.W_enc.dtype == torch.bfloat16
+    assert sae.threshold.dtype == torch.float32
+
+    optimizer = torch.optim.Adam(sae.parameters(), lr=lr)
+    for _ in range(steps):
+        output = sae.training_forward_pass(
+            step_input=TrainStepInput(
+                sae_in=torch.randn(64, sae.cfg.d_in, dtype=torch.bfloat16),
+                coefficients={"l0": 1.0},
+                dead_neuron_mask=None,
+                n_training_steps=0,
+                is_logging_step=False,
+            )
+        )
+        # the threshold is cast at the use site, so the big tensors stay bfloat16
+        assert output.feature_acts.dtype == torch.bfloat16
+        optimizer.zero_grad()
+        output.loss.backward()
+        optimizer.step()
+
+    # bfloat16 resolves ~0.004 at 1.1, so a bfloat16 threshold would round away
+    # most of the lr-sized steps and barely move
+    moved = abs(sae.threshold.detach().float().mean().item() - init)
+    assert moved > 20 * lr
