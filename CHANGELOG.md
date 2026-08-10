@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## v6.49.1 (2026-08-10)
+
+### Documentation
+
+* docs: updating recommendation on bf16 weights, they seem to be fine ([`f87c5ca`](https://github.com/decoderesearch/SAELens/commit/f87c5caaaf78ddc570bde1ca2c512d368047458e))
+
+### Fix
+
+* fix: remove the unused GradScaler from SAETrainer (#723)
+
+GradScaler exists to stop fp16 gradients underflowing: fp16&#39;s smallest normal
+is 6.10e-05, so loss scaling is needed to keep small gradients representable.
+SAELens never autocasts to fp16 — all three autocast sites use bfloat16, whose
+exponent range is identical to fp32 (min normal 1.18e-38). Nothing underflows,
+so the scaler has never had anything to do.
+
+It was not merely inert. It added a scale, an unscale and an inf/nan check to
+every training step, it could silently skip optimizer steps when its inf check
+tripped, and with autocast=True on an SAE holding bfloat16 parameters it raised
+NotImplementedError from _amp_foreach_non_finite_check_and_unscale_cuda, making
+that configuration untrainable on GPU.
+
+Also adds the first test covering trainer-level autocast, which had none — only
+autocast_lm was tested, which is why this went unnoticed.
+
+Co-authored-by: Claude Opus 5 (1M context) &lt;noreply@anthropic.com&gt; ([`8d09350`](https://github.com/decoderesearch/SAELens/commit/8d0935024f17b686b25531b86b4fe6fd3d5fbb88))
+
 ## v6.49.0 (2026-08-09)
 
 ### Feature
