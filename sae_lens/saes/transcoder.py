@@ -228,7 +228,14 @@ class SkipTranscoder(Transcoder):
 
         # Initialize skip connection matrix
         # Shape: [d_out, d_in] to map from input to output dimension
-        self.W_skip = nn.Parameter(torch.zeros(self.cfg.d_out, self.cfg.d_in))
+        self.W_skip = nn.Parameter(
+            torch.zeros(
+                self.cfg.d_out,
+                self.cfg.d_in,
+                dtype=self.dtype,
+                device=self.device,
+            )
+        )
 
     @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
