@@ -1,9 +1,10 @@
 import json
 import math
+import uuid
 import warnings
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 
 import simple_parsing
 import torch
@@ -355,11 +356,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
         if self.lr_end is None:
             self.lr_end = self.lr / 10
 
-        unique_id = self.logger.wandb_id
-        if unique_id is None:
-            unique_id = cast(
-                Any, wandb
-            ).util.generate_id()  # not sure why this type is erroring
+        unique_id = self.logger.wandb_id or uuid.uuid4().hex[:8]
         self.checkpoint_path = f"{self.checkpoint_path}/{unique_id}"
 
         if self.verbose:

@@ -171,6 +171,20 @@ def test_LanguageModelSAERunnerConfig_accepts_zero_prefetch_llm_batches():
     assert cfg.prefetch_llm_batches == 0
 
 
+def test_LanguageModelSAERunnerConfig_generates_checkpoint_id_without_wandb_util(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    fake_uuid = type("UUID", (), {"hex": "12345678abcdef"})()
+    monkeypatch.setattr("sae_lens.config.uuid.uuid4", lambda: fake_uuid)
+
+    cfg = LanguageModelSAERunnerConfig(
+        sae=StandardTrainingSAEConfig(d_in=5, d_sae=10),
+        checkpoint_path="checkpoints",
+    )
+
+    assert cfg.checkpoint_path == "checkpoints/12345678"
+
+
 def test_LanguageModelSAERunnerConfig_to_dict_and_from_dict():
     cfg = LanguageModelSAERunnerConfig(
         sae=JumpReLUTrainingSAEConfig(
