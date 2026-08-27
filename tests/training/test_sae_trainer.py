@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 import pytest
 import torch
+import wandb
 from datasets import Dataset
 from transformer_lens import HookedTransformer
 from typing_extensions import override
@@ -35,6 +36,7 @@ from tests.helpers import (
     build_runner_cfg,
     build_sae_training_cfg,
     load_model_cached,
+    random_params,
 )
 
 
@@ -83,6 +85,69 @@ def trainer(  # type: ignore
         data_provider=activation_store,
         evaluator=evaluator,
     )
+
+
+def test_sae_trainer_uses_independent_eval_data_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    d_in = 8
+    train_batch = torch.ones(4, d_in)
+    eval_batch = torch.full((4, d_in), 7.0)
+    train_data_provider = iter([train_batch])
+    eval_data_provider = iter([eval_batch])
+    evaluated_batches: list[torch.Tensor] = []
+
+    def evaluator(
+        sae: StandardTrainingSAE,
+        data_provider: Any,
+        activation_scaler: Any,
+    ) -> dict[str, Any]:
+        del sae, activation_scaler
+        evaluated_batches.append(next(data_provider))
+        return {}
+
+    cfg = build_runner_cfg(
+        d_in=d_in, d_sae=16, logger={"wandb_id": "held-out-eval-test"}
+    )
+    sae = StandardTrainingSAE(cfg.sae)
+    random_params(sae)
+    trainer = SAETrainer(
+        cfg=cfg.to_sae_trainer_config(),
+        sae=sae,
+        data_provider=train_data_provider,
+        eval_data_provider=eval_data_provider,
+        evaluator=evaluator,
+    )
+
+    def ignore_wandb_log(*args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+
+    monkeypatch.setattr(wandb, "log", ignore_wandb_log)
+
+    trainer.n_training_steps = (
+        cfg.logger.wandb_log_frequency * cfg.logger.eval_every_n_wandb_logs - 1
+    )
+    trainer._run_and_log_evals()
+
+    assert_close(evaluated_batches[0], eval_batch)
+    assert_close(next(train_data_provider), train_batch)
+
+
+def test_sae_trainer_defaults_to_training_data_for_evaluation() -> None:
+    data_provider = iter([torch.ones(4, 8)])
+    cfg = build_runner_cfg(
+        d_in=8, d_sae=16, logger={"wandb_id": "held-out-eval-default-test"}
+    )
+
+    sae = StandardTrainingSAE(cfg.sae)
+    random_params(sae)
+    trainer = SAETrainer(
+        cfg=cfg.to_sae_trainer_config(),
+        sae=sae,
+        data_provider=data_provider,
+    )
+
+    assert trainer.eval_data_provider is data_provider
 
 
 def modify_sae_output(

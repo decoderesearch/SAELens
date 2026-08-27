@@ -138,6 +138,9 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
         hook_eval (str): DEPRECATED: Will be removed in v7.0.0. NOT CURRENTLY IN USE. The name of the hook to use for evaluation.
         hook_head_index (int, optional): When the hook is for an activation with a head index, we can specify a specific head to use here.
         dataset_path (str): A Hugging Face dataset path.
+        eval_dataset_path (str, optional): A separate Hugging Face dataset path used only for held-out evaluation. If omitted, evaluation continues to use the training dataset.
+        eval_dataset_split (str): The split to load from `eval_dataset_path`.
+        eval_dataset_trust_remote_code (bool): Whether to trust remote code when loading the held-out evaluation dataset. Defaults to False.
         dataset_trust_remote_code (bool): Whether to trust remote code when loading datasets from Huggingface.
         streaming (bool): Whether to stream the dataset. Streaming large datasets is usually practical.
         is_dataset_tokenized (bool): Whether the dataset is already tokenized.
@@ -296,6 +299,10 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     sae_lens_training_version: str = field(default_factory=lambda: __version__)
     exclude_special_tokens: bool | list[int] = False
     n_batches_for_norm_estimate: int = 1000  # Default value is 1k, helpful to decrease this if you use a larger batch size
+    # Appended to preserve the positional order of existing config fields.
+    eval_dataset_path: str | None = None
+    eval_dataset_split: str = "train"
+    eval_dataset_trust_remote_code: bool = False
 
     def __post_init__(self):
         if self.hook_eval != "NOT_IN_USE":
