@@ -533,3 +533,43 @@ def test_tokenize_with_chat_template_produces_correct_tokens():
     assert "Hello" in decoded
     assert "<|assistant|>" in decoded
     assert "Hi" in decoded
+
+
+def test_concat_and_batch_sequences_uses_begin_batch_token_id_of_zero_with_concat_sequences_disabled():
+    # Token id 0 is a valid BOS id, e.g. <|endoftext|> on GPT-NeoX and Pythia
+    all_toks = torch.arange(1, 20)
+    seqs = [all_toks[:3], all_toks[3:10], all_toks[10:17], all_toks[17:]]
+    batches_list = list(
+        concat_and_batch_sequences(
+            tokens_iterator=iter(seqs),
+            context_size=5,
+            begin_batch_token_id=0,
+            disable_concat_sequences=True,
+        )
+    )
+    batches = torch.stack(batches_list)
+    expected = [
+        [0, 4, 5, 6, 7],
+        [0, 11, 12, 13, 14],
+    ]
+    assert batches.tolist() == expected
+
+
+def test_concat_and_batch_sequences_keeps_explicit_begin_sequence_token_id_of_zero():
+    all_toks = torch.arange(1, 20)
+    seqs = [all_toks[:3], all_toks[3:10], all_toks[10:17], all_toks[17:]]
+    batches_list = list(
+        concat_and_batch_sequences(
+            tokens_iterator=iter(seqs),
+            context_size=5,
+            begin_batch_token_id=999,
+            begin_sequence_token_id=0,
+            disable_concat_sequences=True,
+        )
+    )
+    batches = torch.stack(batches_list)
+    expected = [
+        [0, 4, 5, 6, 7],
+        [0, 11, 12, 13, 14],
+    ]
+    assert batches.tolist() == expected

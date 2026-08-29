@@ -82,7 +82,7 @@ def concat_and_batch_sequences(
         max_batches: If not provided, the iterator will be run to completion.
     """
     if disable_concat_sequences:
-        if begin_batch_token_id and not begin_sequence_token_id:
+        if begin_batch_token_id is not None and begin_sequence_token_id is None:
             begin_sequence_token_id = begin_batch_token_id
         for sequence in tokens_iterator:
             if (
