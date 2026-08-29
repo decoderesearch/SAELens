@@ -48,6 +48,16 @@ def test_validate_matryoshka_config_appends_d_sae_if_missing():
     assert cfg.matryoshka_widths == [5, 10, 20]
 
 
+def test_validate_matryoshka_config_raises_if_widths_are_empty():
+    cfg = build_matryoshka_batchtopk_sae_training_cfg(
+        d_sae=20,
+        k=5,
+        matryoshka_widths=[],
+    )
+    with pytest.raises(ValueError, match="must not be empty"):
+        _validate_matryoshka_config(cfg)
+
+
 def test_validate_matryoshka_config_does_not_append_d_sae_if_already_present():
     cfg = build_matryoshka_batchtopk_sae_training_cfg(
         d_sae=20,

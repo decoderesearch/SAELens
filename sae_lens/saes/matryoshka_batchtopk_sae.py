@@ -203,6 +203,9 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
 
 
 def _validate_matryoshka_config(cfg: MatryoshkaBatchTopKTrainingSAEConfig) -> None:
+    if not cfg.matryoshka_widths:
+        raise ValueError("cfg.matryoshka_widths must not be empty.")
+
     if cfg.matryoshka_widths[-1] != cfg.d_sae:
         # warn the users that we will add a final matryoshka level
         warnings.warn(
