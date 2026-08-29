@@ -322,6 +322,15 @@ class TestSkipTranscoder:
         # W_skip should be initialized to zeros
         assert torch.all(transcoder.W_skip == 0)
 
+    def test_skip_transcoder_initializes_w_skip_with_configured_dtype(self):
+        cfg = build_skip_transcoder_cfg(dtype="float64", device="cpu")
+
+        transcoder = SkipTranscoder(cfg)
+
+        assert transcoder.W_skip.dtype == torch.float64
+        assert transcoder.W_skip.device.type == "cpu"
+        transcoder(torch.randn(2, cfg.d_in, dtype=torch.float64))
+
     def test_skip_transcoder_forward_with_zero_skip(self):
         """With W_skip=0, output should match base Transcoder."""
         cfg = build_skip_transcoder_cfg(d_in=32, d_sae=64, d_out=48)
