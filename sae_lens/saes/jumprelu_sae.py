@@ -283,6 +283,16 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
         )
 
     @override
+    def _apply(self, *args: Any, **kwargs: Any) -> "JumpReLUTrainingSAE":
+        out = super()._apply(*args, **kwargs)
+        # nn.Module.to() casts every float parameter, and the load paths call it
+        # with cfg.dtype, so restore the threshold invariant from __init__.
+        threshold = self._parameters.get("threshold")
+        if threshold is not None and threshold.dtype != torch.float32:
+            threshold.data = threshold.data.float()
+        return out
+
+    @override
     def training_forward_pass(self, step_input: TrainStepInput) -> TrainStepOutput:
         # Keep the threshold non-negative; below zero the gate passes negative
         # pre-activations through. Projected on .data rather than clamped in the

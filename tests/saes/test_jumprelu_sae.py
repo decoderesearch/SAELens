@@ -13,7 +13,7 @@ from sae_lens.saes.jumprelu_sae import (
     JumpReLUTrainingSAE,
     calculate_pre_act_loss,
 )
-from sae_lens.saes.sae import SAE, TrainStepInput
+from sae_lens.saes.sae import SAE, TrainingSAE, TrainStepInput
 from tests.helpers import (
     assert_close,
     assert_not_close,
@@ -608,3 +608,19 @@ def test_JumpReLUTrainingSAE_keeps_threshold_in_float32_for_bfloat16_saes():
     # most of the lr-sized steps and barely move
     moved = abs(sae.threshold.detach().float().mean().item() - init)
     assert moved > 20 * lr
+
+
+def test_JumpReLUTrainingSAE_keeps_threshold_in_float32_across_a_disk_roundtrip(
+    tmp_path: Path,
+) -> None:
+    sae = JumpReLUTrainingSAE(
+        build_jumprelu_sae_training_cfg(dtype="bfloat16", jumprelu_init_threshold=1.1)
+    )
+    sae.save_model(str(tmp_path))
+
+    loaded = TrainingSAE.load_from_disk(tmp_path, device="cpu")
+
+    # load_from_disk ends in sae.to(dtype=cfg.dtype), which would otherwise
+    # downcast the threshold and silently undo the guard
+    assert loaded.W_enc.dtype == torch.bfloat16
+    assert loaded.threshold.dtype == torch.float32
