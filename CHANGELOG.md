@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v6.49.2 (2026-08-30)
+
+### Fix
+
+* fix: treat a BOS token id of 0 as set when concatenation is disabled (#724) ([`48c0ea9`](https://github.com/decoderesearch/SAELens/commit/48c0ea92aac5b3684d2c4cafd8b8dc3c19c9349a))
+
+* fix: skip transcoder parameter dtype (#725) ([`78f3db8`](https://github.com/decoderesearch/SAELens/commit/78f3db823428bc84e44ac41cada6777f44057436))
+
+* fix: validate Matryoshka level widths (#727) ([`a172b30`](https://github.com/decoderesearch/SAELens/commit/a172b305d539ae49c9c4155ca63d7347a3ebc353))
+
+* fix: fix checkpoint id generation for wandb (#726) ([`a80363d`](https://github.com/decoderesearch/SAELens/commit/a80363d96b53078e662dca373829c61422fff9a0))
+
 ## v6.49.1 (2026-08-10)
 
 ### Documentation
