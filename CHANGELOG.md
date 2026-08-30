@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.50.0 (2026-08-30)
+
+### Feature
+
+* feat: add jumprelu_ste_to_input, and keep the JumpReLU threshold in float32 (#728) ([`c6e1788`](https://github.com/decoderesearch/SAELens/commit/c6e17882f00cc66ca10375c1efdd44d230db3b74))
+
 ## v6.49.2 (2026-08-30)
 
 ### Fix
