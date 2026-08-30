@@ -624,3 +624,49 @@ def test_JumpReLUTrainingSAE_keeps_threshold_in_float32_across_a_disk_roundtrip(
     # downcast the threshold and silently undo the guard
     assert loaded.W_enc.dtype == torch.bfloat16
     assert loaded.threshold.dtype == torch.float32
+
+
+def test_JumpReLUTrainingSAE_ste_to_input_routes_the_step_l0_loss_to_the_encoder():
+    x = torch.ones(1, 2)
+
+    def encoder_grad(ste_to_input: bool) -> torch.Tensor:
+        sae = JumpReLUTrainingSAE(
+            build_jumprelu_sae_training_cfg(
+                d_in=2,
+                d_sae=2,
+                jumprelu_sparsity_loss_mode="step",
+                jumprelu_bandwidth=1.0,
+                jumprelu_init_threshold=1.0,
+                jumprelu_ste_to_input=ste_to_input,
+            )
+        )
+        # pre-activations of 0.8 are below the threshold of 1.0 but inside the
+        # estimator's window of (0.5, 1.5), so nothing fires and the L0 loss is
+        # the only term that can reach the encoder
+        sae.W_enc.data = 0.8 * torch.eye(2)
+        sae.b_enc.data = torch.zeros(2)
+        feature_acts, hidden_pre = sae.encode_with_hidden_pre(x)
+        assert (feature_acts == 0).all()
+
+        losses = sae.calculate_aux_loss(
+            step_input=TrainStepInput(
+                sae_in=x,
+                coefficients={"l0": 1.0},
+                dead_neuron_mask=None,
+                n_training_steps=0,
+                is_logging_step=False,
+            ),
+            feature_acts=feature_acts,
+            hidden_pre=hidden_pre,
+            sae_out=torch.zeros_like(x),
+        )
+        losses["l0_loss"].backward()  # type: ignore[union-attr]
+        return sae.W_enc.grad
+
+    # estimator value is 1 / bandwidth = 1.0, and x is all ones
+    on_grad = encoder_grad(ste_to_input=True)
+    assert on_grad is not None
+    assert_close(on_grad, torch.ones(2, 2), atol=1e-6)
+    # Step returns no input gradient at all when the flag is off, so the L0 loss
+    # never reaches the encoder and autograd leaves .grad unset
+    assert encoder_grad(ste_to_input=False) is None
