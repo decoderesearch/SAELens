@@ -629,7 +629,7 @@ def test_JumpReLUTrainingSAE_keeps_threshold_in_float32_across_a_disk_roundtrip(
 def test_JumpReLUTrainingSAE_ste_to_input_routes_the_step_l0_loss_to_the_encoder():
     x = torch.ones(1, 2)
 
-    def encoder_grad(ste_to_input: bool) -> torch.Tensor:
+    def encoder_grad(ste_to_input: bool) -> torch.Tensor | None:
         sae = JumpReLUTrainingSAE(
             build_jumprelu_sae_training_cfg(
                 d_in=2,
