@@ -65,6 +65,9 @@ class LanguageModelSAERunnerConfigDict(TypedDict, total=False):
     hook_name: str
     hook_head_index: int | None
     dataset_path: str
+    eval_dataset_path: str | None
+    eval_dataset_split: str
+    eval_dataset_trust_remote_code: bool
     dataset_trust_remote_code: bool
     streaming: bool
     is_dataset_tokenized: bool
@@ -173,6 +176,9 @@ def _get_default_runner_config() -> LanguageModelSAERunnerConfigDict:
         "hook_name": "blocks.0.hook_mlp_out",
         "hook_head_index": None,
         "dataset_path": NEEL_NANDA_C4_10K_DATASET,
+        "eval_dataset_path": None,
+        "eval_dataset_split": "train",
+        "eval_dataset_trust_remote_code": False,
         "streaming": False,
         "dataset_trust_remote_code": True,
         "is_dataset_tokenized": False,

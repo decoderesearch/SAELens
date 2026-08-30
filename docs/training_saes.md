@@ -489,6 +489,32 @@ For any real training run, you should be logging to Weights and Biases (WandB). 
 
 A number of helpful metrics are logged to WandB, including the sparsity of the SAE, the mean squared error (MSE) of the SAE, dead features, and explained variance. These metrics can be used to monitor the training progress and adjust the training parameters. Below is a screenshot from one training run.
 
+### Held-out evaluation during training
+
+By default, periodic evaluations use the training activation store. To evaluate
+on independent data without consuming or resetting the training stream, set
+`eval_dataset_path`. Use `eval_dataset_split` when the Hugging Face dataset has
+a dedicated validation or test split:
+
+```python
+cfg = LanguageModelSAERunnerConfig(
+    # ... model, hook, SAE, and training options ...
+    dataset_path="your-org/training-data",
+    eval_dataset_path="your-org/training-data",
+    eval_dataset_split="validation",
+)
+```
+
+The runner creates a separate activation store for held-out evaluation and logs
+its reconstruction, sparsity, variance, and model-performance metrics under the
+`held_out/` prefix. It uses the existing `eval_every_n_wandb_logs` cadence.
+Held-out evaluation always generates activations from the evaluation dataset;
+it does not reuse the training activation cache.
+
+Remote dataset code is disabled for held-out evaluation by default. Set
+`eval_dataset_trust_remote_code=True` only when the evaluation dataset requires
+custom loading code and you trust its publisher.
+
 ![screenshot](dashboard_screenshot.png)
 
 ## Best practices for real SAEs

@@ -60,6 +60,7 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
     """
 
     data_provider: DataProvider
+    eval_data_provider: DataProvider
     activation_scaler: ActivationScaler
     evaluator: Evaluator[T_TRAINING_SAE] | None
     coefficient_schedulers: dict[str, CoefficientScheduler]
@@ -71,9 +72,13 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
         data_provider: DataProvider,
         evaluator: Evaluator[T_TRAINING_SAE] | None = None,
         save_checkpoint_fn: SaveCheckpointFn | None = None,
+        eval_data_provider: DataProvider | None = None,
     ) -> None:
         self.sae = sae
         self.data_provider = data_provider
+        self.eval_data_provider = (
+            data_provider if eval_data_provider is None else eval_data_provider
+        )
         self.evaluator = evaluator
         self.activation_scaler = ActivationScaler()
         self.save_checkpoint_fn = save_checkpoint_fn
@@ -448,7 +453,9 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
         ) == 0:
             self.sae.eval()
             eval_metrics = (
-                self.evaluator(self.sae, self.data_provider, self.activation_scaler)
+                self.evaluator(
+                    self.sae, self.eval_data_provider, self.activation_scaler
+                )
                 if self.evaluator is not None
                 else {}
             )
