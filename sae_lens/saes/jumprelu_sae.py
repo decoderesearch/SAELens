@@ -26,29 +26,34 @@ class Step(torch.autograd.Function):
         x: torch.Tensor,
         threshold: torch.Tensor,
         bandwidth: float,  # noqa: ARG004
+        ste_to_input: bool,  # noqa: ARG004
     ) -> torch.Tensor:
         return (x > threshold).to(x)
 
     @staticmethod
     def setup_context(
-        ctx: Any, inputs: tuple[torch.Tensor, torch.Tensor, float], output: torch.Tensor
+        ctx: Any,
+        inputs: tuple[torch.Tensor, torch.Tensor, float, bool],
+        output: torch.Tensor,
     ) -> None:
-        x, threshold, bandwidth = inputs
+        x, threshold, bandwidth, ste_to_input = inputs
         del output
         ctx.save_for_backward(x, threshold)
         ctx.bandwidth = bandwidth
+        ctx.ste_to_input = ste_to_input
 
     @staticmethod
     def backward(  # type: ignore[override]
         ctx: Any, grad_output: torch.Tensor
-    ) -> tuple[None, torch.Tensor, None]:
+    ) -> tuple[torch.Tensor | None, torch.Tensor, None, None]:
         x, threshold = ctx.saved_tensors
         bandwidth = ctx.bandwidth
-        threshold_grad = torch.sum(
-            -(1.0 / bandwidth) * rectangle((x - threshold) / bandwidth) * grad_output,
-            dim=0,
-        )
-        return None, threshold_grad, None
+        ste = (1.0 / bandwidth) * rectangle((x - threshold) / bandwidth) * grad_output
+        threshold_grad = torch.sum(-ste, dim=0)
+        # the step function depends on x only through (x - threshold), so the
+        # estimator's gradient wrt x is the negation of its gradient wrt threshold
+        x_grad = ste if ctx.ste_to_input else None
+        return x_grad, threshold_grad, None, None
 
 
 class JumpReLU(torch.autograd.Function):
@@ -57,32 +62,38 @@ class JumpReLU(torch.autograd.Function):
         x: torch.Tensor,
         threshold: torch.Tensor,
         bandwidth: float,  # noqa: ARG004
+        ste_to_input: bool,  # noqa: ARG004
     ) -> torch.Tensor:
         return (x * (x > threshold)).to(x)
 
     @staticmethod
     def setup_context(
-        ctx: Any, inputs: tuple[torch.Tensor, torch.Tensor, float], output: torch.Tensor
+        ctx: Any,
+        inputs: tuple[torch.Tensor, torch.Tensor, float, bool],
+        output: torch.Tensor,
     ) -> None:
-        x, threshold, bandwidth = inputs
+        x, threshold, bandwidth, ste_to_input = inputs
         del output
         ctx.save_for_backward(x, threshold)
         ctx.bandwidth = bandwidth
+        ctx.ste_to_input = ste_to_input
 
     @staticmethod
     def backward(  # type: ignore[override]
         ctx: Any, grad_output: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, None]:
+    ) -> tuple[torch.Tensor, torch.Tensor, None, None]:
         x, threshold = ctx.saved_tensors
         bandwidth = ctx.bandwidth
-        x_grad = (x > threshold) * grad_output  # We don't apply STE to x input
-        threshold_grad = torch.sum(
-            -(threshold / bandwidth)
+        ste = (
+            (threshold / bandwidth)
             * rectangle((x - threshold) / bandwidth)
-            * grad_output,
-            dim=0,
+            * grad_output
         )
-        return x_grad, threshold_grad, None
+        threshold_grad = torch.sum(-ste, dim=0)
+        x_grad = (x > threshold) * grad_output
+        if ctx.ste_to_input:
+            x_grad = x_grad + ste
+        return x_grad, threshold_grad, None, None
 
 
 @dataclass
@@ -192,6 +203,7 @@ class JumpReLUTrainingSAEConfig(TrainingSAEConfig):
         l0_warm_up_steps: number of warm-up steps for the l0 sparsity loss
         pre_act_loss_coefficient: coefficient for the pre-activation loss. Set to None to disable. Set to 3e-6 to match Anthropic's setup.
         jumprelu_tanh_scale: scale for the tanh sparsity loss. Only relevant for "tanh" sparsity loss mode.
+        jumprelu_ste_to_input: whether the straight-through estimator also passes gradient to the pre-activations, and so to the encoder, rather than to the threshold alone. False matches DeepMind's JumpReLU, True matches Anthropic's setup.
     """
 
     jumprelu_init_threshold: float = 0.01
@@ -206,6 +218,9 @@ class JumpReLUTrainingSAEConfig(TrainingSAEConfig):
 
     # only relevant for tanh sparsity loss mode
     jumprelu_tanh_scale: float = 4.0
+
+    # Anthropic passes the STE gradient to all model params, DeepMind only to the threshold
+    jumprelu_ste_to_input: bool = False
 
     @override
     @classmethod
@@ -245,11 +260,13 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
         # We'll store a bandwidth for the training approach, if needed
         self.bandwidth = cfg.jumprelu_bandwidth
 
+        # Kept in float32 whatever the SAE dtype, since Adam's ~lr sized steps on an
+        # O(1) threshold round away in bfloat16; cast to the compute dtype at use.
         self.threshold = nn.Parameter(
             torch.full(
                 (self.cfg.d_sae,),
                 cfg.jumprelu_init_threshold,
-                dtype=self.dtype,
+                dtype=torch.float32,
                 device=self.device,
             )
         )
@@ -264,6 +281,16 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
         self.b_enc = nn.Parameter(
             torch.zeros(self.cfg.d_sae, dtype=self.dtype, device=self.device)
         )
+
+    @override
+    def _apply(self, *args: Any, **kwargs: Any) -> "JumpReLUTrainingSAE":
+        out = super()._apply(*args, **kwargs)
+        # nn.Module.to() casts every float parameter, and the load paths call it
+        # with cfg.dtype, so restore the threshold invariant from __init__.
+        threshold = self._parameters.get("threshold")
+        if threshold is not None and threshold.dtype != torch.float32:
+            threshold.data = threshold.data.float()
+        return out
 
     @override
     def training_forward_pass(self, step_input: TrainStepInput) -> TrainStepOutput:
@@ -283,7 +310,12 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
 
         hidden_pre = self.hook_sae_acts_pre(sae_in @ self.W_enc + self.b_enc)
         feature_acts = self.hook_sae_acts_post(
-            JumpReLU.apply(hidden_pre, self.threshold, self.bandwidth)
+            JumpReLU.apply(
+                hidden_pre,
+                self.threshold.to(hidden_pre.dtype),
+                self.bandwidth,
+                self.cfg.jumprelu_ste_to_input,
+            )
         )
 
         return feature_acts, hidden_pre  # type: ignore
@@ -298,11 +330,16 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
     ) -> dict[str, torch.Tensor]:
         """Calculate architecture-specific auxiliary loss terms."""
 
-        threshold = self.threshold
+        threshold = self.threshold.to(hidden_pre.dtype)
         W_dec_norm = self.W_dec.norm(dim=1)
         if self.cfg.jumprelu_sparsity_loss_mode == "step":
             l0 = torch.sum(
-                Step.apply(hidden_pre, threshold, self.bandwidth),  # type: ignore
+                Step.apply(  # type: ignore
+                    hidden_pre,
+                    threshold,
+                    self.bandwidth,
+                    self.cfg.jumprelu_ste_to_input,
+                ),
                 dim=-1,
             )
             l0_loss = (step_input.coefficients["l0"] * l0).mean()

@@ -13,7 +13,7 @@ from sae_lens.saes.jumprelu_sae import (
     JumpReLUTrainingSAE,
     calculate_pre_act_loss,
 )
-from sae_lens.saes.sae import SAE, TrainStepInput
+from sae_lens.saes.sae import SAE, TrainingSAE, TrainStepInput
 from tests.helpers import (
     assert_close,
     assert_not_close,
@@ -40,7 +40,7 @@ def test_JumpReLUTrainingSAE_encoding():
     sae_in = sae.process_sae_in(x)
     expected_hidden_pre = sae_in @ sae.W_enc + sae.b_enc
     expected_feature_acts = JumpReLU.apply(
-        expected_hidden_pre, sae.threshold, sae.bandwidth
+        expected_hidden_pre, sae.threshold, sae.bandwidth, False
     )
 
     assert_close(feature_acts, expected_feature_acts, atol=1e-6)  # type: ignore
@@ -521,3 +521,152 @@ def test_JumpReLUTrainingSAE_errors_on_invalid_sparsity_loss_mode():
                 is_logging_step=False,
             ),
         )
+
+
+@pytest.mark.parametrize("ste_to_input", [True, False])
+def test_JumpReLU_ste_to_input_matches_the_analytic_gradient(ste_to_input: bool):
+    bandwidth = 0.5
+    threshold = torch.full((4,), 1.0, requires_grad=True)
+    # one pre-activation per case: below the window, inside it, above the threshold
+    x = torch.tensor([[0.0, 0.9, 1.05, 3.0]], requires_grad=True)
+
+    out = JumpReLU.apply(x, threshold, bandwidth, ste_to_input)
+    out.sum().backward()  # type: ignore
+    assert x.grad is not None and threshold.grad is not None
+
+    in_window = ((x - threshold).abs() < bandwidth / 2).float()
+    ste = threshold / bandwidth * in_window
+    expected_x_grad = (x > threshold).float() + (ste if ste_to_input else 0.0)
+
+    assert_close(x.grad, expected_x_grad, atol=1e-6)
+    # the threshold gradient is unaffected by where the estimator is routed
+    assert_close(threshold.grad, -ste.squeeze(0), atol=1e-6)
+
+
+def test_JumpReLUTrainingSAE_ste_to_input_reaches_the_encoder_for_gated_off_latents():
+    x = torch.ones(1, 2)
+
+    def encoder_grad(ste_to_input: bool) -> torch.Tensor:
+        sae = JumpReLUTrainingSAE(
+            build_jumprelu_sae_training_cfg(
+                d_in=2,
+                d_sae=2,
+                jumprelu_bandwidth=1.0,
+                jumprelu_init_threshold=1.0,
+                jumprelu_ste_to_input=ste_to_input,
+            )
+        )
+        # pre-activations of 0.8 sit below the threshold of 1.0 but inside the
+        # estimator's window of (0.5, 1.5), so nothing fires and any encoder
+        # gradient can only have arrived through the estimator
+        sae.W_enc.data = 0.8 * torch.eye(2)
+        sae.b_enc.data = torch.zeros(2)
+        feature_acts, _ = sae.encode_with_hidden_pre(x)
+        assert (feature_acts == 0).all()
+        feature_acts.sum().backward()
+        assert sae.W_enc.grad is not None
+        return sae.W_enc.grad
+
+    # estimator value is threshold / bandwidth = 1.0, and x is all ones
+    assert_close(encoder_grad(ste_to_input=True), torch.ones(2, 2), atol=1e-6)
+    assert_close(encoder_grad(ste_to_input=False), torch.zeros(2, 2), atol=1e-6)
+
+
+def test_JumpReLUTrainingSAE_keeps_threshold_in_float32_for_bfloat16_saes():
+    lr, steps, init = 1e-3, 100, 1.1
+    sae = JumpReLUTrainingSAE(
+        build_jumprelu_sae_training_cfg(
+            d_in=16,
+            d_sae=32,
+            dtype="bfloat16",
+            jumprelu_init_threshold=init,
+            jumprelu_bandwidth=2.0,
+            l0_coefficient=1.0,
+        )
+    )
+    assert sae.W_enc.dtype == torch.bfloat16
+    assert sae.threshold.dtype == torch.float32
+
+    optimizer = torch.optim.Adam(sae.parameters(), lr=lr)
+    for _ in range(steps):
+        output = sae.training_forward_pass(
+            step_input=TrainStepInput(
+                sae_in=torch.randn(64, sae.cfg.d_in, dtype=torch.bfloat16),
+                coefficients={"l0": 1.0},
+                dead_neuron_mask=None,
+                n_training_steps=0,
+                is_logging_step=False,
+            )
+        )
+        # the threshold is cast at the use site, so the big tensors stay bfloat16
+        assert output.feature_acts.dtype == torch.bfloat16
+        optimizer.zero_grad()
+        output.loss.backward()
+        optimizer.step()
+
+    # bfloat16 resolves ~0.004 at 1.1, so a bfloat16 threshold would round away
+    # most of the lr-sized steps and barely move
+    moved = abs(sae.threshold.detach().float().mean().item() - init)
+    assert moved > 20 * lr
+
+
+def test_JumpReLUTrainingSAE_keeps_threshold_in_float32_across_a_disk_roundtrip(
+    tmp_path: Path,
+) -> None:
+    sae = JumpReLUTrainingSAE(
+        build_jumprelu_sae_training_cfg(dtype="bfloat16", jumprelu_init_threshold=1.1)
+    )
+    sae.save_model(str(tmp_path))
+
+    loaded = TrainingSAE.load_from_disk(tmp_path, device="cpu")
+
+    # load_from_disk ends in sae.to(dtype=cfg.dtype), which would otherwise
+    # downcast the threshold and silently undo the guard
+    assert loaded.W_enc.dtype == torch.bfloat16
+    assert loaded.threshold.dtype == torch.float32
+
+
+def test_JumpReLUTrainingSAE_ste_to_input_routes_the_step_l0_loss_to_the_encoder():
+    x = torch.ones(1, 2)
+
+    def encoder_grad(ste_to_input: bool) -> torch.Tensor | None:
+        sae = JumpReLUTrainingSAE(
+            build_jumprelu_sae_training_cfg(
+                d_in=2,
+                d_sae=2,
+                jumprelu_sparsity_loss_mode="step",
+                jumprelu_bandwidth=1.0,
+                jumprelu_init_threshold=1.0,
+                jumprelu_ste_to_input=ste_to_input,
+            )
+        )
+        # pre-activations of 0.8 are below the threshold of 1.0 but inside the
+        # estimator's window of (0.5, 1.5), so nothing fires and the L0 loss is
+        # the only term that can reach the encoder
+        sae.W_enc.data = 0.8 * torch.eye(2)
+        sae.b_enc.data = torch.zeros(2)
+        feature_acts, hidden_pre = sae.encode_with_hidden_pre(x)
+        assert (feature_acts == 0).all()
+
+        losses = sae.calculate_aux_loss(
+            step_input=TrainStepInput(
+                sae_in=x,
+                coefficients={"l0": 1.0},
+                dead_neuron_mask=None,
+                n_training_steps=0,
+                is_logging_step=False,
+            ),
+            feature_acts=feature_acts,
+            hidden_pre=hidden_pre,
+            sae_out=torch.zeros_like(x),
+        )
+        losses["l0_loss"].backward()  # type: ignore[union-attr]
+        return sae.W_enc.grad
+
+    # estimator value is 1 / bandwidth = 1.0, and x is all ones
+    on_grad = encoder_grad(ste_to_input=True)
+    assert on_grad is not None
+    assert_close(on_grad, torch.ones(2, 2), atol=1e-6)
+    # Step returns no input gradient at all when the flag is off, so the L0 loss
+    # never reaches the encoder and autograd leaves .grad unset
+    assert encoder_grad(ste_to_input=False) is None
