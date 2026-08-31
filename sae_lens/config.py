@@ -667,7 +667,7 @@ def _validate_seqpos(seqpos: tuple[int | None, ...], context_size: int) -> None:
     # Ensure that the step-size is larger or equal to 1
     if len(seqpos) == 3:
         step_size = seqpos[2] or 1
-        if step_size <= 1:
+        if step_size < 1:
             raise ValueError(
                 f"Ensure the step_size={seqpos[2]} for sequence slicing is at least 1."
             )
