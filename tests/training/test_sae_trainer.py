@@ -732,7 +732,7 @@ def _build_trainer_for_checkpointing(
     )
     return SAETrainer(
         cfg=cfg.to_sae_trainer_config(),
-        sae=TrainingSAE.from_dict(cfg.get_training_sae_cfg_dict()),
+        sae=StandardTrainingSAE.from_dict(cfg.get_training_sae_cfg_dict()),
         data_provider=activation_store,
     )
 
