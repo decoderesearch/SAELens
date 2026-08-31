@@ -314,7 +314,9 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
     def load_trainer_state(self, checkpoint_path: Path | str) -> None:
         checkpoint_path = Path(checkpoint_path)
         self.activation_scaler.load(checkpoint_path / ACTIVATION_SCALER_CFG_FILENAME)
-        state_dict = torch.load(checkpoint_path / TRAINER_STATE_FILENAME)
+        state_dict = torch.load(
+            checkpoint_path / TRAINER_STATE_FILENAME, map_location=self.cfg.device
+        )
         self.optimizer.load_state_dict(state_dict["optimizer"])
         self.lr_scheduler.load_state_dict(state_dict["lr_scheduler"])
         self.n_training_samples = state_dict["n_training_samples"]
