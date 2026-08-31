@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from typing import Any, Callable
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -718,6 +719,63 @@ def test_SAETrainer_save_and_load_from_checkpoint(
             assert torch.allclose(old_state[key], new_state[key])
         else:
             assert old_state[key] == new_state[key]
+
+
+def _build_trainer_for_checkpointing(
+    ts_model: HookedTransformer, checkpoint_dir: Path
+) -> SAETrainer[StandardTrainingSAE, StandardTrainingSAEConfig]:
+    cfg = build_runner_cfg(checkpoint_path=str(checkpoint_dir), context_size=8)
+    activation_store = ActivationsStore.from_config(
+        ts_model,
+        cfg,
+        override_dataset=Dataset.from_list([{"text": "hello world"}] * 100),
+    )
+    return SAETrainer(
+        cfg=cfg.to_sae_trainer_config(),
+        sae=StandardTrainingSAE.from_dict(cfg.get_training_sae_cfg_dict()),
+        data_provider=activation_store,
+    )
+
+
+def test_load_trainer_state_reads_the_checkpoint_onto_the_configured_device(
+    ts_model: HookedTransformer,
+    tmp_path: Path,
+) -> None:
+    checkpoint_dir = tmp_path / "checkpoints"
+    trainer = _build_trainer_for_checkpointing(ts_model, checkpoint_dir)
+    trainer.save_trainer_state(checkpoint_dir)
+
+    new_trainer = _build_trainer_for_checkpointing(ts_model, checkpoint_dir)
+    with patch.object(torch, "load", wraps=torch.load) as load_spy:
+        new_trainer.load_trainer_state(checkpoint_dir)
+
+    assert load_spy.call_args is not None
+    assert load_spy.call_args.kwargs.get("map_location") == new_trainer.cfg.device
+
+
+@pytest.mark.skipif(
+    not (torch.cuda.is_available() or torch.backends.mps.is_available()),
+    reason="Needs a second device to write the checkpoint from.",
+)
+def test_load_trainer_state_moves_an_accelerator_checkpoint_onto_cpu(
+    ts_model: HookedTransformer,
+    tmp_path: Path,
+) -> None:
+    accelerator = "cuda:0" if torch.cuda.is_available() else "mps"
+    checkpoint_dir = tmp_path / "checkpoints"
+
+    trainer = _build_trainer_for_checkpointing(ts_model, checkpoint_dir)
+    trainer.act_freq_scores = torch.tensor([1.0, 2.0, 3.0], device=accelerator)
+    trainer.n_forward_passes_since_fired = torch.tensor(
+        [1.0, 2.0, 3.0], device=accelerator
+    )
+    trainer.save_trainer_state(checkpoint_dir)
+
+    new_trainer = _build_trainer_for_checkpointing(ts_model, checkpoint_dir)
+    new_trainer.load_trainer_state(checkpoint_dir)
+
+    assert new_trainer.act_freq_scores.device.type == "cpu"
+    assert new_trainer.n_forward_passes_since_fired.device.type == "cpu"
 
 
 def test_sae_trainer_fit_logs_train_eval_and_sparsity_metrics_to_wandb(
