@@ -198,18 +198,19 @@ class JumpReLUTrainingSAEConfig(TrainingSAEConfig):
     Args:
         jumprelu_init_threshold: initial threshold for the JumpReLU activation
         jumprelu_bandwidth: bandwidth for the JumpReLU activation
-        jumprelu_sparsity_loss_mode: mode for the sparsity loss, either "step" or "tanh". "step" is Google Deepmind's L0 loss, "tanh" is Anthropic's sparsity loss.
+        jumprelu_sparsity_loss_mode: mode for the sparsity loss, either "step" or "tanh" or "quadratic". "step" is Google Deepmind's L0 loss, "tanh" is Anthropic's sparsity loss, "quadratic" is Google Deepmind (GemmaScope2).
         l0_coefficient: coefficient for the l0 sparsity loss
         l0_warm_up_steps: number of warm-up steps for the l0 sparsity loss
         pre_act_loss_coefficient: coefficient for the pre-activation loss. Set to None to disable. Set to 3e-6 to match Anthropic's setup.
         jumprelu_tanh_scale: scale for the tanh sparsity loss. Only relevant for "tanh" sparsity loss mode.
         jumprelu_ste_to_input: whether the straight-through estimator also passes gradient to the pre-activations, and so to the encoder, rather than to the threshold alone. False matches DeepMind's JumpReLU, True matches Anthropic's setup.
+        target_l0: sparsity target value, relevant only for the quadratic sparsity loss mode
     """
 
     jumprelu_init_threshold: float = 0.01
     jumprelu_bandwidth: float = 0.05
-    # step is Google Deepmind, tanh is Anthropic
-    jumprelu_sparsity_loss_mode: Literal["step", "tanh"] = "step"
+    # step is Google Deepmind, tanh is Anthropic, quadratic is Google Deepmind (GemmaScope2)
+    jumprelu_sparsity_loss_mode: Literal["step", "tanh", "quadratic"] = "step"
     l0_coefficient: float = 1.0
     l0_warm_up_steps: int = 0
 
@@ -221,6 +222,9 @@ class JumpReLUTrainingSAEConfig(TrainingSAEConfig):
 
     # Anthropic passes the STE gradient to all model params, DeepMind only to the threshold
     jumprelu_ste_to_input: bool = False
+
+    # only relevant for quadratic sparsity loss mode
+    target_l0: int = 30
 
     @override
     @classmethod
@@ -348,6 +352,19 @@ class JumpReLUTrainingSAE(TrainingSAE[JumpReLUTrainingSAEConfig]):
                 self.cfg.jumprelu_tanh_scale * feature_acts * W_dec_norm
             ).sum(dim=-1)
             l0_loss = (step_input.coefficients["l0"] * per_item_l0_loss).mean()
+        elif self.cfg.jumprelu_sparsity_loss_mode == "quadratic":
+            l0 = torch.sum(
+                Step.apply(
+                    hidden_pre,
+                    threshold,
+                    self.bandwidth,
+                    self.cfg.jumprelu_ste_to_input,
+                ),
+                dim=-1,
+            )
+            target_l0 = self.cfg.target_l0
+            quadratic_l0 = 2 / target_l0 * (l0 - target_l0) ** 2
+            l0_loss = (step_input.coefficients["l0"] * quadratic_l0).mean()
         else:
             raise ValueError(
                 f"Invalid sparsity loss mode: {self.cfg.jumprelu_sparsity_loss_mode}"
