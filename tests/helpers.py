@@ -1,5 +1,5 @@
 import copy
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any, Literal, TypedDict, cast
 
 import pytest
@@ -717,6 +717,18 @@ def assert_not_close(
             check_stride=check_stride,
             msg=msg,
         )
+
+
+def correlated_activations(d_in: int, batch_size: int) -> Iterator[torch.Tensor]:
+    """
+    Yield batches from a fixed anisotropic, shifted Gaussian. The covariance has
+    eigenvalues in [0.25, 4], so whitening it is well conditioned.
+    """
+    rotation, _ = torch.linalg.qr(torch.randn(d_in, d_in))
+    transform = rotation * (torch.rand(d_in) * 1.5 + 0.5)
+    shift = torch.randn(d_in) * 3.0
+    while True:
+        yield torch.randn(batch_size, d_in) @ transform.T + shift
 
 
 def random_params(model: torch.nn.Module) -> None:

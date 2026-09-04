@@ -470,6 +470,47 @@ def test_estimated_norm_scaling_factor_persistence(
     assert final_checkpoint.get("scaling_factor") is None
 
 
+def test_SAETrainer_fit_with_covariance_whitening_folds_whitening_into_the_sae(
+    ts_model: HookedTransformer,
+    tmp_path: Path,
+):
+    checkpoint_dir = tmp_path / "checkpoints"
+    cfg = build_runner_cfg(
+        checkpoint_path=str(checkpoint_dir),
+        training_tokens=100,
+        context_size=8,
+        normalize_activations="covariance_whitening",
+        n_checkpoints=2,
+        save_final_checkpoint=True,
+    )
+    dataset = Dataset.from_list([{"text": "hello world"}] * 100)
+    activation_store = ActivationsStore.from_config(
+        ts_model, cfg, override_dataset=dataset
+    )
+    sae = StandardTrainingSAE.from_dict(cfg.get_training_sae_cfg_dict())
+    runner = LanguageModelSAETrainingRunner(
+        cfg, override_model=ts_model, override_sae=sae
+    )
+    runner.activations_store = activation_store
+    trainer = SAETrainer(
+        sae=sae,
+        data_provider=activation_store,
+        cfg=cfg.to_sae_trainer_config(),
+        save_checkpoint_fn=runner.save_checkpoint,
+    )
+
+    trainer.fit()
+
+    # intermediate checkpoints carry the whitening, the final one has it folded in
+    whitening_paths = sorted(checkpoint_dir.glob("**/activation_whitening.safetensors"))
+    assert len(whitening_paths) == 2
+    assert all("final" not in path.parent.name for path in whitening_paths)
+    assert trainer.activation_scaler.whitening is None
+    assert sae.cfg.normalize_activations == "none"
+    with open(next(checkpoint_dir.glob("final_*/cfg.json"))) as f:
+        assert json.load(f)["normalize_activations"] == "none"
+
+
 def test_sae_trainer_saves_final_checkpoint_when_enabled(
     ts_model: HookedTransformer,
     tmp_path: Path,
