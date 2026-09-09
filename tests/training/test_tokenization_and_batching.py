@@ -13,7 +13,7 @@ from sae_lens.tokenization_and_batching import (
 
 def test_add_tokens_to_batch_can_start_a_new_batch():
     tokens = torch.arange(10)
-    new_batch, new_offset = _add_tokens_to_batch(
+    new_batch, new_offset, _ = _add_tokens_to_batch(
         batch=None, tokens=tokens, offset=1, context_size=5, is_start_of_sequence=True
     )
     assert torch.all(new_batch == tokens[1:6])
@@ -22,7 +22,7 @@ def test_add_tokens_to_batch_can_start_a_new_batch():
 
 def test_add_tokens_to_batch_adds_bos_if_new_batch():
     tokens = torch.arange(10)
-    new_batch, new_offset = _add_tokens_to_batch(
+    new_batch, new_offset, _ = _add_tokens_to_batch(
         batch=None,
         tokens=tokens,
         offset=0,
@@ -38,7 +38,7 @@ def test_add_tokens_to_batch_adds_bos_if_new_batch():
 
 def test_add_tokens_respects_token_offset_when_adding_bos_if_new_batch():
     tokens = torch.arange(10)
-    new_batch, new_offset = _add_tokens_to_batch(
+    new_batch, new_offset, _ = _add_tokens_to_batch(
         batch=None,
         tokens=tokens,
         offset=2,
@@ -53,7 +53,7 @@ def test_add_tokens_respects_token_offset_when_adding_bos_if_new_batch():
 
 def test_add_tokens_to_batch_does_not_adds_bos_if_the_bos_is_already_there():
     tokens = torch.tensor([999, 1, 2, 3])
-    new_batch, new_offset = _add_tokens_to_batch(
+    new_batch, new_offset, _ = _add_tokens_to_batch(
         batch=None,
         tokens=tokens,
         offset=0,
@@ -68,7 +68,7 @@ def test_add_tokens_to_batch_does_not_adds_bos_if_the_bos_is_already_there():
 
 def test_add_tokens_to_batch_uses_all_tokens_if_less_than_context_size():
     tokens = torch.arange(3)
-    new_batch, new_offset = _add_tokens_to_batch(
+    new_batch, new_offset, _ = _add_tokens_to_batch(
         batch=None,
         tokens=tokens,
         offset=0,
@@ -82,7 +82,7 @@ def test_add_tokens_to_batch_uses_all_tokens_if_less_than_context_size():
 
 def test_add_tokens_to_batch_can_append_both_the_bos_and_start_of_sequence_token():
     tokens = torch.arange(10)
-    new_batch, new_offset = _add_tokens_to_batch(
+    new_batch, new_offset, _ = _add_tokens_to_batch(
         batch=None,
         tokens=tokens,
         offset=0,
@@ -99,7 +99,7 @@ def test_add_tokens_to_batch_can_append_both_the_bos_and_start_of_sequence_token
 def test_add_tokens_to_batch_appends_to_the_existing_batch():
     batch = torch.arange(4)
     tokens = torch.arange(10)
-    new_batch, new_offset = _add_tokens_to_batch(
+    new_batch, new_offset, _ = _add_tokens_to_batch(
         batch=batch,
         tokens=tokens,
         offset=0,
@@ -114,7 +114,7 @@ def test_add_tokens_to_batch_appends_to_the_existing_batch():
 def test_add_tokens_to_batch_can_separate_sequences():
     batch = torch.arange(3)
     tokens = torch.arange(10)
-    new_batch, new_offset = _add_tokens_to_batch(
+    new_batch, new_offset, _ = _add_tokens_to_batch(
         batch=batch,
         tokens=tokens,
         offset=0,
@@ -131,7 +131,7 @@ def test_add_tokens_to_batch_can_separate_sequences():
 def test_add_tokens_to_batch_can_both_separate_sequences_and_add_seq_start_token():
     batch = torch.arange(2)
     tokens = torch.arange(10)
-    new_batch, new_offset = _add_tokens_to_batch(
+    new_batch, new_offset, _ = _add_tokens_to_batch(
         batch=batch,
         tokens=tokens,
         offset=0,
@@ -152,7 +152,7 @@ def test_add_tokens_to_batch_wont_return_more_remaining_tokens_than_the_original
 ):
     batch = torch.arange(4)
     tokens = torch.arange(10)
-    new_batch, new_offset = _add_tokens_to_batch(
+    new_batch, new_offset, _ = _add_tokens_to_batch(
         batch=batch,
         tokens=tokens,
         offset=offset,
@@ -169,7 +169,7 @@ def test_add_tokens_to_batch_wont_return_more_remaining_tokens_than_the_original
 def test_add_tokens_to_batch_collapses_separate_sequences_and_add_seq_start_token_if_identical():
     batch = torch.arange(2)
     tokens = torch.arange(10)
-    new_batch, new_offset = _add_tokens_to_batch(
+    new_batch, new_offset, _ = _add_tokens_to_batch(
         batch=batch,
         tokens=tokens,
         offset=0,
@@ -187,7 +187,7 @@ def test_add_tokens_to_batch_collapses_separate_sequences_and_add_seq_start_toke
 def test_add_tokens_to_batch_skips_add_seq_start_token_if_not_start_of_seq():
     batch = torch.arange(2)
     tokens = torch.arange(10)
-    new_batch, new_offset = _add_tokens_to_batch(
+    new_batch, new_offset, _ = _add_tokens_to_batch(
         batch=batch,
         tokens=tokens,
         offset=0,

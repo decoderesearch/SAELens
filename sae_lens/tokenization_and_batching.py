@@ -14,8 +14,9 @@ def _add_tokens_to_batch(
     begin_batch_token_id: int | None = None,
     begin_sequence_token_id: int | None = None,
     sequence_separator_token_id: int | None = None,
-) -> tuple[torch.Tensor, int]:
+) -> tuple[torch.Tensor, int, bool]:
     prefix_toks = []
+    sequence_start_pending = False
     first_token = tokens[offset]
     # prepend the start of sequence token if needed
     if is_start_of_sequence and begin_sequence_token_id is not None:
@@ -24,6 +25,7 @@ def _add_tokens_to_batch(
         )
         if first_token != begin_sequence_token_id_tensor:
             prefix_toks.insert(0, begin_sequence_token_id_tensor)
+            sequence_start_pending = True
             first_token = begin_sequence_token_id_tensor
     # We're at the start of a new batch
     if batch is None:
@@ -38,7 +40,11 @@ def _add_tokens_to_batch(
         tokens_needed = max(context_size - len(prefix_toks), 0)
         tokens_part = tokens[offset : offset + tokens_needed]
         batch = torch.cat([*prefix_toks[:context_size], tokens_part])
-        return batch, offset + tokens_needed
+        return (
+            batch,
+            offset + tokens_needed,
+            sequence_start_pending and len(prefix_toks) > context_size,
+        )
     # if we're concatting batches, add the separator token as needed
     if sequence_separator_token_id is not None:
         sequence_separator_token_id_tensor = torch.tensor(
@@ -56,7 +62,11 @@ def _add_tokens_to_batch(
             tokens[offset : offset + tokens_needed],
         ]
     )
-    return batch, offset + tokens_needed
+    return (
+        batch,
+        offset + tokens_needed,
+        sequence_start_pending and len(prefix_toks) > prefix_toks_needed,
+    )
 
 
 @torch.no_grad()
@@ -112,7 +122,7 @@ def concat_and_batch_sequences(
         total_toks = tokens.shape[0]
         is_start_of_sequence = True
         while total_toks - offset > 0:
-            batch, offset = _add_tokens_to_batch(
+            batch, offset, is_start_of_sequence = _add_tokens_to_batch(
                 batch=batch,
                 tokens=tokens,
                 offset=offset,
@@ -121,13 +131,6 @@ def concat_and_batch_sequences(
                 begin_batch_token_id=begin_batch_token_id,
                 begin_sequence_token_id=begin_sequence_token_id,
                 sequence_separator_token_id=sequence_separator_token_id,
-            )
-            # If only the separator fit, add the sequence-start token in the next batch.
-            is_start_of_sequence = (
-                is_start_of_sequence
-                and offset == 0
-                and begin_sequence_token_id is not None
-                and batch[-1].item() != begin_sequence_token_id
             )
             if batch.shape[0] == context_size:
                 yield batch
