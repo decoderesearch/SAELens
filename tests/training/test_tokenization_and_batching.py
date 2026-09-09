@@ -403,8 +403,8 @@ def test_concat_and_batch_sequences_can_use_all_token_types():
         [999, 998, 3, 4, 5],
         [999, 6, 7, 997, 998],
         [999, 8, 9, 10, 997],
-        [999, 11, 12, 13, 14],
-        [999, 15, 16, 997, 998],
+        [999, 998, 11, 12, 13],
+        [999, 14, 15, 16, 997],
     ]
     assert batches.tolist() == expected
 

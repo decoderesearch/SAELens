@@ -85,6 +85,8 @@ def concat_and_batch_sequences(
         if begin_batch_token_id is not None and begin_sequence_token_id is None:
             begin_sequence_token_id = begin_batch_token_id
         for sequence in tokens_iterator:
+            if len(sequence) == 0:
+                continue
             if (
                 begin_sequence_token_id is not None
                 and len(sequence) >= context_size - 1
@@ -120,7 +122,13 @@ def concat_and_batch_sequences(
                 begin_sequence_token_id=begin_sequence_token_id,
                 sequence_separator_token_id=sequence_separator_token_id,
             )
-            is_start_of_sequence = False
+            # If only the separator fit, add the sequence-start token in the next batch.
+            is_start_of_sequence = (
+                is_start_of_sequence
+                and offset == 0
+                and begin_sequence_token_id is not None
+                and batch[-1].item() != begin_sequence_token_id
+            )
             if batch.shape[0] == context_size:
                 yield batch
                 batch = None
