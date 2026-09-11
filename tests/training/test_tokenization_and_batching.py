@@ -409,6 +409,27 @@ def test_concat_and_batch_sequences_can_use_all_token_types():
     assert batches.tolist() == expected
 
 
+def test_concat_and_batch_sequences_keeps_sequence_start_when_separator_fills_last_slot():
+    # the first sequence leaves exactly one slot in the batch, which the separator
+    # takes. The next sequence must still start with the begin_sequence token in the
+    # following batch, so its 5 tokens form a complete chunk instead of being dropped.
+    seqs = [torch.tensor([10, 11, 12, 13]), torch.tensor([20, 21, 22, 23, 24])]
+    batches_list = list(
+        concat_and_batch_sequences(
+            tokens_iterator=iter(seqs),
+            context_size=6,
+            begin_sequence_token_id=1,
+            sequence_separator_token_id=2,
+        )
+    )
+    batches = torch.stack(batches_list)
+    expected = [
+        [1, 10, 11, 12, 13, 2],
+        [1, 20, 21, 22, 23, 24],
+    ]
+    assert batches.tolist() == expected
+
+
 def test_concat_and_batch_collapses_identical_special_tokens():
     all_toks = torch.arange(19)
     seqs = [all_toks[:3], all_toks[3:8], all_toks[8:11], all_toks[11:17], all_toks[17:]]
@@ -508,6 +529,20 @@ def test_concat_and_batch_sequences_handles_empty_sequences_with_begin_sequence_
         [999, 0, 1, 2, 3],
     ]
     assert batches.tolist() == expected
+
+
+def test_concat_and_batch_sequences_skips_empty_sequences_with_context_size_1_and_disable_concat():
+    seqs = [torch.tensor([], dtype=torch.long), torch.tensor([5])]
+    batches_list = list(
+        concat_and_batch_sequences(
+            tokens_iterator=iter(seqs),
+            context_size=1,
+            begin_sequence_token_id=999,
+            disable_concat_sequences=True,
+        )
+    )
+    batches = torch.stack(batches_list)
+    assert batches.tolist() == [[999]]
 
 
 def test_tokenize_with_chat_template_produces_correct_tokens():
