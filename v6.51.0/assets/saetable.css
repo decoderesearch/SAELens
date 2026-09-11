@@ -1,0 +1,115 @@
+.stdev {
+    font-size: 0.8em;
+    color: #888;
+}
+
+.saetable-loadSaeId {
+    display: inline-block;
+    margin-top: 10px;
+    cursor: pointer;
+}
+/* Modal styles */
+.saetable-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0 !important;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.saetable-modalContent {
+    background-color: white;
+    margin: 15% auto;
+    padding: 2px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 600px;
+    border-radius: 5px;
+    position: relative;
+}
+
+.saetable-close {
+    color: #aaa;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    position: absolute;
+    right: 15px;
+    top: 0;
+    z-index: 1001;
+}
+
+.saetable-close:hover {
+    color: black;
+}
+
+.saetable-modalContent pre {
+    padding: 5px;
+    border-radius: 5px;
+    overflow-x: auto;
+    margin: 0;
+}
+
+.saetable-copyButton {
+    margin: 0 5px 5px 5px;
+    padding: 8px 16px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.saetable-copyButton:hover {
+    background-color: #45a049;
+}
+
+/* Hook label styles */
+.saetable-hookLabel {
+    display: inline-block;
+    font-size: 0.75em;
+    color: #888;
+    margin-left: 4px;
+    cursor: help;
+    position: relative;
+}
+
+.saetable-hookLabel:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #333;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-bottom: 4px;
+}
+
+.saetable-hookLabel:hover::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #333;
+    z-index: 1000;
+}
+
+.saetable-hookRow {
+    display: block;
+    margin-bottom: 2px;
+}
+
+.saetable-hookRow:last-child {
+    margin-bottom: 0;
+}
