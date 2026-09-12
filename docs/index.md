@@ -104,6 +104,10 @@ Below are some tutorials that show how to do some basic exploration of SAEs:
 - Training SAEs on Synthetic Data [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/training_saes_on_synthetic_data.ipynb)
 - SynthSAEBench: Evaluating SAE Architectures on Synthetic Data [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/decoderesearch/SAELens/blob/main/tutorials/synth_sae_bench.ipynb)
 
+### Community Tutorials
+
+- Cross-SAE Feature Alignment with FeatureMatch [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://githubtocolab.com/jbloomAus/SAELens/blob/main/tutorials/featurematch_cross_sae.ipynb) - Quantify how similar two SAEs' learned dictionaries are using cosine-based alignment ([external package](https://github.com/Course-Correct-Labs/featurematch))
+
 ## Example WandB Dashboard
 
 WandB Dashboards provide lots of useful insights while training SAEs. Here's a screenshot from one training run.
