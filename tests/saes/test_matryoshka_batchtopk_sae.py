@@ -58,6 +58,19 @@ def test_validate_matryoshka_config_raises_if_widths_are_empty():
         _validate_matryoshka_config(cfg)
 
 
+@pytest.mark.parametrize("widths", [[0, 20], [-5, 20]])
+def test_validate_matryoshka_config_raises_if_widths_are_not_positive(
+    widths: list[int],
+):
+    cfg = build_matryoshka_batchtopk_sae_training_cfg(
+        d_sae=20,
+        k=5,
+        matryoshka_widths=widths,
+    )
+    with pytest.raises(ValueError, match="must contain only positive widths"):
+        _validate_matryoshka_config(cfg)
+
+
 def test_validate_matryoshka_config_does_not_append_d_sae_if_already_present():
     cfg = build_matryoshka_batchtopk_sae_training_cfg(
         d_sae=20,
