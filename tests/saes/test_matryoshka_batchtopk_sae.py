@@ -59,7 +59,9 @@ def test_validate_matryoshka_config_raises_if_widths_are_empty():
 
 
 @pytest.mark.parametrize("widths", [[0, 20], [-5, 20]])
-def test_validate_matryoshka_config_raises_if_widths_are_not_positive(widths):
+def test_validate_matryoshka_config_raises_if_widths_are_not_positive(
+    widths: list[int],
+):
     cfg = build_matryoshka_batchtopk_sae_training_cfg(
         d_sae=20,
         k=5,
