@@ -4,7 +4,7 @@ import signal
 import sys
 from argparse import Namespace
 from collections.abc import Sequence
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, make_dataclass
 from functools import partial
 from pathlib import Path
@@ -47,6 +47,8 @@ class LLMSaeEvaluator(Generic[T_TRAINING_SAE]):
     eval_batch_size_prompts: int | None
     n_eval_batches: int
     model_kwargs: dict[str, Any]
+    metric_prefix: str = ""
+    pause_data_provider: DataProvider | None = None
 
     def __call__(
         self,
@@ -70,15 +72,20 @@ class LLMSaeEvaluator(Generic[T_TRAINING_SAE]):
             compute_variance_metrics=True,
         )
 
-        # Eval calls into self.activations_store directly, which would race the
-        # prefetcher's producer thread on shared generator state. Pause it for
-        # the duration of the eval.
-        pause_ctx: AbstractContextManager[None] = (
-            data_provider.paused()
-            if isinstance(data_provider, PrefetchingIterator)
-            else nullcontext()
-        )
-        with pause_ctx:
+        # Eval calls into self.activations_store directly. Pause any prefetchers
+        # that could concurrently access evaluation or training model state.
+        pause_contexts: list[AbstractContextManager[None]] = []
+        seen_providers: set[int] = set()
+        for provider in (data_provider, self.pause_data_provider):
+            if (
+                isinstance(provider, PrefetchingIterator)
+                and id(provider) not in seen_providers
+            ):
+                pause_contexts.append(provider.paused())
+                seen_providers.add(id(provider))
+        with ExitStack() as stack:
+            for pause_context in pause_contexts:
+                stack.enter_context(pause_context)
             eval_metrics, _ = run_evals(
                 sae=sae,
                 activation_store=self.activations_store,
@@ -89,17 +96,20 @@ class LLMSaeEvaluator(Generic[T_TRAINING_SAE]):
                 model_kwargs=self.model_kwargs,
             )  # not calculating featurwise metrics here.
 
-        # Remove eval metrics that are already logged during training
-        eval_metrics.pop("metrics/explained_variance", None)
-        eval_metrics.pop("metrics/explained_variance_std", None)
-        eval_metrics.pop("metrics/l0", None)
-        eval_metrics.pop("metrics/l1", None)
-        eval_metrics.pop("metrics/mse", None)
+        if not self.metric_prefix:
+            # Remove eval metrics that are already logged during training.
+            eval_metrics.pop("metrics/explained_variance", None)
+            eval_metrics.pop("metrics/explained_variance_std", None)
+            eval_metrics.pop("metrics/l0", None)
+            eval_metrics.pop("metrics/l1", None)
+            eval_metrics.pop("metrics/mse", None)
 
         # Remove metrics that are not useful for wandb logging
         eval_metrics.pop("metrics/total_tokens_evaluated", None)
 
-        return eval_metrics
+        return {
+            f"{self.metric_prefix}{key}": value for key, value in eval_metrics.items()
+        }
 
 
 class LanguageModelSAETrainingRunner:
@@ -111,6 +121,7 @@ class LanguageModelSAETrainingRunner:
     model: HookedRootModule
     sae: TrainingSAE[Any]
     activations_store: ActivationsStore
+    eval_activations_store: ActivationsStore
     evaluator: "LLMSaeEvaluator[Any]"
 
     def __init__(
@@ -119,6 +130,7 @@ class LanguageModelSAETrainingRunner:
         override_dataset: HfDataset | None = None,
         override_model: HookedRootModule | None = None,
         override_sae: TrainingSAE[Any] | None = None,
+        override_eval_dataset: HfDataset | None = None,
     ):
         if override_dataset is not None:
             logger.warning(
@@ -127,6 +139,10 @@ class LanguageModelSAETrainingRunner:
         if override_model is not None:
             logger.warning(
                 f"You just passed in a model which will override the one specified in your configuration: {cfg.model_name}. As a consequence this run will not be reproducible via configuration alone."
+            )
+        if override_eval_dataset is not None:
+            logger.warning(
+                f"You just passed in an evaluation dataset which will override the one specified in your configuration: {cfg.eval_dataset_path}. As a consequence this run will not be reproducible via configuration alone."
             )
 
         self.cfg = cfg
@@ -157,6 +173,27 @@ class LanguageModelSAETrainingRunner:
             override_dataset=override_dataset,
         )
 
+        has_held_out_dataset = (
+            override_eval_dataset is not None or self.cfg.eval_dataset_path is not None
+        )
+        if has_held_out_dataset:
+            eval_dataset = (
+                override_eval_dataset
+                if override_eval_dataset is not None
+                else self.cfg.eval_dataset_path
+            )
+            assert eval_dataset is not None
+            self.eval_activations_store = ActivationsStore.from_config(
+                self.model,
+                self.cfg,
+                override_dataset=eval_dataset,
+                dataset_split=self.cfg.eval_dataset_split,
+                use_cached_activations=False,
+                dataset_trust_remote_code=self.cfg.eval_dataset_trust_remote_code,
+            )
+        else:
+            self.eval_activations_store = self.activations_store
+
         if override_sae is None:
             if self.cfg.from_pretrained_path is not None:
                 self.sae = TrainingSAE.load_from_disk(
@@ -175,10 +212,11 @@ class LanguageModelSAETrainingRunner:
 
         self.evaluator = LLMSaeEvaluator(
             model=self.model,
-            activations_store=self.activations_store,
+            activations_store=self.eval_activations_store,
             eval_batch_size_prompts=self.cfg.eval_batch_size_prompts,
             n_eval_batches=self.cfg.n_eval_batches,
             model_kwargs=self.cfg.model_kwargs,
+            metric_prefix="held_out/" if has_held_out_dataset else "",
         )
 
     def run(self):
@@ -207,9 +245,15 @@ class LanguageModelSAETrainingRunner:
                 iter(self.activations_store), prefetch=prefetch_size
             )
 
+        eval_data_provider: DataProvider = self.eval_activations_store
+        if self.eval_activations_store is self.activations_store:
+            eval_data_provider = data_provider
+        self.evaluator.pause_data_provider = data_provider
+
         trainer = SAETrainer(
             sae=self.sae,
             data_provider=data_provider,
+            eval_data_provider=eval_data_provider,
             evaluator=self.evaluator,
             save_checkpoint_fn=self.save_checkpoint,
             cfg=self.cfg.to_sae_trainer_config(),
