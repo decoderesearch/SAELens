@@ -219,6 +219,42 @@ def test_multi_sae_trainer_runs_with_normalize_activations(
     assert multi_trainer.trainers["a"].activation_scaler.scaling_factor is None
 
 
+def test_multi_sae_trainer_folds_covariance_whitening_into_the_sae(
+    ts_model: HookedTransformer, dataset: Dataset
+):
+    hook = "blocks.0.hook_mlp_out"
+    d_in = ts_model.cfg.d_model
+    common = _common_store_kwargs(dataset)
+
+    sae = StandardTrainingSAE(
+        StandardTrainingSAEConfig(
+            d_in=d_in,
+            d_sae=32,
+            l1_coefficient=1e-3,
+            decoder_init_norm=0.1,
+            normalize_activations="covariance_whitening",
+            dtype="float32",
+            device="cpu",
+        )
+    )
+    multi_store = ActivationsStore.from_config_multi_hook(
+        model=ts_model,
+        hook_names=[hook],
+        hook_d_ins={hook: d_in},
+        **common,
+    )
+    multi_trainer = MultiSAETrainer(
+        cfg=_trainer_cfg(total_samples=4 * 4),
+        saes={"a": sae},
+        hook_names={"a": hook},
+        data_provider=multi_store.get_multi_hook_data_loader(),
+    )
+    multi_trainer.fit()
+
+    assert multi_trainer.trainers["a"].activation_scaler.whitening is None
+    assert sae.cfg.normalize_activations == "none"
+
+
 def test_multi_sae_trainer_save_and_load_round_trip(
     ts_model: HookedTransformer, dataset: Dataset, tmp_path: Path
 ):

@@ -170,6 +170,12 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
                 data_provider=self.data_provider,
                 n_batches_for_norm_estimate=self.cfg.n_batches_for_norm_estimate,
             )
+        elif self.sae.cfg.normalize_activations == "covariance_whitening":
+            self.activation_scaler.estimate_whitening(
+                d_in=self.sae.cfg.d_in,
+                data_provider=self.data_provider,
+                n_batches_for_norm_estimate=self.cfg.n_batches_for_norm_estimate,
+            )
 
         # Train loop
         while self.n_training_samples < self.cfg.total_training_samples:
@@ -187,12 +193,19 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
             self.n_training_steps += 1
             self._update_pbar(step_output, pbar)
 
-        # fold the estimated norm scaling factor into the sae weights
+        # fold the estimated activation normalization into the sae weights
         if self.activation_scaler.scaling_factor is not None:
             self.sae.fold_activation_norm_scaling_factor(
                 self.activation_scaler.scaling_factor
             )
             self.activation_scaler.scaling_factor = None
+        if self.activation_scaler.whitening is not None:
+            self.sae.fold_activation_whitening(
+                mean=self.activation_scaler.whitening.mean,
+                whitening_matrix=self.activation_scaler.whitening.matrix,
+                unwhitening_matrix=self.activation_scaler.whitening.inverse_matrix,
+            )
+            self.activation_scaler.whitening = None
 
         self.set_final_sae_metadata()
 
