@@ -33,7 +33,7 @@ Core options typically configured within the architecture-specific `sae` object 
   - For Gated SAEs: `l1_coefficient` (controls L1-like penalty on gate activations), `l1_warm_up_steps`.
   - For JumpReLU SAEs: `l0_coefficient` (controls L0-like penalty), `l0_warm_up_steps`, `jumprelu_init_threshold`, `jumprelu_bandwidth`.
   - For TopK and BatchTopK SAEs: `k` (the number of features to keep active). Sparsity is enforced structurally.
-- `normalize_activations`: Strategy for normalizing activations before they enter the SAE (e.g., `"expected_average_only_in"`).
+- `normalize_activations`: Strategy for normalizing activations before they enter the SAE (e.g., `"expected_average_only_in"`). `"covariance_whitening"` whitens the activations using their estimated mean and covariance during training, following [Data Whitening Improves Sparse Autoencoder Learning](https://arxiv.org/abs/2511.13981). Like `"expected_average_only_in"`, the whitening is folded into the SAE weights at the end of training, so the saved SAE takes raw activations and needs no extra compute at inference.
 
 A sample training run from the [tutorial](https://github.com/decoderesearch/SAELens/blob/main/tutorials/training_a_sparse_autoencoder.ipynb) is shown below. Note how SAE-specific parameters are nested within the `sae` field:
 

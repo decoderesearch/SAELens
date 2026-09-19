@@ -133,7 +133,7 @@ class TopKSAEConfig(SAEConfig):
         device (str): Device to place the SAE on. Inherited from SAEConfig.
         apply_b_dec_to_input (bool): Whether to apply decoder bias to the input
             before encoding. Inherited from SAEConfig.
-        normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm"]):
+        normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm", "covariance_whitening"]):
             Normalization strategy for input activations. Inherited from SAEConfig.
         reshape_activations (Literal["none", "hook_z"]): How to reshape activations
             (useful for attention head outputs). Inherited from SAEConfig.
@@ -293,6 +293,22 @@ class TopKSAE(SAE[TopKSAEConfig]):
             )
         super().fold_W_dec_norm()
 
+    @override
+    @torch.no_grad()
+    def fold_activation_whitening(
+        self,
+        mean: torch.Tensor,
+        whitening_matrix: torch.Tensor,
+        unwhitening_matrix: torch.Tensor,
+    ) -> None:
+        if self.cfg.rescale_acts_by_decoder_norm:
+            # Unwhitening changes the decoder row norms, which would change the topk
+            # selection. Folding the norms first makes the selection independent of
+            # them, so the whitening can then be folded exactly.
+            self.fold_W_dec_norm()
+            self.cfg.rescale_acts_by_decoder_norm = False
+        super().fold_activation_whitening(mean, whitening_matrix, unwhitening_matrix)
+
 
 @dataclass
 class TopKTrainingSAEConfig(TrainingSAEConfig):
@@ -324,7 +340,7 @@ class TopKTrainingSAEConfig(TrainingSAEConfig):
         device (str): Device to place the SAE on. Inherited from SAEConfig.
         apply_b_dec_to_input (bool): Whether to apply decoder bias to the input
             before encoding. Inherited from SAEConfig.
-        normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm"]):
+        normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm", "covariance_whitening"]):
             Normalization strategy for input activations. Inherited from SAEConfig.
         reshape_activations (Literal["none", "hook_z"]): How to reshape activations
             (useful for attention head outputs). Inherited from SAEConfig.
@@ -438,6 +454,22 @@ class TopKTrainingSAE(TrainingSAE[TopKTrainingSAEConfig]):
                 "Folding W_dec_norm is not safe for TopKSAEs when rescale_acts_by_decoder_norm is False, as this may change the topk activations"
             )
         super().fold_W_dec_norm()
+
+    @override
+    @torch.no_grad()
+    def fold_activation_whitening(
+        self,
+        mean: torch.Tensor,
+        whitening_matrix: torch.Tensor,
+        unwhitening_matrix: torch.Tensor,
+    ) -> None:
+        if self.cfg.rescale_acts_by_decoder_norm:
+            # Unwhitening changes the decoder row norms, which would change the topk
+            # selection. Folding the norms first makes the selection independent of
+            # them, so the whitening can then be folded exactly.
+            self.fold_W_dec_norm()
+            self.cfg.rescale_acts_by_decoder_norm = False
+        super().fold_activation_whitening(mean, whitening_matrix, unwhitening_matrix)
 
     @override
     def get_activation_fn(self) -> Callable[[torch.Tensor], torch.Tensor]:
