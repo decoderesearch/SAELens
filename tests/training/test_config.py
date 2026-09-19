@@ -196,6 +196,9 @@ def test_LanguageModelSAERunnerConfig_to_dict_and_from_dict():
         ),
         seqpos_slice=(0, 10),
         context_size=10,
+        eval_dataset_path="test/held-out",
+        eval_dataset_split="validation",
+        eval_dataset_trust_remote_code=True,
     )
     cfg_dict = cfg.to_dict()
     assert cfg_dict == cfg.to_dict()

@@ -1,11 +1,15 @@
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 import torch
+from datasets import Dataset
 from safetensors.torch import load_file
-from transformer_lens import HookedTransformer
+from transformer_lens import HookedTransformer, HookedTransformerConfig
 
 from sae_lens import __version__
 from sae_lens.config import LanguageModelSAERunnerConfig
@@ -33,7 +37,21 @@ from tests.helpers import (
     TINYSTORIES_MODEL,
     assert_close,
     build_runner_cfg_for_arch,
+    random_params,
 )
+
+
+class _PausableDataProvider(Iterator[torch.Tensor]):
+    def __init__(self) -> None:
+        self.paused_calls = 0
+
+    def __next__(self) -> torch.Tensor:
+        return torch.empty(0)
+
+    @contextmanager
+    def paused(self) -> Iterator[None]:
+        self.paused_calls += 1
+        yield
 
 
 @pytest.mark.parametrize("architecture", ALL_TRAINING_ARCHITECTURES)
@@ -151,6 +169,99 @@ def test_LanguageModelSAETrainingRunner_runs_with_prefetch_llm_batches(
     runner = LanguageModelSAETrainingRunner(cfg, override_model=ts_model)
     sae = runner.run()
     assert sae.cfg.architecture() == "standard"
+
+
+def test_language_model_runner_builds_held_out_evaluation_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loaded_splits: list[tuple[str, str, bool]] = []
+    eval_dataset = Dataset.from_list([{"text": "held out example"}] * 20)
+
+    def load_eval_dataset(
+        path: str,
+        *,
+        split: str,
+        streaming: bool,
+        trust_remote_code: bool,
+    ) -> Dataset:
+        del streaming
+        loaded_splits.append((path, split, trust_remote_code))
+        return eval_dataset
+
+    monkeypatch.setattr(
+        "sae_lens.training.activations_store.load_dataset", load_eval_dataset
+    )
+    cfg = build_runner_cfg_for_arch(
+        architecture="standard",
+        eval_dataset_path="test/held-out",
+        eval_dataset_split="validation",
+        context_size=4,
+        logger={"wandb_id": "held-out-runner-test"},
+    )
+    train_dataset = Dataset.from_list([{"text": "training example"}] * 20)
+    model = MagicMock()
+
+    runner = LanguageModelSAETrainingRunner(
+        cfg,
+        override_dataset=train_dataset,
+        override_model=model,
+    )
+
+    assert loaded_splits == [("test/held-out", "validation", False)]
+    assert runner.eval_activations_store is not runner.activations_store
+    assert runner.evaluator.activations_store is runner.eval_activations_store
+    assert runner.evaluator.metric_prefix == "held_out/"
+
+
+def test_runner_evaluates_held_out_data_without_consuming_training_data() -> None:
+    model = HookedTransformer(
+        HookedTransformerConfig(
+            n_layers=1,
+            d_model=16,
+            d_head=8,
+            n_heads=2,
+            d_mlp=32,
+            d_vocab=32,
+            n_ctx=4,
+            act_fn="relu",
+            device="cpu",
+        )
+    )
+    first_train_tokens = [1, 2, 3, 4]
+    train_dataset = Dataset.from_list(
+        [{"tokens": first_train_tokens}] + [{"tokens": [9, 9, 9, 9]}] * 19
+    )
+    eval_dataset = Dataset.from_list([{"tokens": [5, 6, 7, 8]}] * 20)
+    cfg = build_runner_cfg_for_arch(
+        architecture="standard",
+        d_in=16,
+        d_sae=32,
+        context_size=4,
+        training_tokens=20,
+        n_batches_in_buffer=2,
+        store_batch_size_prompts=2,
+        train_batch_size_tokens=4,
+        eval_batch_size_prompts=2,
+        n_eval_batches=1,
+        logger={"wandb_id": "held-out-integration-test"},
+    )
+    runner = LanguageModelSAETrainingRunner(
+        cfg,
+        override_dataset=train_dataset,
+        override_model=model,
+        override_eval_dataset=eval_dataset,
+    )
+    random_params(runner.sae)
+
+    metrics = runner.evaluator(
+        runner.sae,
+        runner.eval_activations_store,
+        ActivationScaler(),
+    )
+
+    assert metrics
+    assert all(key.startswith("held_out/") for key in metrics)
+    assert runner.activations_store.get_batch_tokens(1).tolist() == [first_train_tokens]
 
 
 class _CompiledCallable:
@@ -519,6 +630,81 @@ class TestLLMSaeEvaluator:
 
         for metric_key in filtered_metrics:
             assert metric_key not in metrics
+
+    def test_llm_sae_evaluator_prefixes_held_out_metrics(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def run_evals_stub(**kwargs: Any) -> tuple[dict[str, Any], None]:
+            del kwargs
+            return {
+                "metrics/l0": 2.0,
+                "metrics/l1": 3.0,
+                "metrics/mse": 1.0,
+            }, None
+
+        monkeypatch.setattr(
+            "sae_lens.llm_sae_training_runner.run_evals", run_evals_stub
+        )
+        activation_store = MagicMock()
+        activation_store.exclude_special_tokens = None
+        evaluator = LLMSaeEvaluator(
+            model=MagicMock(),
+            activations_store=activation_store,
+            eval_batch_size_prompts=2,
+            n_eval_batches=1,
+            model_kwargs={},
+            metric_prefix="held_out/",
+        )
+
+        metrics = evaluator(
+            sae=MagicMock(),
+            data_provider=activation_store,
+            activation_scaler=ActivationScaler(),
+        )
+
+        assert metrics
+        assert metrics["held_out/metrics/l0"] == 2.0
+        assert metrics["held_out/metrics/l1"] == 3.0
+        assert metrics["held_out/metrics/mse"] == 1.0
+        assert all(key.startswith("held_out/") for key in metrics)
+
+    def test_llm_sae_evaluator_pauses_training_and_eval_prefetchers(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def run_evals_stub(**kwargs: Any) -> tuple[dict[str, Any], None]:
+            del kwargs
+            return {}, None
+
+        monkeypatch.setattr(
+            "sae_lens.llm_sae_training_runner.run_evals", run_evals_stub
+        )
+        monkeypatch.setattr(
+            "sae_lens.llm_sae_training_runner.PrefetchingIterator",
+            _PausableDataProvider,
+        )
+        activation_store = MagicMock()
+        activation_store.exclude_special_tokens = None
+        eval_provider = _PausableDataProvider()
+        training_provider = _PausableDataProvider()
+        evaluator = LLMSaeEvaluator(
+            model=MagicMock(),
+            activations_store=activation_store,
+            eval_batch_size_prompts=2,
+            n_eval_batches=1,
+            model_kwargs={},
+            pause_data_provider=training_provider,
+        )
+
+        evaluator(
+            sae=MagicMock(),
+            data_provider=eval_provider,
+            activation_scaler=ActivationScaler(),
+        )
+
+        assert eval_provider.paused_calls == 1
+        assert training_provider.paused_calls == 1
 
     def test_llm_sae_evaluator_handles_ignore_tokens_with_exclude_special_tokens(
         self,
