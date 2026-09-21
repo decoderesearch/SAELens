@@ -8,6 +8,10 @@ from transformer_lens import HookedTransformer
 
 from sae_lens.config import LanguageModelSAERunnerConfig, LoggingConfig
 from sae_lens.registry import SAE_TRAINING_CLASS_REGISTRY
+from sae_lens.saes.abstopk_sae import (
+    AbsTopKSAEConfig,
+    AbsTopKTrainingSAEConfig,
+)
 from sae_lens.saes.batchtopk_sae import BatchTopKTrainingSAEConfig
 from sae_lens.saes.gated_sae import GatedSAEConfig, GatedTrainingSAEConfig
 from sae_lens.saes.jumprelu_sae import JumpReLUSAEConfig, JumpReLUTrainingSAEConfig
@@ -36,6 +40,7 @@ ALL_ARCHITECTURES = [
     "gated",
     "jumprelu",
     "topk",
+    "abstopk",
     "temporal",
     "matching_pursuit",
 ]
@@ -470,6 +475,47 @@ def build_topk_sae_training_cfg(**kwargs: Any) -> TopKTrainingSAEConfig:
     return build_topk_runner_cfg(**kwargs).sae  # type: ignore
 
 
+# --- AbsTopK SAE Builder ---
+def build_abstopk_runner_cfg(
+    **kwargs: Any,
+) -> LanguageModelSAERunnerConfig[AbsTopKTrainingSAEConfig]:
+    """Helper to create a mock instance for AbsTopK SAE."""
+    default_sae_config: TrainingSAEConfigDict = {
+        "d_in": 64,
+        "d_sae": 256,
+        "dtype": "float32",
+        "device": "cpu",
+        "normalize_activations": "none",
+        "decoder_init_norm": 0.1,
+        "apply_b_dec_to_input": False,
+        "k": 10,
+        "rescale_acts_by_decoder_norm": True,
+    }
+    runner_cfg = _build_runner_config(
+        AbsTopKTrainingSAEConfig,
+        cast(dict[str, Any], default_sae_config),
+        **kwargs,
+    )
+    _update_sae_metadata(runner_cfg)
+    return runner_cfg
+
+
+def build_abstopk_sae_cfg(**kwargs: Any) -> AbsTopKSAEConfig:
+    default_sae_config: SAEConfigDict = {
+        "k": 100,
+        "d_in": 64,
+        "d_sae": 256,
+        "dtype": "float32",
+        "device": "cpu",
+        "normalize_activations": "none",
+    }
+    return AbsTopKSAEConfig(**{**default_sae_config, **kwargs})  # type: ignore
+
+
+def build_abstopk_sae_training_cfg(**kwargs: Any) -> AbsTopKTrainingSAEConfig:
+    return build_abstopk_runner_cfg(**kwargs).sae  # type: ignore
+
+
 # --- Matching Pursuit SAE Builder ---
 
 
@@ -751,6 +797,7 @@ SAE_TRAINING_CONFIG_BUILDERS = {
     "gated": build_gated_sae_training_cfg,
     "jumprelu": build_jumprelu_sae_training_cfg,
     "topk": build_topk_sae_training_cfg,
+    "abstopk": build_abstopk_sae_training_cfg,
     "batchtopk": build_batchtopk_sae_training_cfg,
     "matryoshka_batchtopk": build_matryoshka_batchtopk_sae_training_cfg,
     "matching_pursuit": build_matching_pursuit_sae_training_cfg,
@@ -761,6 +808,7 @@ SAE_CONFIG_BUILDERS = {
     "gated": build_gated_sae_cfg,
     "jumprelu": build_jumprelu_sae_cfg,
     "topk": build_topk_sae_cfg,
+    "abstopk": build_abstopk_sae_cfg,
     "temporal": build_temporal_sae_cfg,
     "matching_pursuit": build_matching_pursuit_sae_cfg,
 }
@@ -770,6 +818,7 @@ SAE_RUNNER_CONFIG_BUILDERS = {
     "gated": build_gated_runner_cfg,
     "jumprelu": build_jumprelu_runner_cfg,
     "topk": build_topk_runner_cfg,
+    "abstopk": build_abstopk_runner_cfg,
     "batchtopk": build_batchtopk_runner_cfg,
     "matryoshka_batchtopk": build_matryoshka_batchtopk_runner_cfg,
     "matching_pursuit": build_matching_pursuit_runner_cfg,

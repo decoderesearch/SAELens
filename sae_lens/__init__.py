@@ -7,6 +7,10 @@ logger = logging.getLogger(__name__)
 
 from sae_lens.saes import (
     SAE,
+    AbsTopKSAE,
+    AbsTopKSAEConfig,
+    AbsTopKTrainingSAE,
+    AbsTopKTrainingSAEConfig,
     BatchTopKTrainingSAE,
     BatchTopKTrainingSAEConfig,
     GatedSAE,
@@ -110,6 +114,10 @@ __all__ = [
     "SAETrainingRunner",
     "SAETrainer",
     "LoggingConfig",
+    "AbsTopKSAE",
+    "AbsTopKSAEConfig",
+    "AbsTopKTrainingSAE",
+    "AbsTopKTrainingSAEConfig",
     "BatchTopKTrainingSAE",
     "BatchTopKTrainingSAEConfig",
     "Transcoder",
@@ -153,6 +161,8 @@ register_sae_class("gated", GatedSAE, GatedSAEConfig)
 register_sae_training_class("gated", GatedTrainingSAE, GatedTrainingSAEConfig)
 register_sae_class("topk", TopKSAE, TopKSAEConfig)
 register_sae_training_class("topk", TopKTrainingSAE, TopKTrainingSAEConfig)
+register_sae_class("abstopk", AbsTopKSAE, AbsTopKSAEConfig)
+register_sae_training_class("abstopk", AbsTopKTrainingSAE, AbsTopKTrainingSAEConfig)
 register_sae_class("jumprelu", JumpReLUSAE, JumpReLUSAEConfig)
 register_sae_training_class("jumprelu", JumpReLUTrainingSAE, JumpReLUTrainingSAEConfig)
 register_sae_training_class(

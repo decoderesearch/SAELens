@@ -569,7 +569,10 @@ def get_sparsity_and_variance_metrics(
             )
 
         if compute_sparsity_metrics:
-            l0 = (flattened_sae_feature_acts > 0).sum(dim=-1).float()
+            # != 0 rather than > 0 so that negative-but-active features (e.g.
+            # bidirectional architectures like AbsTopK) are counted. This is a
+            # no-op for ReLU-based architectures, whose activations are >= 0.
+            l0 = (flattened_sae_feature_acts != 0).sum(dim=-1).float()
             l1 = flattened_sae_feature_acts.sum(dim=-1)
             metric_dict["l0"].append(l0)
             metric_dict["l1"].append(l1)
@@ -606,7 +609,10 @@ def get_sparsity_and_variance_metrics(
             metric_dict["cossim"].append(cossim)
 
         if compute_featurewise_density_statistics:
-            sae_feature_activations_bool = (masked_sae_feature_activations > 0).float()
+            # != 0 rather than > 0 so that negative-but-active features (e.g.
+            # bidirectional architectures like AbsTopK) are counted. This is a
+            # no-op for ReLU-based architectures, whose activations are >= 0.
+            sae_feature_activations_bool = (masked_sae_feature_activations != 0).float()
             total_feature_acts += sae_feature_activations_bool.sum(dim=1).sum(dim=0)
             total_feature_prompts += (sae_feature_activations_bool.sum(dim=1) > 0).sum(
                 dim=0

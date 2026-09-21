@@ -16,6 +16,8 @@ The system separates inference SAEs (designed to be deployed after training) fro
 
 When an SAE is trained in SAELens, we create a `TrainingSAE` class. When the SAE is finished training, it is saved as an `SAE` for inference. For most SAE architectures, there is both a training and an inference SAE class available (e.g. there's is a `TopKSAE` class for inference, and a `TopKTrainingSAE` class for training). However, this does not always have to be the case. For instance, there is a `BatchTopKTrainingSAE` class for training batch TopK SAEs, but there is not corresponding inference class since Batch TopK SAEs are saved as `JumpReLU` SAEs for inference.
 
+Built-in architectures are registered in `sae_lens/__init__.py` under the name returned by their config's `architecture()` method (e.g. `"topk"` for `TopKSAE`/`TopKTrainingSAE`, or `"abstopk"` for the bidirectional `AbsTopKSAE`/`AbsTopKTrainingSAE`, which selects the top-k features by pre-activation magnitude and keeps their signs as described in [AbsTopK: Rethinking Sparse Autoencoders For Bidirectional Features](https://arxiv.org/abs/2510.00404)). You can look up any registered architecture with `sae_lens.registry.get_sae_class` / `get_sae_training_class`.
+
 If you just want to modify the training procedure for an SAE, you can just create your own custom training SAE class, extending the `TrainingSAE` subclass you're interested in (or the base `TrainingSAE` class directly, depending on your needs).
 
 ### Base Classes
