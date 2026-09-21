@@ -12,8 +12,26 @@ from sae_lens.synthetic import (
     feature_uniqueness,
     mean_correlation_coefficient,
 )
+from sae_lens.synthetic.evals import DeadLatentsCalculator, L0Calculator
 from sae_lens.training.activation_scaler import ActivationScaler
 from tests.helpers import random_params
+
+
+class TestSignedLatentFiring:
+    def test_l0_counts_negative_active_latents(self) -> None:
+        calc = L0Calculator()
+        # token 0 has 2 active latents (-1, 2), token 1 has 1 active (-3); a
+        # > 0 predicate would miss the negatives and report l0 = 0.5 not 1.5
+        acts = torch.tensor([[-1.0, 0.0, 2.0, 0.0], [-3.0, 0.0, 0.0, 0.0]])
+        calc.add_batch(acts)
+        assert calc.compute() == pytest.approx(1.5)
+
+    def test_dead_latents_treats_negative_only_firing_as_alive(self) -> None:
+        calc = DeadLatentsCalculator(num_latents=3)
+        # latent 0 fires only negative, latent 1 never fires, latent 2 positive;
+        # only latent 1 is dead. A > 0 predicate would wrongly call latent 0 dead
+        calc.add_batch(torch.tensor([[-2.0, 0.0, 1.0]]))
+        assert calc.compute() == 1
 
 
 class TestSyntheticDataEvalResultToLogDict:

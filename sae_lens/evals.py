@@ -573,7 +573,10 @@ def get_sparsity_and_variance_metrics(
             # bidirectional architectures like AbsTopK) are counted. This is a
             # no-op for ReLU-based architectures, whose activations are >= 0.
             l0 = (flattened_sae_feature_acts != 0).sum(dim=-1).float()
-            l1 = flattened_sae_feature_acts.sum(dim=-1)
+            # abs() before summing so the L1 metric aggregates activation
+            # magnitudes; without it, signed activations (e.g. AbsTopK) can
+            # cancel or yield a negative "L1". No-op for ReLU-based SAEs (>= 0).
+            l1 = flattened_sae_feature_acts.abs().sum(dim=-1)
             metric_dict["l0"].append(l0)
             metric_dict["l1"].append(l1)
 

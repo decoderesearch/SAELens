@@ -224,6 +224,10 @@ def test_evals_l0_and_feature_density_count_negative_active_features():
     # the same k features (largest magnitude, indices d-k..d-1) fire on every
     # token, each with density 1.0
     assert sum(feature_metrics["feature_density"]) == pytest.approx(k)
+    # l1 aggregates magnitudes: the k selected features have magnitudes
+    # {d-k+1, ..., d} = {4, 5, 6}, so l1 = 15 per token; a signed sum would
+    # (wrongly) report -15 because every selected activation is negative
+    assert metrics["l1"] == pytest.approx(sum(range(d - k + 1, d + 1)))
 
 
 def test_AbsTopKSAE_save_and_load_from_pretrained(tmp_path: Path) -> None:
