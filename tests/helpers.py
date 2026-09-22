@@ -24,6 +24,10 @@ from sae_lens.saes.sae import (
     TrainStepInput,
     TrainStepOutput,
 )
+from sae_lens.saes.phase_multiplexed_sae import (
+    PhaseMultiplexedSAEConfig,
+    PhaseMultiplexedTrainingSAEConfig,
+)
 from sae_lens.saes.standard_sae import StandardSAEConfig, StandardTrainingSAEConfig
 from sae_lens.saes.temporal_sae import TemporalSAEConfig
 from sae_lens.saes.topk_sae import TopKSAEConfig, TopKTrainingSAEConfig
@@ -38,6 +42,7 @@ ALL_ARCHITECTURES = [
     "topk",
     "temporal",
     "matching_pursuit",
+    "phase_multiplexed",
 ]
 ALL_FOLDABLE_ARCHITECTURES = [
     "standard",
@@ -470,6 +475,59 @@ def build_topk_sae_training_cfg(**kwargs: Any) -> TopKTrainingSAEConfig:
     return build_topk_runner_cfg(**kwargs).sae  # type: ignore
 
 
+# --- Phase-Multiplexed SAE Builder ---
+
+
+def build_phase_multiplexed_runner_cfg(
+    **kwargs: Any,
+) -> LanguageModelSAERunnerConfig[PhaseMultiplexedTrainingSAEConfig]:
+    """Helper to create a mock instance for PhaseMultiplexed SAE."""
+    default_sae_config: TrainingSAEConfigDict = {
+        "d_in": 64,
+        "d_sae": 256,
+        "dtype": "float32",
+        "device": "cpu",
+        "normalize_activations": "none",
+        "decoder_init_norm": 0.1,
+        "apply_b_dec_to_input": False,
+        "num_phases": 4,
+        "k_per_phase": 4,
+        "rescale_acts_by_decoder_norm": False,
+    }
+    temp_sae_overrides = {
+        k: v for k, v in kwargs.items() if k in TrainingSAEConfigDict.__annotations__
+    }
+    temp_sae_config = {**default_sae_config, **temp_sae_overrides}
+    final_default_sae_config = cast(dict[str, Any], temp_sae_config)
+
+    runner_cfg = _build_runner_config(
+        PhaseMultiplexedTrainingSAEConfig,
+        final_default_sae_config,
+        **kwargs,
+    )
+    _update_sae_metadata(runner_cfg)
+    return runner_cfg
+
+
+def build_phase_multiplexed_sae_cfg(**kwargs: Any) -> PhaseMultiplexedSAEConfig:
+    default_sae_config: SAEConfigDict = {
+        "d_in": 64,
+        "d_sae": 256,
+        "num_phases": 4,
+        "k_per_phase": 4,
+        "dtype": "float32",
+        "device": "cpu",
+        "normalize_activations": "none",
+    }
+    return PhaseMultiplexedSAEConfig(**{**default_sae_config, **kwargs})  # type: ignore
+
+
+def build_phase_multiplexed_sae_training_cfg(
+    **kwargs: Any,
+) -> PhaseMultiplexedTrainingSAEConfig:
+    return build_phase_multiplexed_runner_cfg(**kwargs).sae  # type: ignore
+
+
 # --- Matching Pursuit SAE Builder ---
 
 
@@ -754,6 +812,7 @@ SAE_TRAINING_CONFIG_BUILDERS = {
     "batchtopk": build_batchtopk_sae_training_cfg,
     "matryoshka_batchtopk": build_matryoshka_batchtopk_sae_training_cfg,
     "matching_pursuit": build_matching_pursuit_sae_training_cfg,
+    "phase_multiplexed": build_phase_multiplexed_sae_training_cfg,
 }
 
 SAE_CONFIG_BUILDERS = {
@@ -763,6 +822,7 @@ SAE_CONFIG_BUILDERS = {
     "topk": build_topk_sae_cfg,
     "temporal": build_temporal_sae_cfg,
     "matching_pursuit": build_matching_pursuit_sae_cfg,
+    "phase_multiplexed": build_phase_multiplexed_sae_cfg,
 }
 
 SAE_RUNNER_CONFIG_BUILDERS = {
@@ -773,4 +833,5 @@ SAE_RUNNER_CONFIG_BUILDERS = {
     "batchtopk": build_batchtopk_runner_cfg,
     "matryoshka_batchtopk": build_matryoshka_batchtopk_runner_cfg,
     "matching_pursuit": build_matching_pursuit_runner_cfg,
+    "phase_multiplexed": build_phase_multiplexed_runner_cfg,
 }

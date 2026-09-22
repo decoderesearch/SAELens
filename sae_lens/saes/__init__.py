@@ -38,6 +38,12 @@ from .topk_sae import (
     TopKTrainingSAE,
     TopKTrainingSAEConfig,
 )
+from .phase_multiplexed_sae import (
+    PhaseMultiplexedSAE,
+    PhaseMultiplexedSAEConfig,
+    PhaseMultiplexedTrainingSAE,
+    PhaseMultiplexedTrainingSAEConfig,
+)
 from .transcoder import (
     JumpReLUSkipTranscoder,
     JumpReLUSkipTranscoderConfig,
@@ -88,4 +94,8 @@ __all__ = [
     "MatchingPursuitTrainingSAE",
     "MatchingPursuitSAEConfig",
     "MatchingPursuitTrainingSAEConfig",
+    "PhaseMultiplexedSAE",
+    "PhaseMultiplexedSAEConfig",
+    "PhaseMultiplexedTrainingSAE",
+    "PhaseMultiplexedTrainingSAEConfig",
 ]
