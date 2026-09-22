@@ -13,12 +13,13 @@ Usage:
 import json
 import time
 from pathlib import Path
+
 import torch
 
 from sae_lens.llm_sae_training_runner import LanguageModelSAETrainingRunner
 from tests.helpers import (
-    TINYSTORIES_MODEL,
     NEEL_NANDA_C4_10K_DATASET,
+    TINYSTORIES_MODEL,
     build_phase_multiplexed_runner_cfg,
     load_model_cached,
 )
@@ -41,6 +42,7 @@ OUT_FILE = ARTIFACT_DIR / "feature_specialization_report.json"
 def get_activations_with_tokens(model, n_tokens):
     """Returns (acts, token_strings) for audit use."""
     from datasets import load_dataset
+
     dataset = load_dataset(NEEL_NANDA_C4_10K_DATASET, split="train", streaming=True)
     all_acts, all_tok_strs = [], []
     for ex in dataset:
@@ -71,7 +73,7 @@ def gini_coefficient(freqs: torch.Tensor) -> float:
 
 def cross_phase_cosine_sim(W_dec: torch.Tensor, num_phases: int, m: int) -> list:
     """Compute P×P cross-phase cosine similarity matrices between decoder tiles."""
-    tiles = [W_dec[p * m:(p + 1) * m, :] for p in range(num_phases)]
+    tiles = [W_dec[p * m : (p + 1) * m, :] for p in range(num_phases)]
     result = []
     for i in range(num_phases):
         row = []
@@ -89,7 +91,13 @@ def cross_phase_cosine_sim(W_dec: torch.Tensor, num_phases: int, m: int) -> list
     return result
 
 
-def top_activating_tokens(feature_acts_all: torch.Tensor, tok_strs: list, phase_idx: int, m: int, top_n: int = 10):
+def top_activating_tokens(
+    feature_acts_all: torch.Tensor,
+    tok_strs: list,
+    phase_idx: int,
+    m: int,
+    top_n: int = 10,
+):
     start = phase_idx * m
     end = (phase_idx + 1) * m
     phase_acts = feature_acts_all[:, start:end]
@@ -151,7 +159,7 @@ def main():
     print("\n── [Metric A: Firing Frequency & Gini Coefficient per Phase] ──")
     gini_per_phase = {}
     for p in range(NUM_PHASES):
-        phase_acts = feature_acts_all[:, p * m:(p + 1) * m]
+        phase_acts = feature_acts_all[:, p * m : (p + 1) * m]
         firing_counts = (phase_acts > 0).float().sum(0)
         g = gini_coefficient(firing_counts)
         mean_fr = float((phase_acts > 0).float().mean().item())
@@ -166,15 +174,25 @@ def main():
         print(f"   Phase {i} vs [0..3]: " + "  ".join(f"{v:.4f}" for v in row))
 
     # ── C: Top activating tokens Phase 0 vs Phase P-1 ──
-    print(f"\n── [Metric C: Feature Specialization (Phase 0 vs Phase {NUM_PHASES-1})] ──")
+    print(
+        f"\n── [Metric C: Feature Specialization (Phase 0 vs Phase {NUM_PHASES-1})] ──"
+    )
     top_phase0 = top_activating_tokens(feature_acts_all, tok_strs, 0, m, TOP_N_TOKENS)
-    top_phaseLast = top_activating_tokens(feature_acts_all, tok_strs, NUM_PHASES - 1, m, TOP_N_TOKENS)
+    top_phaseLast = top_activating_tokens(
+        feature_acts_all, tok_strs, NUM_PHASES - 1, m, TOP_N_TOKENS
+    )
 
     print(f"   Phase 0 Feat 0: tokens = {top_phase0[0]['top_tokens'][:6]}")
-    print(f"   Phase {NUM_PHASES-1} Feat 0: tokens = {top_phaseLast[0]['top_tokens'][:6]}")
+    print(
+        f"   Phase {NUM_PHASES-1} Feat 0: tokens = {top_phaseLast[0]['top_tokens'][:6]}"
+    )
 
-    phase0_mean_fr = float(torch.tensor([top_phase0[f]["firing_rate"] for f in top_phase0]).mean())
-    phaseLast_mean_fr = float(torch.tensor([top_phaseLast[f]["firing_rate"] for f in top_phaseLast]).mean())
+    phase0_mean_fr = float(
+        torch.tensor([top_phase0[f]["firing_rate"] for f in top_phase0]).mean()
+    )
+    phaseLast_mean_fr = float(
+        torch.tensor([top_phaseLast[f]["firing_rate"] for f in top_phaseLast]).mean()
+    )
 
     report = {
         "model": MODEL_NAME,
@@ -186,13 +204,22 @@ def main():
         "A_gini_per_phase": {str(k): v for k, v in gini_per_phase.items()},
         "B_cross_phase_cosine_sim": cross_phase_sim,
         "C_top_tokens_phase0": {str(k): v for k, v in list(top_phase0.items())[:5]},
-        "C_top_tokens_phase_last": {str(k): v for k, v in list(top_phaseLast.items())[:5]},
+        "C_top_tokens_phase_last": {
+            str(k): v for k, v in list(top_phaseLast.items())[:5]
+        },
         "summary": {
             "phase0_mean_firing_rate": phase0_mean_fr,
             f"phase{NUM_PHASES-1}_mean_firing_rate": phaseLast_mean_fr,
-            "mean_gini": float(sum(v["gini"] for v in gini_per_phase.values()) / NUM_PHASES),
+            "mean_gini": float(
+                sum(v["gini"] for v in gini_per_phase.values()) / NUM_PHASES
+            ),
             "cross_phase_off_diag_mean_cos_sim": float(
-                sum(cross_phase_sim[i][j] for i in range(NUM_PHASES) for j in range(NUM_PHASES) if i != j)
+                sum(
+                    cross_phase_sim[i][j]
+                    for i in range(NUM_PHASES)
+                    for j in range(NUM_PHASES)
+                    if i != j
+                )
                 / (NUM_PHASES * (NUM_PHASES - 1))
             ),
             "within_phase_mean_cos_sim": float(
@@ -204,6 +231,7 @@ def main():
     with open(OUT_FILE, "w") as f:
         json.dump(report, f, indent=2)
     print(f"\nSaved feature specialization audit report → {OUT_FILE}")
+
 
 if __name__ == "__main__":
     main()

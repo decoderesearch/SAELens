@@ -11,14 +11,13 @@ Usage:
 import json
 import time
 from pathlib import Path
-import torch
 
-from sae_lens.llm_sae_training_runner import LanguageModelSAETrainingRunner
 from sae_lens.evals import EvalConfig, run_evals
+from sae_lens.llm_sae_training_runner import LanguageModelSAETrainingRunner
 from sae_lens.training.activation_scaler import ActivationScaler
 from tests.helpers import (
-    TINYSTORIES_MODEL,
     NEEL_NANDA_C4_10K_DATASET,
+    TINYSTORIES_MODEL,
     build_phase_multiplexed_runner_cfg,
     build_topk_runner_cfg,
     load_model_cached,
@@ -31,6 +30,7 @@ OUT_FILE = ARTIFACT_DIR / "pareto_sweep_results.json"
 K_VALUES = [8, 16, 24]
 NUM_PHASES = 4
 TRAINING_TOKENS = 16000
+
 
 def main():
     print("=" * 75)
@@ -84,7 +84,9 @@ def main():
             **common_cfg,
         )
         t0 = time.time()
-        topk_runner = LanguageModelSAETrainingRunner(topk_runner_cfg, override_model=model)
+        topk_runner = LanguageModelSAETrainingRunner(
+            topk_runner_cfg, override_model=model
+        )
         topk_sae = topk_runner.run()
         topk_time = time.time() - t0
 
@@ -97,8 +99,12 @@ def main():
             eval_config=eval_cfg,
         )
 
-        topk_ce = float(topk_metrics["model_performance_preservation"].get("ce_loss_score", 0.0))
-        topk_r2 = float(topk_metrics["reconstruction_quality"].get("explained_variance", 0.0))
+        topk_ce = float(
+            topk_metrics["model_performance_preservation"].get("ce_loss_score", 0.0)
+        )
+        topk_r2 = float(
+            topk_metrics["reconstruction_quality"].get("explained_variance", 0.0)
+        )
         topk_mse = float(topk_metrics["reconstruction_quality"].get("mse", 0.0))
         topk_l0 = float(topk_metrics["sparsity"].get("l0", float(k)))
         topk_peak_mb = (d_in * d_sae * 4) / (1024 * 1024)
@@ -115,7 +121,9 @@ def main():
         # ── 2. PhaseSAE ──
         k_per_phase = max(1, k // NUM_PHASES)
         actual_total_k = k_per_phase * NUM_PHASES
-        print(f"\n[K={k}] Training PhaseSAE (P={NUM_PHASES}, k_pp={k_per_phase}, total_k={actual_total_k})...")
+        print(
+            f"\n[K={k}] Training PhaseSAE (P={NUM_PHASES}, k_pp={k_per_phase}, total_k={actual_total_k})..."
+        )
         phase_runner_cfg = build_phase_multiplexed_runner_cfg(
             num_phases=NUM_PHASES,
             k_per_phase=k_per_phase,
@@ -123,7 +131,9 @@ def main():
             **common_cfg,
         )
         t0 = time.time()
-        phase_runner = LanguageModelSAETrainingRunner(phase_runner_cfg, override_model=model)
+        phase_runner = LanguageModelSAETrainingRunner(
+            phase_runner_cfg, override_model=model
+        )
         phase_sae = phase_runner.run()
         phase_time = time.time() - t0
 
@@ -136,8 +146,12 @@ def main():
             eval_config=eval_cfg,
         )
 
-        phase_ce = float(phase_metrics["model_performance_preservation"].get("ce_loss_score", 0.0))
-        phase_r2 = float(phase_metrics["reconstruction_quality"].get("explained_variance", 0.0))
+        phase_ce = float(
+            phase_metrics["model_performance_preservation"].get("ce_loss_score", 0.0)
+        )
+        phase_r2 = float(
+            phase_metrics["reconstruction_quality"].get("explained_variance", 0.0)
+        )
         phase_mse = float(phase_metrics["reconstruction_quality"].get("mse", 0.0))
         phase_l0 = float(phase_metrics["sparsity"].get("l0", float(actual_total_k)))
         phase_peak_mb = (d_in * (d_sae // NUM_PHASES) * 4) / (1024 * 1024)
@@ -167,26 +181,39 @@ def main():
         }
 
         print(f"\n--> K={k} Comparison:")
-        print(f"    Top-K:    CE Rec={topk_ce*100:.2f}%  R²={topk_r2:.4f}  MSE={topk_mse:.4f}  Peak={topk_peak_mb:.4f}MB")
-        print(f"    PhaseSAE: CE Rec={phase_ce*100:.2f}%  R²={phase_r2:.4f}  MSE={phase_mse:.4f}  Peak={phase_peak_mb:.4f}MB")
-        print(f"    Δ: CE Rec={ce_delta:+.1f}%  R²={r2_delta:+.1f}%  BW={bw_factor:.1f}x reduction")
+        print(
+            f"    Top-K:    CE Rec={topk_ce*100:.2f}%  R²={topk_r2:.4f}  MSE={topk_mse:.4f}  Peak={topk_peak_mb:.4f}MB"
+        )
+        print(
+            f"    PhaseSAE: CE Rec={phase_ce*100:.2f}%  R²={phase_r2:.4f}  MSE={phase_mse:.4f}  Peak={phase_peak_mb:.4f}MB"
+        )
+        print(
+            f"    Δ: CE Rec={ce_delta:+.1f}%  R²={r2_delta:+.1f}%  BW={bw_factor:.1f}x reduction"
+        )
 
     with open(OUT_FILE, "w") as f:
         json.dump(results, f, indent=2)
     print(f"\nSaved all sweep results → {OUT_FILE}")
 
-    print("\n" + "="*85)
-    print(f"{'Target K':>8} | {'Architecture':>12} | {'CE Rec (%)':>11} | {'R²':>7} | {'MSE':>8} | {'Peak MB':>8} | {'BW Red.':>8}")
-    print("-"*85)
+    print("\n" + "=" * 85)
+    print(
+        f"{'Target K':>8} | {'Architecture':>12} | {'CE Rec (%)':>11} | {'R²':>7} | {'MSE':>8} | {'Peak MB':>8} | {'BW Red.':>8}"
+    )
+    print("-" * 85)
     for k in K_VALUES:
         r = results[str(k)]
         t = r["topk"]
         p = r["phasesae"]
-        print(f"{k:>8} | {'Top-K':>12} | {t['ce_loss_recovery']*100:>10.2f}% | {t['explained_variance']:>7.4f} | {t['mse']:>8.4f} | {t['peak_stream_param_slice_mb']:>8.4f} | {'1.0x':>8}")
+        print(
+            f"{k:>8} | {'Top-K':>12} | {t['ce_loss_recovery']*100:>10.2f}% | {t['explained_variance']:>7.4f} | {t['mse']:>8.4f} | {t['peak_stream_param_slice_mb']:>8.4f} | {'1.0x':>8}"
+        )
         bw_str = f"{r['delta']['bandwidth_reduction_factor']:.1f}x"
-        print(f"{k:>8} | {'PhaseSAE':>12} | {p['ce_loss_recovery']*100:>10.2f}% | {p['explained_variance']:>7.4f} | {p['mse']:>8.4f} | {p['peak_stream_param_slice_mb']:>8.4f} | {bw_str:>8}")
-        print("-"*85)
-    print("="*85)
+        print(
+            f"{k:>8} | {'PhaseSAE':>12} | {p['ce_loss_recovery']*100:>10.2f}% | {p['explained_variance']:>7.4f} | {p['mse']:>8.4f} | {p['peak_stream_param_slice_mb']:>8.4f} | {bw_str:>8}"
+        )
+        print("-" * 85)
+    print("=" * 85)
+
 
 if __name__ == "__main__":
     main()

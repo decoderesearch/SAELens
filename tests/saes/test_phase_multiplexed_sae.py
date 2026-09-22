@@ -323,14 +323,20 @@ def test_phase_multiplexed_early_exit_generous_and_strict():
 
     # 1. Test generous early exit (terminates after Phase 0)
     ticks = list(sae_generous.stream_phase_ticks(x_2d))
-    assert len(ticks) == 1, f"Expected 1 phase tick for generous threshold, got {len(ticks)}"
+    assert (
+        len(ticks) == 1
+    ), f"Expected 1 phase tick for generous threshold, got {len(ticks)}"
     assert ticks[0][0] == 0  # Phase 0
 
     acts_2d = sae_generous.encode(x_2d)
     assert acts_2d.shape == (10, d_sae), "Shape preservation failed for encode()"
     # Phase 0 features must be populated, subsequent phases must remain strictly 0
-    assert (acts_2d[:, :m] != 0).any(), "Phase 0 features should have non-zero activations"
-    assert (acts_2d[:, m:] == 0).all(), "Phases 1..P-1 should be strictly 0 after early exit"
+    assert (
+        acts_2d[:, :m] != 0
+    ).any(), "Phase 0 features should have non-zero activations"
+    assert (
+        acts_2d[:, m:] == 0
+    ).all(), "Phases 1..P-1 should be strictly 0 after early exit"
 
     # Shape preservation on decode and forward
     recon_2d = sae_generous.decode(acts_2d)
@@ -364,19 +370,23 @@ def test_phase_multiplexed_early_exit_generous_and_strict():
 
     x_random = torch.randn(10, d_in)
     ticks_strict = list(sae_strict.stream_phase_ticks(x_random))
-    assert len(ticks_strict) == num_phases, (
-        f"Expected {num_phases} ticks for strict threshold, got {len(ticks_strict)}"
-    )
+    assert (
+        len(ticks_strict) == num_phases
+    ), f"Expected {num_phases} ticks for strict threshold, got {len(ticks_strict)}"
 
     acts_strict = sae_strict.encode(x_random)
     assert acts_strict.shape == (10, d_sae)
     # With random input and strict threshold, features beyond phase 0 must be populated
-    assert not (acts_strict[:, m:] == 0).all(), "Strict threshold should execute subsequent phases"
+    assert not (
+        acts_strict[:, m:] == 0
+    ).all(), "Strict threshold should execute subsequent phases"
 
     # 4. Test dynamic threshold parameter override
     # Pass generous exit_threshold dynamically to strict SAE
     acts_dyn = sae_strict.encode(x_2d, exit_threshold=0.9)
-    assert (acts_dyn[:, m:] == 0).all(), "Dynamic generous threshold should early-exit after Phase 0"
+    assert (
+        acts_dyn[:, m:] == 0
+    ).all(), "Dynamic generous threshold should early-exit after Phase 0"
 
 
 def test_phase_multiplexed_training_sae_early_exit():
@@ -423,5 +433,3 @@ def test_phase_multiplexed_training_sae_early_exit():
     assert out.feature_acts.shape == (8, d_sae)
     assert out.metrics["phase_0_l0"] > 0
     assert out.metrics["phase_1_l0"] == 0
-
-

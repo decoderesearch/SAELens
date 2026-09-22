@@ -16,6 +16,10 @@ from sae_lens.saes.matching_pursuit_sae import (
     MatchingPursuitTrainingSAEConfig,
 )
 from sae_lens.saes.matryoshka_batchtopk_sae import MatryoshkaBatchTopKTrainingSAEConfig
+from sae_lens.saes.phase_multiplexed_sae import (
+    PhaseMultiplexedSAEConfig,
+    PhaseMultiplexedTrainingSAEConfig,
+)
 from sae_lens.saes.sae import (
     T_TRAINING_SAE_CONFIG,
     SAEConfig,
@@ -23,10 +27,6 @@ from sae_lens.saes.sae import (
     TrainingSAEConfig,
     TrainStepInput,
     TrainStepOutput,
-)
-from sae_lens.saes.phase_multiplexed_sae import (
-    PhaseMultiplexedSAEConfig,
-    PhaseMultiplexedTrainingSAEConfig,
 )
 from sae_lens.saes.standard_sae import StandardSAEConfig, StandardTrainingSAEConfig
 from sae_lens.saes.temporal_sae import TemporalSAEConfig

@@ -24,6 +24,12 @@ from .matryoshka_batchtopk_sae import (
     MatryoshkaBatchTopKTrainingSAE,
     MatryoshkaBatchTopKTrainingSAEConfig,
 )
+from .phase_multiplexed_sae import (
+    PhaseMultiplexedSAE,
+    PhaseMultiplexedSAEConfig,
+    PhaseMultiplexedTrainingSAE,
+    PhaseMultiplexedTrainingSAEConfig,
+)
 from .sae import SAE, SAEConfig, TrainingSAE, TrainingSAEConfig
 from .standard_sae import (
     StandardSAE,
@@ -37,12 +43,6 @@ from .topk_sae import (
     TopKSAEConfig,
     TopKTrainingSAE,
     TopKTrainingSAEConfig,
-)
-from .phase_multiplexed_sae import (
-    PhaseMultiplexedSAE,
-    PhaseMultiplexedSAEConfig,
-    PhaseMultiplexedTrainingSAE,
-    PhaseMultiplexedTrainingSAEConfig,
 )
 from .transcoder import (
     JumpReLUSkipTranscoder,

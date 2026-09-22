@@ -10,9 +10,9 @@ prior phases, enforcing progressive orthogonalization while keeping peak streami
 memory bandwidth bounded to 1/P.
 """
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 import torch
 from torch import nn
@@ -54,9 +54,9 @@ class PhaseMultiplexedSAEConfig(SAEConfig):
 
     num_phases: int = 4
     k_per_phase: int = 8
-    phase_mode: Literal[
-        "cascaded_ticks", "sequence_tdm", "resonant_clock"
-    ] = "cascaded_ticks"
+    phase_mode: Literal["cascaded_ticks", "sequence_tdm", "resonant_clock"] = (
+        "cascaded_ticks"
+    )
     rescale_acts_by_decoder_norm: bool = False
     use_sparse_activations: bool = False
     exit_threshold: float | None = None
@@ -259,9 +259,9 @@ class PhaseMultiplexedTrainingSAEConfig(TrainingSAEConfig):
 
     num_phases: int = 4
     k_per_phase: int = 8
-    phase_mode: Literal[
-        "cascaded_ticks", "sequence_tdm", "resonant_clock"
-    ] = "cascaded_ticks"
+    phase_mode: Literal["cascaded_ticks", "sequence_tdm", "resonant_clock"] = (
+        "cascaded_ticks"
+    )
     rescale_acts_by_decoder_norm: bool = False
     use_sparse_activations: bool = False
     aux_loss_coefficient: float = 1.0
@@ -419,7 +419,6 @@ class PhaseMultiplexedTrainingSAE(TrainingSAE[PhaseMultiplexedTrainingSAEConfig]
                 )
                 if (residual_ratio < threshold).all():
                     break
-
 
     @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:

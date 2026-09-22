@@ -17,12 +17,13 @@ Usage:
 import json
 import time
 from pathlib import Path
+
 import torch
 
 from sae_lens.llm_sae_training_runner import LanguageModelSAETrainingRunner
 from tests.helpers import (
-    TINYSTORIES_MODEL,
     NEEL_NANDA_C4_10K_DATASET,
+    TINYSTORIES_MODEL,
     build_phase_multiplexed_runner_cfg,
     load_model_cached,
 )
@@ -45,6 +46,7 @@ OUT_FILE = ARTIFACT_DIR / "adaptive_early_exit_results.json"
 
 def get_eval_activations(model, n_tokens):
     from datasets import load_dataset
+
     dataset = load_dataset(NEEL_NANDA_C4_10K_DATASET, split="train", streaming=True)
     all_acts = []
     for ex in dataset:
@@ -92,7 +94,9 @@ def main():
     sae = runner.run()
     print(f"   PhaseSAE training finished in {time.time() - t0:.1f}s")
 
-    print(f"\n3. Collecting {N_TOKENS_EVAL} activations for anytime early-exit evaluation …")
+    print(
+        f"\n3. Collecting {N_TOKENS_EVAL} activations for anytime early-exit evaluation …"
+    )
     acts = get_eval_activations(model, N_TOKENS_EVAL)
     ss_tot = (acts - acts.mean(0, keepdim=True)).pow(2).sum().item()
 
@@ -104,9 +108,11 @@ def main():
     # Each tick: (p, acts_p, recon_p, cur_residual)
 
     results = {}
-    print("\n" + "="*80)
-    print(f"{'Exit Thresh':>12} | {'R²':>7} | {'MSE':>8} | {'Avg Phases':>10} | {'Avg L0':>8} | {'Speedup':>8}")
-    print("-"*80)
+    print("\n" + "=" * 80)
+    print(
+        f"{'Exit Thresh':>12} | {'R²':>7} | {'MSE':>8} | {'Avg Phases':>10} | {'Avg L0':>8} | {'Speedup':>8}"
+    )
+    print("-" * 80)
 
     base_phases = float(NUM_PHASES)
     N = acts.shape[0]
@@ -125,7 +131,7 @@ def main():
                 # Accumulate for active tokens
                 mask = token_active.unsqueeze(-1)
                 final_recon += recon_p * mask.float()
-                final_acts[:, p*m:(p+1)*m] = acts_p * mask.float()
+                final_acts[:, p * m : (p + 1) * m] = acts_p * mask.float()
                 phases_per_token[token_active] += 1
 
                 if thresh is not None:
@@ -154,13 +160,16 @@ def main():
             "effective_compute_speedup": float(speedup),
         }
 
-        print(f"{label:>12} | {r2:>7.4f} | {mse:>8.5f} | {avg_phases:>10.2f} | {avg_l0:>8.2f} | {speedup:>7.2f}x")
+        print(
+            f"{label:>12} | {r2:>7.4f} | {mse:>8.5f} | {avg_phases:>10.2f} | {avg_l0:>8.2f} | {speedup:>7.2f}x"
+        )
 
-    print("="*80)
+    print("=" * 80)
 
     with open(OUT_FILE, "w") as f:
         json.dump(results, f, indent=2)
     print(f"\nSaved adaptive early-exit benchmark results → {OUT_FILE}")
+
 
 if __name__ == "__main__":
     main()
