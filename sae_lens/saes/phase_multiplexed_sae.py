@@ -59,6 +59,7 @@ class PhaseMultiplexedSAEConfig(SAEConfig):
     ] = "cascaded_ticks"
     rescale_acts_by_decoder_norm: bool = False
     use_sparse_activations: bool = False
+    exit_threshold: float | None = None
 
     @override
     @classmethod
@@ -117,7 +118,10 @@ class PhaseMultiplexedSAE(SAE[PhaseMultiplexedSAEConfig]):
         )
 
     @override
-    def encode(self, x: torch.Tensor) -> torch.Tensor:
+    @override
+    def encode(
+        self, x: torch.Tensor, exit_threshold: float | None = None
+    ) -> torch.Tensor:
         """Converts input x into feature activations via cascaded phase micro-ticks."""
         sae_in = self.process_sae_in(x)
         cur_residual = sae_in
@@ -126,6 +130,9 @@ class PhaseMultiplexedSAE(SAE[PhaseMultiplexedSAEConfig]):
             *x.shape[:-1], self.cfg.d_sae, dtype=self.dtype, device=x.device
         )
 
+        threshold = (
+            exit_threshold if exit_threshold is not None else self.cfg.exit_threshold
+        )
         m = self.cfg.d_sae_per_phase
         for p in range(self.cfg.num_phases):
             start_idx = p * m
@@ -151,10 +158,17 @@ class PhaseMultiplexedSAE(SAE[PhaseMultiplexedSAEConfig]):
             accumulated_recon = accumulated_recon + recon_p
             cur_residual = sae_in - accumulated_recon
 
+            if threshold is not None:
+                residual_ratio = cur_residual.norm(dim=-1) / (
+                    sae_in.norm(dim=-1) + 1e-8
+                )
+                if (residual_ratio < threshold).all():
+                    break
+
         return self.hook_sae_acts_post(feature_acts)
 
     def stream_phase_ticks(
-        self, x: torch.Tensor
+        self, x: torch.Tensor, exit_threshold: float | None = None
     ) -> Generator[tuple[int, torch.Tensor, torch.Tensor, torch.Tensor], None, None]:
         """Time-Division Multiplexing generator.
 
@@ -165,6 +179,9 @@ class PhaseMultiplexedSAE(SAE[PhaseMultiplexedSAEConfig]):
         cur_residual = sae_in
         accumulated_recon = torch.zeros_like(sae_in)
         m = self.cfg.d_sae_per_phase
+        threshold = (
+            exit_threshold if exit_threshold is not None else self.cfg.exit_threshold
+        )
 
         for p in range(self.cfg.num_phases):
             start_idx = p * m
@@ -187,6 +204,13 @@ class PhaseMultiplexedSAE(SAE[PhaseMultiplexedSAEConfig]):
 
             yield (p, acts_p, recon_p, cur_residual)
 
+            if threshold is not None:
+                residual_ratio = cur_residual.norm(dim=-1) / (
+                    sae_in.norm(dim=-1) + 1e-8
+                )
+                if (residual_ratio < threshold).all():
+                    break
+
     @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """Decode feature activations back to the input space."""
@@ -200,14 +224,16 @@ class PhaseMultiplexedSAE(SAE[PhaseMultiplexedSAEConfig]):
         return self.reshape_fn_out(sae_out_pre, self.d_head)
 
     @override
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        feature_acts = self.encode(x)
+    def forward(
+        self, x: torch.Tensor, exit_threshold: float | None = None
+    ) -> torch.Tensor:
+        feature_acts = self.encode(x, exit_threshold=exit_threshold)
         sae_out = self.decode(feature_acts)
 
         if self.use_error_term:
             with torch.no_grad():
                 with _disable_hooks(self):
-                    feature_acts_clean = self.encode(x)
+                    feature_acts_clean = self.encode(x, exit_threshold=exit_threshold)
                     x_reconstruct_clean = self.decode(feature_acts_clean)
                 sae_error = self.hook_sae_error(x - x_reconstruct_clean)
             sae_out = sae_out + sae_error
@@ -239,6 +265,7 @@ class PhaseMultiplexedTrainingSAEConfig(TrainingSAEConfig):
     rescale_acts_by_decoder_norm: bool = False
     use_sparse_activations: bool = False
     aux_loss_coefficient: float = 1.0
+    exit_threshold: float | None = None
 
     @override
     @classmethod
@@ -296,7 +323,7 @@ class PhaseMultiplexedTrainingSAE(TrainingSAE[PhaseMultiplexedTrainingSAEConfig]
 
     @override
     def encode_with_hidden_pre(
-        self, x: torch.Tensor
+        self, x: torch.Tensor, exit_threshold: float | None = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         sae_in = self.process_sae_in(x)
         cur_residual = sae_in
@@ -308,6 +335,9 @@ class PhaseMultiplexedTrainingSAE(TrainingSAE[PhaseMultiplexedTrainingSAEConfig]
             *x.shape[:-1], self.cfg.d_sae, dtype=self.dtype, device=x.device
         )
 
+        threshold = (
+            exit_threshold if exit_threshold is not None else self.cfg.exit_threshold
+        )
         m = self.cfg.d_sae_per_phase
         for p in range(self.cfg.num_phases):
             start_idx = p * m
@@ -331,24 +361,36 @@ class PhaseMultiplexedTrainingSAE(TrainingSAE[PhaseMultiplexedTrainingSAEConfig]
             accumulated_recon = accumulated_recon + recon_p
             cur_residual = sae_in - accumulated_recon
 
+            if threshold is not None:
+                residual_ratio = cur_residual.norm(dim=-1) / (
+                    sae_in.norm(dim=-1) + 1e-8
+                )
+                if (residual_ratio < threshold).all():
+                    break
+
         return (
             self.hook_sae_acts_post(feature_acts),
             self.hook_sae_acts_pre(hidden_pre),
         )
 
     @override
-    def encode(self, x: torch.Tensor) -> torch.Tensor:
-        acts, _ = self.encode_with_hidden_pre(x)
+    def encode(
+        self, x: torch.Tensor, exit_threshold: float | None = None
+    ) -> torch.Tensor:
+        acts, _ = self.encode_with_hidden_pre(x, exit_threshold=exit_threshold)
         return acts
 
     def stream_phase_ticks(
-        self, x: torch.Tensor
+        self, x: torch.Tensor, exit_threshold: float | None = None
     ) -> Generator[tuple[int, torch.Tensor, torch.Tensor, torch.Tensor], None, None]:
         """Time-Division Multiplexing generator for training SAE."""
         sae_in = self.process_sae_in(x)
         cur_residual = sae_in
         accumulated_recon = torch.zeros_like(sae_in)
         m = self.cfg.d_sae_per_phase
+        threshold = (
+            exit_threshold if exit_threshold is not None else self.cfg.exit_threshold
+        )
 
         for p in range(self.cfg.num_phases):
             start_idx = p * m
@@ -370,6 +412,13 @@ class PhaseMultiplexedTrainingSAE(TrainingSAE[PhaseMultiplexedTrainingSAEConfig]
             cur_residual = sae_in - accumulated_recon
 
             yield (p, acts_p, recon_p, cur_residual)
+
+            if threshold is not None:
+                residual_ratio = cur_residual.norm(dim=-1) / (
+                    sae_in.norm(dim=-1) + 1e-8
+                )
+                if (residual_ratio < threshold).all():
+                    break
 
 
     @override

@@ -275,3 +275,153 @@ def test_phase_multiplexed_latency_vs_bandwidth_tradeoff():
     # Verify that micro-ticks run sequentially and yield num_phases ticks
     assert len(residual_norms) == num_phases
 
+
+def test_phase_multiplexed_config_exit_threshold():
+    # Default is None
+    cfg = PhaseMultiplexedSAEConfig(d_in=32, d_sae=128, num_phases=4, k_per_phase=4)
+    assert cfg.exit_threshold is None
+
+    # Custom threshold
+    cfg_with_threshold = PhaseMultiplexedSAEConfig(
+        d_in=32, d_sae=128, num_phases=4, k_per_phase=4, exit_threshold=0.05
+    )
+    assert cfg_with_threshold.exit_threshold == 0.05
+
+    # Training config
+    tr_cfg = PhaseMultiplexedTrainingSAEConfig(
+        d_in=32, d_sae=128, num_phases=4, k_per_phase=4, exit_threshold=0.1
+    )
+    assert tr_cfg.exit_threshold == 0.1
+
+
+def test_phase_multiplexed_early_exit_generous_and_strict():
+    d_in = 32
+    d_sae = 128
+    num_phases = 4
+    k_per_phase = 4
+    m = d_sae // num_phases  # 32
+
+    # Generous configuration (exit_threshold=0.9)
+    cfg_generous = PhaseMultiplexedSAEConfig(
+        d_in=d_in,
+        d_sae=d_sae,
+        num_phases=num_phases,
+        k_per_phase=k_per_phase,
+        exit_threshold=0.9,
+    )
+    sae_generous = PhaseMultiplexedSAE(cfg_generous)
+    # Unit-norm normalize decoder weights to ensure well-behaved projections
+    sae_generous.W_dec.data = sae_generous.W_dec.data / sae_generous.W_dec.data.norm(
+        dim=-1, keepdim=True
+    )
+    sae_generous.W_enc.data = sae_generous.W_dec.data.T.clone()
+
+    # Synthetic input constructed from Phase 0 features so that Phase 0 achieves < 0.9 residual ratio
+    target_acts = torch.zeros(10, d_sae)
+    target_acts[:, :k_per_phase] = torch.rand(10, k_per_phase) + 1.0
+    x_2d = target_acts @ sae_generous.W_dec
+
+    # 1. Test generous early exit (terminates after Phase 0)
+    ticks = list(sae_generous.stream_phase_ticks(x_2d))
+    assert len(ticks) == 1, f"Expected 1 phase tick for generous threshold, got {len(ticks)}"
+    assert ticks[0][0] == 0  # Phase 0
+
+    acts_2d = sae_generous.encode(x_2d)
+    assert acts_2d.shape == (10, d_sae), "Shape preservation failed for encode()"
+    # Phase 0 features must be populated, subsequent phases must remain strictly 0
+    assert (acts_2d[:, :m] != 0).any(), "Phase 0 features should have non-zero activations"
+    assert (acts_2d[:, m:] == 0).all(), "Phases 1..P-1 should be strictly 0 after early exit"
+
+    # Shape preservation on decode and forward
+    recon_2d = sae_generous.decode(acts_2d)
+    out_2d = sae_generous(x_2d)
+    assert recon_2d.shape == (10, d_in)
+    assert out_2d.shape == (10, d_in)
+
+    # Numerical invariant: decode output equals partial phase-0 reconstruction
+    expected_recon = acts_2d[:, :m] @ sae_generous.W_dec[:m, :]
+    assert torch.allclose(recon_2d, expected_recon, atol=1e-5)
+
+    # 2. Test 3D batch shape preservation with generous exit
+    x_3d = x_2d.unsqueeze(1).expand(-1, 5, -1)  # [10, 5, d_in]
+    acts_3d = sae_generous.encode(x_3d)
+    out_3d = sae_generous(x_3d)
+    assert acts_3d.shape == (10, 5, d_sae)
+    assert out_3d.shape == (10, 5, d_in)
+    assert (acts_3d[..., m:] == 0).all()
+
+    # 3. Test strict configuration (exit_threshold=0.001) - runs all phases
+    cfg_strict = PhaseMultiplexedSAEConfig(
+        d_in=d_in,
+        d_sae=d_sae,
+        num_phases=num_phases,
+        k_per_phase=k_per_phase,
+        exit_threshold=0.001,
+    )
+    sae_strict = PhaseMultiplexedSAE(cfg_strict)
+    sae_strict.W_dec.data = sae_generous.W_dec.data.clone()
+    sae_strict.W_enc.data = sae_generous.W_enc.data.clone()
+
+    x_random = torch.randn(10, d_in)
+    ticks_strict = list(sae_strict.stream_phase_ticks(x_random))
+    assert len(ticks_strict) == num_phases, (
+        f"Expected {num_phases} ticks for strict threshold, got {len(ticks_strict)}"
+    )
+
+    acts_strict = sae_strict.encode(x_random)
+    assert acts_strict.shape == (10, d_sae)
+    # With random input and strict threshold, features beyond phase 0 must be populated
+    assert not (acts_strict[:, m:] == 0).all(), "Strict threshold should execute subsequent phases"
+
+    # 4. Test dynamic threshold parameter override
+    # Pass generous exit_threshold dynamically to strict SAE
+    acts_dyn = sae_strict.encode(x_2d, exit_threshold=0.9)
+    assert (acts_dyn[:, m:] == 0).all(), "Dynamic generous threshold should early-exit after Phase 0"
+
+
+def test_phase_multiplexed_training_sae_early_exit():
+    d_in = 32
+    d_sae = 128
+    num_phases = 4
+    k_per_phase = 4
+    m = d_sae // num_phases
+
+    # Generous training config
+    tr_cfg_generous = PhaseMultiplexedTrainingSAEConfig(
+        d_in=d_in,
+        d_sae=d_sae,
+        num_phases=num_phases,
+        k_per_phase=k_per_phase,
+        exit_threshold=0.9,
+        dtype="float32",
+        device="cpu",
+    )
+    tr_sae = PhaseMultiplexedTrainingSAE(tr_cfg_generous)
+    tr_sae.W_dec.data = tr_sae.W_dec.data / tr_sae.W_dec.data.norm(dim=-1, keepdim=True)
+    tr_sae.W_enc.data = tr_sae.W_dec.data.T.clone()
+
+    target_acts = torch.zeros(8, d_sae)
+    target_acts[:, :k_per_phase] = torch.rand(8, k_per_phase) + 1.0
+    x = target_acts @ tr_sae.W_dec
+
+    feature_acts, hidden_pre = tr_sae.encode_with_hidden_pre(x)
+    assert feature_acts.shape == (8, d_sae)
+    assert hidden_pre.shape == (8, d_sae)
+    assert (feature_acts[:, m:] == 0).all()
+    assert (hidden_pre[:, m:] == 0).all()
+
+    # Verify training forward pass with logging
+    step_input = TrainStepInput(
+        sae_in=x,
+        coefficients={},
+        dead_neuron_mask=None,
+        n_training_steps=1,
+        is_logging_step=True,
+    )
+    out = tr_sae.training_forward_pass(step_input)
+    assert out.sae_out.shape == (8, d_in)
+    assert out.feature_acts.shape == (8, d_sae)
+    assert out.metrics["phase_0_l0"] > 0
+    assert out.metrics["phase_1_l0"] == 0
+
+
