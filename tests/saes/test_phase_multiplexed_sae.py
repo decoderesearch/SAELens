@@ -257,7 +257,7 @@ def test_phase_multiplexed_latency_vs_bandwidth_tradeoff():
     tile_param_bytes = full_param_bytes // num_phases
 
     residual_norms = []
-    for phase_idx, acts_p, recon_p, cur_residual in sae.stream_phase_ticks(x):
+    for _, acts_p, _, cur_residual in sae.stream_phase_ticks(x):
         # 1. Parameter slice bandwidth per micro-tick is exactly 1/P
         m = cfg.d_sae_per_phase
         w_enc_slice_bytes = (d_in * m) * 4
@@ -431,5 +431,5 @@ def test_phase_multiplexed_training_sae_early_exit():
     out = tr_sae.training_forward_pass(step_input)
     assert out.sae_out.shape == (8, d_in)
     assert out.feature_acts.shape == (8, d_sae)
-    assert out.metrics["phase_0_l0"] > 0
-    assert out.metrics["phase_1_l0"] == 0
+    assert float(out.metrics["phase_0_l0"]) > 0  # type: ignore
+    assert float(out.metrics["phase_1_l0"]) == 0  # type: ignore

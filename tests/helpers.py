@@ -482,7 +482,7 @@ def build_phase_multiplexed_runner_cfg(
     **kwargs: Any,
 ) -> LanguageModelSAERunnerConfig[PhaseMultiplexedTrainingSAEConfig]:
     """Helper to create a mock instance for PhaseMultiplexed SAE."""
-    default_sae_config: TrainingSAEConfigDict = {
+    default_sae_config: dict[str, Any] = {
         "d_in": 64,
         "d_sae": 256,
         "dtype": "float32",
@@ -498,7 +498,7 @@ def build_phase_multiplexed_runner_cfg(
         k: v for k, v in kwargs.items() if k in TrainingSAEConfigDict.__annotations__
     }
     temp_sae_config = {**default_sae_config, **temp_sae_overrides}
-    final_default_sae_config = cast(dict[str, Any], temp_sae_config)
+    final_default_sae_config = temp_sae_config
 
     runner_cfg = _build_runner_config(
         PhaseMultiplexedTrainingSAEConfig,
@@ -510,7 +510,7 @@ def build_phase_multiplexed_runner_cfg(
 
 
 def build_phase_multiplexed_sae_cfg(**kwargs: Any) -> PhaseMultiplexedSAEConfig:
-    default_sae_config: SAEConfigDict = {
+    default_sae_config: dict[str, Any] = {
         "d_in": 64,
         "d_sae": 256,
         "num_phases": 4,
