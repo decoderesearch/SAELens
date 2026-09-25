@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.51.3 (2026-09-25)
+
+### Fix
+
+* fix: fix attn only hooked sae transformer (#741) ([`1de2390`](https://github.com/decoderesearch/SAELens/commit/1de2390cafcb2061532047b96810bb8044181121))
+
 ## v6.51.2 (2026-09-24)
 
 ### Fix
