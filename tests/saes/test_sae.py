@@ -791,3 +791,74 @@ def test_from_pretrained_folds_norm_scaling_factor(tmp_path: Path):
     assert_close(loaded_sae.W_dec, original_W_dec / scaling_factor)
     assert_close(loaded_sae.b_dec, original_b_dec / scaling_factor)
     assert loaded_sae.cfg.normalize_activations == "none"
+
+
+@pytest.mark.parametrize("architecture", ALL_FOLDABLE_ARCHITECTURES)
+def test_SAE_load_from_disk_fold_W_dec_norm_matches_loading_then_folding(
+    tmp_path: Path, architecture: str
+):
+    cfg = build_sae_training_cfg_for_arch(architecture, d_in=16, d_sae=32)
+    sae = TrainingSAE.from_dict(cfg.to_dict())
+    random_params(sae)
+    sae.save_model(tmp_path)
+
+    folded_on_load = SAE.load_from_disk(tmp_path, device="cpu", fold_W_dec_norm=True)
+    folded_afterwards = SAE.load_from_disk(tmp_path, device="cpu")
+    folded_afterwards.fold_W_dec_norm()
+
+    for name, param in folded_on_load.named_parameters():
+        assert_close(param, dict(folded_afterwards.named_parameters())[name])
+
+
+def test_SAE_load_from_disk_leaves_decoder_norms_alone_by_default(tmp_path: Path):
+    cfg = build_sae_training_cfg_for_arch("standard", d_in=16, d_sae=32)
+    sae = TrainingSAE.from_dict(cfg.to_dict())
+    random_params(sae)
+    sae.save_model(tmp_path)
+    saved_norms = sae.get_W_dec_norm().clone()
+
+    loaded = SAE.load_from_disk(tmp_path, device="cpu")
+
+    # random params give non-unit decoder norms, so an accidental fold would show
+    assert saved_norms.sub(1.0).abs().max().item() > 1e-3
+    assert_close(loaded.get_W_dec_norm(), saved_norms)
+
+
+def test_SAE_load_from_disk_fold_W_dec_norm_preserves_output_and_unit_norms(
+    tmp_path: Path,
+):
+    cfg = build_sae_training_cfg_for_arch("standard", d_in=16, d_sae=32)
+    sae = TrainingSAE.from_dict(cfg.to_dict())
+    random_params(sae)
+    sae.save_model(tmp_path)
+
+    unfolded = SAE.load_from_disk(tmp_path, device="cpu")
+    folded = SAE.load_from_disk(tmp_path, device="cpu", fold_W_dec_norm=True)
+
+    activations = torch.randn(64, 16)
+    # folding is a reparameterization: the reconstruction is unchanged, while
+    # feature activations become comparable across features
+    assert_close(folded(activations), unfolded(activations), atol=1e-5)
+    assert_close(folded.get_W_dec_norm(), torch.ones(32), atol=1e-6)
+    assert not torch.allclose(
+        folded.encode(activations), unfolded.encode(activations), atol=1e-5
+    )
+
+
+def test_SAE_load_from_disk_fold_W_dec_norm_propagates_refusal_for_topk(
+    tmp_path: Path,
+):
+    # topk rejects folding unless rescale_acts_by_decoder_norm is set, because
+    # rescaling activations can change which features survive the top-k
+    cfg = build_sae_training_cfg_for_arch(
+        "topk", d_in=16, d_sae=32, rescale_acts_by_decoder_norm=False
+    )
+    sae = TrainingSAE.from_dict(cfg.to_dict())
+    random_params(sae)
+    sae.save_model(tmp_path)
+
+    with pytest.raises(NotImplementedError, match="rescale_acts_by_decoder_norm"):
+        SAE.load_from_disk(tmp_path, device="cpu", fold_W_dec_norm=True)
+
+    # and loads fine without it, which is why the flag defaults to off
+    assert SAE.load_from_disk(tmp_path, device="cpu") is not None

@@ -41,6 +41,43 @@ sae = SAE.load_from_disk(
 )
 ```
 
+### Folding Decoder Norms
+
+Most SAEs are not trained with a unit-norm decoder. When decoder rows have different
+lengths, a feature's activation magnitude and the length of its decoder direction are
+entangled, so activations are not comparable between features, and analyses that assume
+a unit-norm decoder will not reproduce. This is a common source of confusion when trying
+to match [Neuronpedia](https://neuronpedia.org) dashboards, whose values are computed
+after folding.
+
+`fold_W_dec_norm()` rescales every decoder row to unit norm and moves that norm into the
+encoder weights and biases. It is a reparameterization: the SAE's reconstruction is
+unchanged, while feature activations are rescaled onto a comparable footing. Pass
+`fold_W_dec_norm=True` to fold at load time:
+
+```python
+sae = SAE.from_pretrained(
+    release="gemma-scope-2b-pt-res-canonical",
+    sae_id="layer_12/width_16k/canonical",
+    fold_W_dec_norm=True,
+)
+
+# equivalent to
+sae = SAE.from_pretrained(...)
+sae.fold_W_dec_norm()
+```
+
+The flag defaults to `False`, and is not merely a conservative default: folding is not
+defined for every architecture.
+
+- `standard`, `gated` and `jumprelu` support it.
+- `matching_pursuit` and `temporal` reject it outright.
+- `topk` rejects it unless the SAE was configured with `rescale_acts_by_decoder_norm`,
+  because rescaling activations can change which features survive the top-k.
+
+Requesting a fold on an SAE that does not support it raises `NotImplementedError` rather
+than silently returning differently-scaled weights.
+
 ## Running SAEs Directly
 
 The SAE class provides three main methods for inference: `encode()`, `decode()`, and `forward()`.
