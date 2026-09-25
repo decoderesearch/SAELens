@@ -372,7 +372,7 @@ def test_training_sae_fold_w_dec_norm_all_architectures(architecture: str):
     assert sae.W_dec.norm(dim=-1).mean().item() != pytest.approx(1.0, abs=1e-6)
     sae2 = deepcopy(sae)
 
-    if architecture in {"matching_pursuit"}:
+    if architecture in {"matching_pursuit", "phase_multiplexed"}:
         with pytest.raises(NotImplementedError):
             sae2.fold_W_dec_norm()
         return
@@ -532,7 +532,7 @@ def test_training_fold_W_dec_norm_does_not_produce_nan_with_zero_norm_decoder(
 
     # Call fold_W_dec_norm - this should not produce NaN values
 
-    if architecture in {"matching_pursuit"}:
+    if architecture in {"matching_pursuit", "phase_multiplexed"}:
         with pytest.raises(NotImplementedError):
             sae.fold_W_dec_norm()
         return

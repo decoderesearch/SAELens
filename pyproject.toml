@@ -104,7 +104,7 @@ reportUnknownLambdaType = "none"
 reportPrivateUsage = "none"
 reportDeprecated = "none"
 reportPrivateImportUsage = "none"
-ignore = ["**/wandb/**"]
+ignore = ["**/wandb/**", "benchmark/**"]
 
 [tool.semantic_release]
 version_variables = ["sae_lens/__init__.py:__version__"]
