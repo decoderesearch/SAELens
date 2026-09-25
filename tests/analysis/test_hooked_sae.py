@@ -2,13 +2,21 @@
 import einops
 import pytest
 import torch
-from transformer_lens import HookedTransformer
 from transformer_lens.hook_points import HookPoint
 
-from sae_lens import HookedSAETransformer
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.saes.sae import SAE, SAEMetadata
 from sae_lens.saes.standard_sae import StandardSAE, StandardSAEConfig
 from tests.helpers import assert_close
+
+if not has_hooked_transformer():
+    pytest.skip(
+        "HookedTransformer was removed in transformer-lens 4.0", allow_module_level=True
+    )
+
+from transformer_lens import HookedTransformer
+
+from sae_lens import HookedSAETransformer
 
 MODEL = "solu-1l"
 prompt = "Hello World!"

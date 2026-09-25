@@ -1,12 +1,13 @@
+from __future__ import annotations
+
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import torch
 from datasets import Dataset
 from safetensors.torch import load_file
-from transformer_lens import HookedTransformer
 
 from sae_lens import (
     MultiSAETrainingRunner,
@@ -14,6 +15,7 @@ from sae_lens import (
     StandardTrainingSAEConfig,
     TopKTrainingSAEConfig,
 )
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.config import LoggingConfig
 from sae_lens.multi_sae_training_runner import InterruptedException, PerSAEEvaluator
 from sae_lens.saes.sae import TrainingSAE, TrainingSAEConfig
@@ -21,6 +23,9 @@ from sae_lens.saes.standard_sae import StandardTrainingSAE
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.multi_sae_trainer import MultiSAETrainer
 from tests.helpers import TINYSTORIES_MODEL, load_model_cached
+
+if TYPE_CHECKING or has_hooked_transformer():
+    from transformer_lens import HookedTransformer
 
 
 @pytest.fixture

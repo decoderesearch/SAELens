@@ -1,13 +1,16 @@
+from __future__ import annotations
+
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import torch
 from safetensors.torch import load_file
-from transformer_lens import HookedTransformer
+from transformers import AutoModelForCausalLM
 
 from sae_lens import __version__
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.config import LanguageModelSAERunnerConfig
 from sae_lens.constants import (
     ACTIVATIONS_STORE_STATE_FILENAME,
@@ -33,7 +36,12 @@ from tests.helpers import (
     TINYSTORIES_MODEL,
     assert_close,
     build_runner_cfg_for_arch,
+    requires_hooked_transformer,
+    requires_transformer_bridge,
 )
+
+if TYPE_CHECKING or has_hooked_transformer():
+    from transformer_lens import HookedTransformer
 
 
 @pytest.mark.parametrize("architecture", ALL_TRAINING_ARCHITECTURES)
@@ -122,6 +130,45 @@ def test_LanguageModelSAETrainingRunner_runs_and_saves_all_architectures(
         runner_cfg = json.load(f)
     # json turns tuples into lists, so just dump and load the metadata to make things consistent
     assert runner_cfg == json.loads(json.dumps(cfg.to_dict()))
+
+
+@requires_transformer_bridge
+def test_LanguageModelSAETrainingRunner_trains_on_unprocessed_transformer_bridge_activations(
+    tmp_path: Path,
+):
+    cfg = build_runner_cfg_for_arch(
+        d_in=64,
+        d_sae=128,
+        architecture="standard",
+        checkpoint_path=str(tmp_path),
+        training_tokens=100,
+        store_batch_size_prompts=2,
+        train_batch_size_tokens=4,
+        model_batch_size=1,
+        context_size=10,
+        n_batches_in_buffer=2,
+        dataset_path=NEEL_NANDA_C4_10K_DATASET,
+        hook_name="blocks.1.hook_resid_post",
+        model_name=TINYSTORIES_MODEL,
+        model_class_name="TransformerBridge",
+        n_checkpoints=0,
+        output_path=str(tmp_path / "test_output"),
+        n_batches_for_norm_estimate=10,
+    )
+    runner = LanguageModelSAETrainingRunner(cfg)
+
+    tokens = runner.activations_store.get_batch_tokens()
+    acts = runner.activations_store.get_activations(tokens)
+    hf_model = AutoModelForCausalLM.from_pretrained("roneneldan/TinyStories-1M")
+    hf_hidden_states = hf_model(tokens, output_hidden_states=True).hidden_states
+    assert_close(acts, hf_hidden_states[2], atol=1e-5)
+
+    sae = runner.run()
+
+    assert sae.cfg.metadata.model_class_name == "TransformerBridge"
+    assert sae.cfg.metadata.model_from_pretrained_kwargs == {}
+    loaded_sae = SAE.load_from_disk(tmp_path / "test_output")
+    assert_close(loaded_sae.W_dec, sae.W_dec)
 
 
 @pytest.mark.parametrize("prefetch_llm_batches", [True, 2])
@@ -806,6 +853,7 @@ def test_LanguageModelSAETrainingRunner_skips_save_final_sae_when_output_path_no
     assert not Path("output").exists()
 
 
+@requires_hooked_transformer
 class TestResumeFromCheckpoint:
     """Tests for the resume_from_checkpoint functionality."""
 

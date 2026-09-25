@@ -1,11 +1,11 @@
 import copy
 from collections.abc import Sequence
-from typing import Any, Literal, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
 
 import pytest
 import torch
-from transformer_lens import HookedTransformer
 
+from sae_lens.analysis.compat import has_hooked_transformer, has_transformer_bridge
 from sae_lens.config import LanguageModelSAERunnerConfig, LoggingConfig
 from sae_lens.registry import SAE_TRAINING_CLASS_REGISTRY
 from sae_lens.saes.batchtopk_sae import BatchTopKTrainingSAEConfig
@@ -27,6 +27,18 @@ from sae_lens.saes.sae import (
 from sae_lens.saes.standard_sae import StandardSAEConfig, StandardTrainingSAEConfig
 from sae_lens.saes.temporal_sae import TemporalSAEConfig
 from sae_lens.saes.topk_sae import TopKSAEConfig, TopKTrainingSAEConfig
+
+if TYPE_CHECKING or has_hooked_transformer():
+    from transformer_lens import HookedTransformer
+
+requires_hooked_transformer = pytest.mark.skipif(
+    not has_hooked_transformer(),
+    reason="HookedTransformer was removed in transformer-lens 4.0",
+)
+requires_transformer_bridge = pytest.mark.skipif(
+    not has_transformer_bridge(),
+    reason="TransformerBridge requires transformer-lens v3+",
+)
 
 TINYSTORIES_MODEL = "tiny-stories-1M"
 NEEL_NANDA_C4_10K_DATASET = "NeelNanda/c4-10k"
@@ -617,14 +629,16 @@ def build_matryoshka_batchtopk_sae_training_cfg(
     return build_matryoshka_batchtopk_runner_cfg(**kwargs).sae  # type: ignore
 
 
-MODEL_CACHE: dict[str, HookedTransformer] = {}
+MODEL_CACHE: dict[str, "HookedTransformer"] = {}
 
 
-def load_model_cached(model_name: str) -> HookedTransformer:
+def load_model_cached(model_name: str) -> "HookedTransformer":
     """
     helper to avoid unnecessarily loading the same model multiple times.
     NOTE: if the model gets modified in tests this will not work.
     """
+    if not has_hooked_transformer():
+        pytest.skip("HookedTransformer was removed in transformer-lens 4.0")
     if model_name not in MODEL_CACHE:
         MODEL_CACHE[model_name] = HookedTransformer.from_pretrained(
             model_name, device="cpu"

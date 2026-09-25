@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 import torch
-from transformer_lens import HookedTransformer
 
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.util import (
     cosine_similarities,
     dtype_to_str,
@@ -15,6 +18,9 @@ from sae_lens.util import (
     str_to_dtype,
     temporary_seed,
 )
+
+if TYPE_CHECKING or has_hooked_transformer():
+    from transformer_lens import HookedTransformer
 
 
 @pytest.mark.parametrize(

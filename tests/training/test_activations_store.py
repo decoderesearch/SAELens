@@ -1,16 +1,19 @@
+from __future__ import annotations
+
 import os
 import tempfile
 from collections.abc import Iterable
 from math import ceil
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 import torch
 from datasets import Dataset
 from safetensors.torch import load_file
-from transformer_lens import HookedTransformer
 from transformers import AutoTokenizer
 
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.config import LanguageModelSAERunnerConfig, PretokenizeRunnerConfig
 from sae_lens.load_model import load_model
 from sae_lens.pretokenize_runner import pretokenize_dataset
@@ -28,7 +31,11 @@ from tests.helpers import (
     assert_not_close,
     build_runner_cfg,
     load_model_cached,
+    requires_hooked_transformer,
 )
+
+if TYPE_CHECKING or has_hooked_transformer():
+    from transformer_lens import HookedTransformer
 
 
 def hf_to_tokens(
@@ -227,6 +234,7 @@ def test_activations_store__get_activations__autocast_lm_runs_the_llm_in_bfloat1
     assert_close(autocast_activations, activations, atol=3e-3)
 
 
+@requires_hooked_transformer
 def test_activations_store__get_activations__gives_same_results_with_hf_model_and_tlens_model():
     hf_model = load_model(
         model_class_name="AutoModelForCausalLM",

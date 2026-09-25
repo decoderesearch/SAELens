@@ -2,9 +2,21 @@
 
 import pytest
 import torch
-from transformer_lens import HookedTransformer
 from transformer_lens.ActivationCache import ActivationCache
 from transformer_lens.hook_points import HookPoint  # Hooking utilities
+
+from sae_lens.analysis.compat import has_hooked_transformer
+from sae_lens.saes.sae import SAE, SAEMetadata
+from sae_lens.saes.standard_sae import StandardSAE, StandardSAEConfig
+from sae_lens.saes.transcoder import Transcoder, TranscoderConfig
+from tests.helpers import TINYSTORIES_MODEL, assert_close, assert_not_close
+
+if not has_hooked_transformer():
+    pytest.skip(
+        "HookedTransformer was removed in transformer-lens 4.0", allow_module_level=True
+    )
+
+from transformer_lens import HookedTransformer
 from transformer_lens.HookedTransformer import Loss
 
 from sae_lens.analysis.hooked_sae_transformer import (
@@ -12,10 +24,6 @@ from sae_lens.analysis.hooked_sae_transformer import (
     _SAEWrapper,
     get_deep_attr,
 )
-from sae_lens.saes.sae import SAE, SAEMetadata
-from sae_lens.saes.standard_sae import StandardSAE, StandardSAEConfig
-from sae_lens.saes.transcoder import Transcoder, TranscoderConfig
-from tests.helpers import TINYSTORIES_MODEL, assert_close, assert_not_close
 
 MODEL = TINYSTORIES_MODEL
 prompt = "Hello World!"

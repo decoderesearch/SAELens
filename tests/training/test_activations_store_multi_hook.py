@@ -1,12 +1,17 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import torch
 from datasets import Dataset
-from transformer_lens import HookedTransformer
 
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.training.activations_store import ActivationsStore
 from tests.helpers import TINYSTORIES_MODEL, assert_close, load_model_cached
+
+if TYPE_CHECKING or has_hooked_transformer():
+    from transformer_lens import HookedTransformer
 
 
 def _common_kwargs(dataset: Dataset) -> dict[str, Any]:

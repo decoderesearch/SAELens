@@ -10,12 +10,12 @@ from datasets import Array2D, Dataset, Features, Sequence, Value
 from datasets.fingerprint import generate_fingerprint
 from huggingface_hub import HfApi
 from tqdm.auto import tqdm
-from transformer_lens.HookedTransformer import HookedRootModule
 
 from sae_lens import logger
 from sae_lens.config import CacheActivationsRunnerConfig
 from sae_lens.load_model import load_model
 from sae_lens.training.activations_store import ActivationsStore
+from sae_lens.transformer_lens_compat import HookedRootModule
 from sae_lens.util import str_to_dtype
 
 

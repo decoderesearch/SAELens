@@ -1,17 +1,25 @@
 import sys
+from typing import TYPE_CHECKING
 
 import pytest
 import torch
-from mamba_lens import HookedMamba
-from transformer_lens import HookedTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.load_model import (
     HookedProxyLM,
     _extract_logits_from_output,
     load_model,
 )
-from tests.helpers import assert_close
+from tests.helpers import (
+    assert_close,
+    requires_hooked_transformer,
+    requires_transformer_bridge,
+)
+
+if TYPE_CHECKING or has_hooked_transformer():
+    from mamba_lens import HookedMamba
+    from transformer_lens import HookedTransformer
 
 
 @pytest.fixture
@@ -23,6 +31,7 @@ def gpt2_proxy_model():
     )
 
 
+@requires_hooked_transformer
 def test_load_model_works_with_mamba():
     model = load_model(
         model_class_name="HookedMamba",
@@ -32,6 +41,7 @@ def test_load_model_works_with_mamba():
     assert isinstance(model, HookedMamba)
 
 
+@requires_hooked_transformer
 def test_load_model_works_without_model_kwargs():
     model = load_model(
         model_class_name="HookedTransformer",
@@ -41,6 +51,7 @@ def test_load_model_works_without_model_kwargs():
     assert isinstance(model, HookedTransformer)
 
 
+@requires_hooked_transformer
 def test_load_model_works_with_model_kwargs():
     model = load_model(
         model_class_name="HookedTransformer",
@@ -50,6 +61,43 @@ def test_load_model_works_with_model_kwargs():
     )
     assert isinstance(model, HookedTransformer)
     assert model.cfg.dtype == torch.float16
+
+
+@requires_transformer_bridge
+def test_load_model_with_transformer_bridge_matches_unprocessed_hf_model():
+    model = load_model(
+        model_class_name="TransformerBridge",
+        model_name="tiny-stories-1M",
+        device="cpu",
+    )
+    hf_model = AutoModelForCausalLM.from_pretrained("roneneldan/TinyStories-1M")
+    tokenizer = AutoTokenizer.from_pretrained("roneneldan/TinyStories-1M")
+    input_ids = tokenizer.encode("Hello there, how are you?", return_tensors="pt")
+
+    logits, cache = model.run_with_cache(input_ids)
+    hf_output = hf_model(input_ids, output_hidden_states=True)
+
+    assert_close(logits, hf_output.logits, atol=1e-4)
+    # the final hidden state has the final layer norm applied, so skip it
+    for i in range(len(hf_output.hidden_states) - 2):
+        assert_close(
+            cache[f"blocks.{i}.hook_resid_post"],
+            hf_output.hidden_states[i + 1],
+            atol=1e-5,
+        )
+
+
+def test_load_model_raises_helpful_error_for_HookedTransformer_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # transformer-lens >= 4.0 removed HookedTransformer
+    monkeypatch.setattr("sae_lens.load_model.HookedTransformer", None)
+    with pytest.raises(ValueError, match="model_class_name='TransformerBridge'"):
+        load_model(
+            model_class_name="HookedTransformer",
+            model_name="tiny-stories-1M",
+            device="cpu",
+        )
 
 
 def test_load_model_with_generic_huggingface_lm():
@@ -143,6 +191,7 @@ def test_HookedProxyLM_gives_same_cached_states_as_original_implementation():
         assert_close(cache[f"transformer.h.{i}"], hf_output.hidden_states[i + 1])
 
 
+@requires_hooked_transformer
 def test_HookedProxyLM_gives_same_cached_states_as_tlens_implementation(
     gpt2_proxy_model: HookedProxyLM,
 ):
@@ -159,6 +208,7 @@ def test_HookedProxyLM_gives_same_cached_states_as_tlens_implementation(
         )
 
 
+@requires_hooked_transformer
 def test_HookedProxyLM_forward_gives_same_output_as_tlens(
     gpt2_proxy_model: HookedProxyLM,
 ):
@@ -190,6 +240,7 @@ def test_extract_logits_from_output_works_with_multiple_return_types():
     assert_close(logits_dict, logits_tuple)
 
 
+@requires_hooked_transformer
 def test_HookedProxyLM_to_tokens_gives_same_output_as_tlens(
     gpt2_proxy_model: HookedProxyLM,
 ):

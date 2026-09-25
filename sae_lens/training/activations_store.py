@@ -15,7 +15,6 @@ from huggingface_hub.utils import HfHubHTTPError
 from requests import HTTPError
 from safetensors.torch import load_file, save_file
 from tqdm.auto import tqdm
-from transformer_lens.HookedTransformer import HookedRootModule
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from sae_lens import logger
@@ -35,6 +34,7 @@ from sae_lens.training.mixing_buffer import (
     mixing_buffer,
     multi_hook_concat_split_iter,
 )
+from sae_lens.transformer_lens_compat import HookedRootModule
 from sae_lens.util import (
     extract_stop_at_layer_from_tlens_hook_name,
     get_special_token_ids,

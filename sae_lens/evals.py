@@ -17,13 +17,13 @@ import einops
 import pandas as pd
 import torch
 from tqdm.auto import tqdm
-from transformer_lens import HookedTransformer
-from transformer_lens.HookedTransformer import HookedRootModule
 
+from sae_lens.load_model import load_model
 from sae_lens.loading.pretrained_saes_directory import get_pretrained_saes_directory
 from sae_lens.saes.sae import SAE, SAEConfig
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
+from sae_lens.transformer_lens_compat import HookedRootModule
 from sae_lens.util import (
     extract_stop_at_layer_from_tlens_hook_name,
     get_special_token_ids,
@@ -871,10 +871,11 @@ def multiple_evals(
         if current_model_str != sae.cfg.metadata.model_name:
             del current_model  # potentially saves GPU memory
             current_model_str = sae.cfg.metadata.model_name
-            current_model = HookedTransformer.from_pretrained_no_processing(
+            current_model = load_model(
+                "HookedTransformer",
                 current_model_str,
                 device=device,
-                **sae.cfg.metadata.model_from_pretrained_kwargs,
+                model_from_pretrained_kwargs=sae.cfg.metadata.model_from_pretrained_kwargs,
             )
         assert current_model is not None
 
