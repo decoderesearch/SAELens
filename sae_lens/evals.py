@@ -401,6 +401,11 @@ class ExplainedVarianceCalculator:
 
     def add_batch(self, sae_output: torch.Tensor, hidden_acts: torch.Tensor) -> None:
         """Add a batch. Both shapes: (batch_size, hidden_dim)."""
+        # Promote before squaring or reducing: converting a low-precision sum
+        # afterwards cannot recover overflow or variance lost to rounding.
+        hidden_acts = hidden_acts.to(
+            torch.promote_types(hidden_acts.dtype, torch.float32)
+        )
         batch_sum = hidden_acts.sum(dim=0).to(device="cpu", dtype=torch.float64)
         self.sum_x = batch_sum if self.sum_x is None else self.sum_x + batch_sum
         self.sum_squared_norm += hidden_acts.pow(2).sum().item()
