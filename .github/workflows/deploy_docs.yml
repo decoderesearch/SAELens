@@ -38,7 +38,7 @@ jobs:
         with:
           fetch-depth: 0 # Important for mike to work properly
       - name: Install uv and Python
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "3.11"
           # Creates .venv and puts it on PATH for later steps
