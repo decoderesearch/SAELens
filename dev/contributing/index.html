@@ -754,10 +754,10 @@
 <h1 id="contributing">Contributing</h1>
 <p>Contributions are welcome! To get setup for development, follow the instructions below.</p>
 <h2 id="setup">Setup</h2>
-<p>Make sure you have <a href="https://python-poetry.org/">poetry</a> installed, clone the repository, and install dependencies with:</p>
+<p>Make sure you have <a href="https://docs.astral.sh/uv/">uv</a> installed, clone the repository, and install dependencies with:</p>
 <div class="highlight"><pre><span></span><code><span id="__span-0-1"><a href="#__codelineno-0-1" id="__codelineno-0-1" name="__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/decoderesearch/SAELens.git<span class="w"> </span><span class="c1"># we recommend you make a fork for submitting PR's and clone that!</span>
-</span><span id="__span-0-2"><a href="#__codelineno-0-2" id="__codelineno-0-2" name="__codelineno-0-2"></a>poetry<span class="w"> </span>lock<span class="w"> </span><span class="c1"># can take a while.</span>
-</span><span id="__span-0-3"><a href="#__codelineno-0-3" id="__codelineno-0-3" name="__codelineno-0-3"></a>poetry<span class="w"> </span>install
+</span><span id="__span-0-2"><a href="#__codelineno-0-2" id="__codelineno-0-2" name="__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>SAELens
+</span><span id="__span-0-3"><a href="#__codelineno-0-3" id="__codelineno-0-3" name="__codelineno-0-3"></a>uv<span class="w"> </span>sync
 </span><span id="__span-0-4"><a href="#__codelineno-0-4" id="__codelineno-0-4" name="__codelineno-0-4"></a>make<span class="w"> </span>check-ci<span class="w"> </span><span class="c1"># validate the install</span>
 </span></code></pre></div>
 <h2 id="testing-linting-and-formatting">Testing, Linting, and Formatting</h2>
