@@ -1829,6 +1829,109 @@ def test_dictionary_learning_sae_huggingface_loader_1_matryoshka(
     assert torch.all(state_dict["threshold"] == threshold_scalar)
 
 
+def _mock_dictionary_learning_jumprelu_download(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    raw_state_dict: dict[str, torch.Tensor],
+) -> None:
+    d_sae, d_in = raw_state_dict["W_dec"].shape
+    config = {
+        "trainer": {
+            "trainer_class": "JumpReluTrainer",
+            "dict_class": "JumpReluAutoEncoder",
+            "activation_dim": d_in,
+            "dict_size": d_sae,
+            "layer": 8,
+            "lm_name": "EleutherAI/pythia-160m-deduped",
+        },
+        "buffer": {"ctx_len": 1024},
+    }
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config))
+    sae_path = tmp_path / "ae.pt"
+    torch.save(raw_state_dict, sae_path)
+
+    def mock_hf_hub_download(
+        repo_id: str,  # noqa: ARG001
+        filename: str,
+        force_download: bool = False,  # noqa: ARG001
+    ) -> str:
+        return str(sae_path if filename.endswith("ae.pt") else config_path)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+
+def test_dictionary_learning_sae_huggingface_loader_1_jumprelu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    D_IN = 64
+    D_SAE = 256
+    raw_state_dict = {
+        "W_enc": torch.randn(D_IN, D_SAE),
+        "b_enc": torch.randn(D_SAE),
+        "W_dec": torch.randn(D_SAE, D_IN),
+        "b_dec": torch.randn(D_IN),
+        "threshold": torch.rand(D_SAE) + 0.1,
+    }
+    _mock_dictionary_learning_jumprelu_download(tmp_path, monkeypatch, raw_state_dict)
+
+    cfg_dict, state_dict, sparsity = dictionary_learning_sae_huggingface_loader_1(
+        "adamkarvonen/saebench_pythia-160m-deduped_width-2pow14_date-0108",
+        "JumpRelu_pythia-160m-deduped__0108/resid_post_layer_8/trainer_0",
+    )
+
+    assert sparsity is None
+    assert cfg_dict["architecture"] == "jumprelu"
+    assert cfg_dict["apply_b_dec_to_input"] is False
+    assert state_dict.keys() == {"W_enc", "W_dec", "b_dec", "b_enc", "threshold"}
+    torch.testing.assert_close(state_dict["threshold"], raw_state_dict["threshold"])
+
+
+def test_from_pretrained_dictionary_learning_jumprelu_matches_reference_encoding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    D_IN = 64
+    D_SAE = 256
+    W_enc = torch.randn(D_IN, D_SAE) / D_IN**0.5
+    b_enc = torch.randn(D_SAE) * 0.3
+    W_dec = torch.randn(D_SAE, D_IN)
+    b_dec = torch.randn(D_IN)
+    threshold = torch.rand(D_SAE) + 0.2
+    _mock_dictionary_learning_jumprelu_download(
+        tmp_path,
+        monkeypatch,
+        {
+            "W_enc": W_enc,
+            "b_enc": b_enc,
+            "W_dec": W_dec,
+            "b_dec": b_dec,
+            "threshold": threshold,
+        },
+    )
+
+    sae = SAE.from_pretrained(
+        "adamkarvonen/saebench_pythia-160m-deduped_width-2pow14_date-0108",
+        "JumpRelu_pythia-160m-deduped__0108/resid_post_layer_8/trainer_0",
+        converter=dictionary_learning_sae_huggingface_loader_1,
+    )
+
+    # Reference: dictionary_learning's JumpReluAutoEncoder.encode / decode
+    x = torch.randn(1000, D_IN) * 2
+    pre_jump = x @ W_enc + b_enc
+    expected_feats = torch.relu(pre_jump * (pre_jump > threshold))
+    # the threshold must actually zero out some positive pre-activations
+    assert ((pre_jump > 0) & (pre_jump <= threshold)).any()
+    assert (expected_feats > 0).any()
+
+    with torch.no_grad():
+        feats = sae.encode(x)
+        recons = sae.decode(feats)
+    torch.testing.assert_close(feats, expected_feats)
+    torch.testing.assert_close(recons, expected_feats @ W_dec + b_dec)
+
+
 def test_from_pretrained_warns_when_using_registered_repo_id_directly(
     monkeypatch: pytest.MonkeyPatch,
 ):
