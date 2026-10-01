@@ -67,10 +67,12 @@ jobs:
         # Dependencies are resolved fresh on every run so CI tests against the
         # latest releases. This only caches per-version package metadata to
         # speed up resolution: cached PyPI version listings expire after 10
-        # minutes, so new releases are still picked up.
+        # minutes, so new releases are still picked up. Downloaded wheels are
+        # cached separately in ~/.cache/pypoetry/cache/repositories/_default_cache
+        # (several GB), and are deliberately left out.
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pypoetry/cache
+          path: ~/.cache/pypoetry/cache/repositories/PyPI
           key: poetry-metadata-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             poetry-metadata-${{ env.CACHE_VERSION }}-${{ runner.os }}-
