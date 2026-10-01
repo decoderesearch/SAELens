@@ -81,7 +81,9 @@ jobs:
       - name: Run Unit Tests
         #   Would use make, but want cov report in xml format
         #   TRACK_DISK_USAGE=1 enables per-test disk usage tracking (see tests/conftest.py)
-        run: pytest -v --cov=sae_lens/ --cov-report=term-missing --cov-branch tests --cov-report=xml
+        #   -n auto runs tests in parallel across the runner's CPUs. worksteal
+        #   rebalances work since test durations vary a lot.
+        run: pytest -v -n auto --dist worksteal --durations=20 --cov=sae_lens/ --cov-report=term-missing --cov-branch tests --cov-report=xml
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           TRACK_DISK_USAGE: "1"
