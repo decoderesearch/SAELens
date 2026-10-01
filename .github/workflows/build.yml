@@ -22,6 +22,9 @@ jobs:
       matrix:
         # Huggingface gets mad about us spamming them in CI, so try to run fewer versions of tests
         python-version: ["3.10"] # , "3.11", "3.12"]
+        # 3.x is what pyproject.toml resolves to. 4.x removed HookedTransformer and isn't
+        # allowed by pyproject.toml yet, but the rest of sae_lens should keep working with it.
+        transformer-lens: ["3.x", "4.x"]
 
     env:
       # Increment this number to bust all caches (HuggingFace, Poetry, venv)
@@ -62,14 +65,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
+          key: venv-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ matrix.python-version }}-${{ matrix.transformer-lens }}-${{ hashFiles('**/pyproject.toml') }}
           restore-keys: |
-            venv-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ matrix.python-version }}-
+            venv-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ matrix.python-version }}-${{ matrix.transformer-lens }}-
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction
-      - name: Install TransformerLens dev-3.x
-        run: poetry run pip install git+https://github.com/TransformerLensOrg/TransformerLens.git@dev-3.x
+      - name: Install TransformerLens 4.x
+        if: matrix.transformer-lens == '4.x'
+        run: poetry run pip install "transformer-lens>=4.0.0,<5.0.0"
       - name: Check disk space before tests
         run: |
           echo "=== Disk Space Summary ==="
@@ -81,11 +85,20 @@ jobs:
           echo "=== Huggingface Cache Size ==="
           du -sh ~/.cache/huggingface 2>/dev/null || echo "No HF cache yet"
       - name: Check linting
+        if: matrix.transformer-lens == '3.x'
         run: poetry run ruff check .
       - name: Check formatting
+        if: matrix.transformer-lens == '3.x'
         run: poetry run ruff format --check .
       - name: type checking
+        if: matrix.transformer-lens == '3.x'
         run: poetry run pyright
+      # The tests and these two modules are built on HookedTransformer, which 4.x removed
+      - name: type checking (transformer-lens 4.x)
+        if: matrix.transformer-lens == '4.x'
+        run: >-
+          poetry run pyright $(git ls-files 'sae_lens/*.py'
+          | grep -v -e sae_lens/analysis/hooked_sae_transformer.py -e sae_lens/tutorial/tsea.py)
       - name: Run Unit Tests
         #   Would use make, but want cov report in xml format
         #   TRACK_DISK_USAGE=1 enables per-test disk usage tracking (see tests/conftest.py)

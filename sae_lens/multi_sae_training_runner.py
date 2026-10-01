@@ -33,7 +33,6 @@ from typing import Any, Literal
 import torch
 import wandb
 from safetensors.torch import save_file
-from transformer_lens.HookedTransformer import HookedRootModule
 
 from sae_lens import __version__, logger
 from sae_lens.config import HfDataset, LoggingConfig, SAETrainerConfig
@@ -48,6 +47,7 @@ from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.multi_sae_trainer import MultiSAETrainer
 from sae_lens.training.prefetch import PrefetchingIterator
 from sae_lens.training.types import MultiHookDataProvider
+from sae_lens.transformer_lens_compat import HookedRootModule
 from sae_lens.util import get_special_token_ids
 
 # A user-supplied custom evaluator. Mirrors the single-SAE Evaluator signature

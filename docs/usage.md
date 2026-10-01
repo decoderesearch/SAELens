@@ -101,6 +101,11 @@ reconstructed = sae(activations)
 HookedSAETransformer extends TransformerLens's HookedTransformer to seamlessly integrate SAEs into the model's forward pass.
 
 <!-- prettier-ignore-start -->
+!!! note
+    TransformerLens 4.0 removed `HookedTransformer`, so `HookedSAETransformer` requires `transformer-lens<4.0`. With TransformerLens 4.0 or later, use [SAETransformerBridge](#using-saetransformerbridge-beta) instead.
+<!-- prettier-ignore-end -->
+
+<!-- prettier-ignore-start -->
 !!! warning
     When using `HookedSAETransformer` or `HookedTransformer`, you should probably use `from_pretrained_no_processing` to load the model, not `from_pretrained`. Most SAEs are trained on raw LLM activations, and the default processing in `from_pretrained` will apply post-processing to the activations, and may break your SAE.
 <!-- prettier-ignore-end -->
@@ -208,11 +213,11 @@ logits = model.run_with_hooks(
 
 ## Using SAETransformerBridge (Beta)
 
-For models not natively supported by HookedTransformer (such as Gemma 3), use `SAETransformerBridge`. This wraps TransformerLens v3's `TransformerBridge`, which provides hook points for HuggingFace models without the overhead of weight processing.
+For models not natively supported by HookedTransformer (such as Gemma 3), or when using TransformerLens 4.0 or later, use `SAETransformerBridge`. This wraps TransformerLens's `TransformerBridge`, which provides hook points for HuggingFace models without the overhead of weight processing.
 
 <!-- prettier-ignore-start -->
 !!! warning "Beta Feature"
-    `SAETransformerBridge` requires TransformerLens v3, which is currently in beta. Install it with `pip install transformer-lens>=3.0.0b0`. The API may change in future versions.
+    `SAETransformerBridge` requires TransformerLens v3 or later. The API may change in future versions.
 <!-- prettier-ignore-end -->
 
 ### Setup

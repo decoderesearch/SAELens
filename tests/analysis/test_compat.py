@@ -1,7 +1,9 @@
+import importlib
 from unittest.mock import patch
 
 from sae_lens.analysis.compat import (
     get_transformer_lens_version,
+    has_hooked_transformer,
     has_transformer_bridge,
 )
 
@@ -40,3 +42,12 @@ def test_has_transformer_bridge_returns_true_for_source_install():
     """transformer-lens installed from source emits version '0.0.0'; must be treated as v3+."""
     with patch("importlib.metadata.version", return_value="0.0.0"):
         assert has_transformer_bridge() is True
+
+
+def test_has_hooked_transformer_matches_whether_HookedTransformer_can_be_imported():
+    try:
+        importlib.import_module("transformer_lens.HookedTransformer")
+        importable = True
+    except ImportError:
+        importable = False
+    assert has_hooked_transformer() is importable

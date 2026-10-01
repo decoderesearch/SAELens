@@ -10,11 +10,7 @@ from transformer_lens.model_bridge import (  # type: ignore[import-not-found]
 )
 
 from sae_lens import logger
-from sae_lens.analysis.hooked_sae_transformer import (
-    _SAEWrapper,
-    get_deep_attr,
-    set_deep_attr,
-)
+from sae_lens.analysis.sae_wrapper import _SAEWrapper, get_deep_attr, set_deep_attr
 from sae_lens.saes.sae import SAE
 
 SingleLoss = torch.Tensor  # Type alias for a single element tensor
@@ -184,9 +180,10 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
                 )
             self._transcoder_output_hooks[input_hook_alias] = output_hook_actual
 
-        # Store wrapper in _acts_to_saes and at output hook
+        # Store wrapper in _acts_to_saes and at output hook. The replaced HookPoint
+        # stays in _hook_registry since TransformerBridge expects registry values to
+        # be HookPoints and resolves hook aliases from the registry. hook_dict hides it.
         set_deep_attr(self, output_hook_actual, wrapper)
-        self._hook_registry[output_hook_actual] = wrapper  # type: ignore[assignment]
         self._acts_to_saes[input_hook_alias] = wrapper
 
         # Register wrapper's internal hooks in the registry so they appear in cache
@@ -423,26 +420,17 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
 
     @property
     def hook_dict(self) -> dict[str, HookPoint]:
-        """Return combined hook registry including SAE internal hooks.
+        """Return the hook registry, excluding hook points replaced by attached SAEs.
 
-        When SAEs are attached, they replace HookPoint entries in the registry.
-        This property returns both the base hooks and any internal hooks from
-        attached SAEs (like hook_sae_acts_post, hook_sae_input, etc.) with
-        their full path names.
+        The internal hooks of attached SAEs (like hook_sae_acts_post, hook_sae_input,
+        etc.) are registered by :meth:`add_sae` with their full path names.
         """
-        hooks: dict[str, HookPoint] = {}
-
-        for name, hook_or_sae in self._hook_registry.items():
-            if isinstance(hook_or_sae, _SAEWrapper):
-                # Include SAE's internal hooks with full path names
-                for sae_hook_name, sae_hook in hook_or_sae.sae.hook_dict.items():
-                    full_name = f"{name}.{sae_hook_name}"
-                    # Set the HookPoint's name to the full compound path so that
-                    # build_alias_to_canonical_map sees key == name (no spurious alias)
-                    # and run_with_hooks can find SAE hooks by their compound names.
-                    sae_hook.name = full_name
-                    hooks[full_name] = sae_hook
-            else:
-                hooks[name] = hook_or_sae
-
-        return hooks
+        replaced_hooks = {
+            self._transcoder_output_hooks.get(name, self._resolve_hook_name(name))
+            for name in self._acts_to_saes
+        }
+        return {
+            name: hook
+            for name, hook in self._hook_registry.items()
+            if name not in replaced_hooks
+        }

@@ -23,7 +23,6 @@ from numpy.typing import NDArray
 from safetensors.torch import load_file, save_file
 from torch import nn
 from transformer_lens.hook_points import HookPoint
-from transformer_lens.HookedTransformer import HookedRootModule
 from typing_extensions import deprecated, overload, override
 
 from sae_lens import __version__
@@ -31,6 +30,7 @@ from sae_lens.constants import (
     SAE_CFG_FILENAME,
     SAE_WEIGHTS_FILENAME,
 )
+from sae_lens.transformer_lens_compat import HookedRootModule
 from sae_lens.util import dtype_to_str, filter_valid_dataclass_fields, str_to_dtype
 
 if TYPE_CHECKING:

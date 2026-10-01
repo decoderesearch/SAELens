@@ -46,7 +46,7 @@ from sae_lens.saes import (
     TranscoderConfig,
 )
 
-from .analysis.hooked_sae_transformer import HookedSAETransformer
+from .analysis.compat import has_hooked_transformer, has_transformer_bridge
 from .cache_activations_runner import CacheActivationsRunner
 from .config import (
     CacheActivationsRunnerConfig,
@@ -76,7 +76,6 @@ __all__ = [
     "SAEConfig",
     "TrainingSAE",
     "TrainingSAEConfig",
-    "HookedSAETransformer",
     "ActivationsStore",
     "LanguageModelSAERunnerConfig",
     "LanguageModelSAETrainingRunner",
@@ -133,10 +132,14 @@ __all__ = [
     "MultiSAETrainingRunnerConfig",
 ]
 
+# Conditional export for HookedSAETransformer (HookedTransformer was removed in transformer-lens v4)
+if has_hooked_transformer():
+    from .analysis.hooked_sae_transformer import HookedSAETransformer  # noqa: F401
+
+    __all__.append("HookedSAETransformer")
+
 # Conditional export for SAETransformerBridge (requires transformer-lens v3+)
 try:
-    from sae_lens.analysis.compat import has_transformer_bridge
-
     if has_transformer_bridge():
         from sae_lens.analysis.sae_transformer_bridge import (  # noqa: F401
             SAETransformerBridge,
@@ -145,6 +148,16 @@ try:
         __all__.append("SAETransformerBridge")
 except ImportError:
     pass
+
+
+def __getattr__(name: str):
+    if name == "HookedSAETransformer":
+        raise AttributeError(
+            "HookedSAETransformer requires transformer-lens<4.0, which removed "
+            "HookedTransformer. Use SAETransformerBridge instead, or install "
+            "transformer-lens<4.0."
+        )
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 register_sae_class("standard", StandardSAE, StandardSAEConfig)

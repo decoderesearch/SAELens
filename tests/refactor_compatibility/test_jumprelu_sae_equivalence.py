@@ -1,6 +1,7 @@
 import pytest
 import torch
 
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.saes.jumprelu_sae import (
     JumpReLUSAE,
     JumpReLUSAEConfig,
@@ -10,6 +11,13 @@ from sae_lens.saes.jumprelu_sae import (
 from sae_lens.saes.sae import (
     TrainStepInput,
 )
+from tests.helpers import assert_close
+
+if not has_hooked_transformer():
+    pytest.skip(
+        "HookedTransformer was removed in transformer-lens 4.0", allow_module_level=True
+    )
+
 from tests._comparison.sae_lens_old.sae import (
     SAE as OldSAE,
 )
@@ -22,7 +30,6 @@ from tests._comparison.sae_lens_old.training.training_sae import (
 from tests._comparison.sae_lens_old.training.training_sae import (
     TrainingSAEConfig as OldTrainingSAEConfig,
 )
-from tests.helpers import assert_close
 
 
 @pytest.fixture

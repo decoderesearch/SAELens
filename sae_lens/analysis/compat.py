@@ -1,4 +1,5 @@
 import importlib.metadata
+import importlib.util
 
 from packaging.version import parse as parse_version
 
@@ -19,3 +20,8 @@ def has_transformer_bridge() -> bool:
         return True
     major, _, _ = get_transformer_lens_version()
     return major >= 3
+
+
+def has_hooked_transformer() -> bool:
+    """Check if HookedTransformer is available (removed in v4)."""
+    return importlib.util.find_spec("transformer_lens.HookedTransformer") is not None

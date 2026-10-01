@@ -1,6 +1,7 @@
 import os
 import re
 import string
+from typing import TYPE_CHECKING
 
 import nltk
 import numpy as np
@@ -8,9 +9,12 @@ import pandas as pd
 import plotly_express as px
 import torch
 from babe import UsNames
-from transformer_lens import HookedTransformer
 
 from sae_lens import logger
+
+if TYPE_CHECKING:
+    # HookedTransformer was removed in transformer-lens v4
+    from transformer_lens import HookedTransformer
 
 
 def get_enrichment_df(
@@ -156,7 +160,7 @@ def plot_top_k_feature_projections_by_token_and_category(
     gene_sets_selected: dict[str, set[int]],
     df_enrichment_scores: pd.DataFrame,
     category: str,
-    model: HookedTransformer,
+    model: "HookedTransformer",
     dec_projection_onto_W_U: torch.Tensor,
     k: int = 5,
     projection_onto: str = "W_U",
@@ -286,7 +290,7 @@ def get_gene_set_from_regex(vocab: dict[str, int], pattern: str) -> set[int]:
     return gene_set
 
 
-def get_test_gene_sets(model: HookedTransformer) -> dict[str, set[int]]:
+def get_test_gene_sets(model: "HookedTransformer") -> dict[str, set[int]]:
     colors = [
         "red",
         "blue",
@@ -636,7 +640,7 @@ def get_test_gene_sets(model: HookedTransformer) -> dict[str, set[int]]:
     }
 
     def convert_tokens_to_ids(
-        list_of_strings: list[str], model: HookedTransformer
+        list_of_strings: list[str], model: "HookedTransformer"
     ) -> set[int]:
         token_ids = [
             model.tokenizer.encode(f" {word}", add_special_tokens=False)  # type: ignore
