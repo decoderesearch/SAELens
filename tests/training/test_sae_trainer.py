@@ -235,6 +235,32 @@ def test_build_train_step_log_dict(
     assert log_dict == pytest.approx(expected)
 
 
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_build_train_step_log_dict_explained_variance_with_low_precision_acts(
+    trainer: SAETrainer[StandardTrainingSAE, StandardTrainingSAEConfig],
+    dtype: torch.dtype,
+) -> None:
+    # Every token has a centered squared norm of 100 * 768 = 76800, which
+    # overflows float16, and an explained variance of 1 - 9 / 100 = 0.91,
+    # which bfloat16 can't represent.
+    sae_in = torch.tensor([-10, 10], dtype=dtype).repeat(64)[:, None].repeat(1, 768)
+    train_output = TrainStepOutput(
+        sae_in=sae_in,
+        sae_out=sae_in + 3,
+        feature_acts=torch.ones(128, 4),
+        hidden_pre=torch.ones(128, 4),
+        loss=torch.tensor(0.5),
+        losses={},
+    )
+
+    log_dict = trainer.build_train_step_log_dict(
+        output=train_output, n_training_samples=128
+    )
+
+    assert log_dict["metrics/explained_variance"] == pytest.approx(0.91)
+    assert log_dict["metrics/explained_variance_legacy"] == pytest.approx(0.91)
+
+
 def test_build_train_step_log_dict_callable_metrics(
     trainer: SAETrainer[StandardTrainingSAE, StandardTrainingSAEConfig],
 ) -> None:

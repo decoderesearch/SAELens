@@ -401,7 +401,11 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
         output: TrainStepOutput,
         n_training_samples: int,
     ) -> dict[str, Any]:
-        sae_in = output.sae_in
+        # Promote before squaring or reducing: low-precision sums can overflow,
+        # and low-precision results are too coarse to track explained variance.
+        sae_in = output.sae_in.to(
+            torch.promote_types(output.sae_in.dtype, torch.float32)
+        )
         sae_out = output.sae_out
         feature_acts = output.feature_acts
         loss = output.loss.item()

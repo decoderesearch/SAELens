@@ -869,7 +869,9 @@ def test_explained_variance_batched_matches_unbatched_with_unequal_batch_sizes()
 @pytest.mark.parametrize(
     "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
 )
-def test_explained_variance_low_precision_reductions_are_batch_invariant(dtype):
+def test_explained_variance_low_precision_reductions_are_batch_invariant(
+    dtype: torch.dtype,
+):
     # Each coordinate has variance 1 and squared reconstruction error 0.25.
     # The full squared-norm sum exceeds float16's range even though every
     # activation is only +/-1. Casting after the reduction is too late.
@@ -885,7 +887,7 @@ def test_explained_variance_low_precision_reductions_are_batch_invariant(dtype):
 @pytest.mark.parametrize(
     "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
 )
-def test_explained_variance_low_precision_with_nonzero_mean(dtype):
+def test_explained_variance_low_precision_with_nonzero_mean(dtype: torch.dtype):
     # These inputs and errors are exactly representable even in bfloat16.
     # Squaring them in bfloat16 loses the unit variance around the mean;
     # float16 sums overflow for larger batches.
