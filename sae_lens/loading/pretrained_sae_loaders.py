@@ -1262,7 +1262,8 @@ def dictionary_learning_sae_huggingface_loader_1(
     if "r_mag" in encoder:
         state_dict["r_mag"] = encoder["r_mag"]
 
-    if "threshold" in encoder:
+    # AutoEncoderTopK also saves a threshold, but its encode uses per-token top-k
+    if "threshold" in encoder and cfg_dict["architecture"] == "jumprelu":
         threshold = encoder["threshold"]
         if threshold.ndim == 0:
             threshold = torch.full((W_enc.size(1),), threshold)
