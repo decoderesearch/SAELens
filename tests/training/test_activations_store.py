@@ -512,7 +512,7 @@ def test_activations_store__errors_on_context_size_mismatch(
         ]
         * 20
     )
-    pretokenize_cfg = PretokenizeRunnerConfig(context_size=10)
+    pretokenize_cfg = PretokenizeRunnerConfig(context_size=10, num_proc=1)
     tokenized_dataset = pretokenize_dataset(dataset, tokenizer, cfg=pretokenize_cfg)
 
     # This context_size should raise an error or a warning if it mismatches the dataset size

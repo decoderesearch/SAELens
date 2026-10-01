@@ -336,9 +336,10 @@ def test_gemma_3_sae_huggingface_loader_with_mocked_download(
     folder_name = "resid_post_all/layer_10_width_262k_l0_small"
     device = "cpu"
 
-    # These dimensions match the real SAE
+    # The loader infers d_in and d_sae from the tensor shapes rather than the
+    # folder name, so small weights work and avoid writing GBs to disk.
     d_in = 1152
-    d_sae = 262144
+    d_sae = 512
 
     # Create mock weights matching the expected safetensors format
     W_enc = torch.randn(d_in, d_sae, dtype=torch.float32)
