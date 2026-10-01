@@ -4,12 +4,12 @@ Contributions are welcome! To get setup for development, follow the instructions
 
 ## Setup
 
-Make sure you have [poetry](https://python-poetry.org/) installed, clone the repository, and install dependencies with:
+Make sure you have [uv](https://docs.astral.sh/uv/) installed, clone the repository, and install dependencies with:
 
 ```bash
 git clone https://github.com/decoderesearch/SAELens.git # we recommend you make a fork for submitting PR's and clone that!
-poetry lock # can take a while.
-poetry install
+cd SAELens
+uv sync
 make check-ci # validate the install
 ```
 

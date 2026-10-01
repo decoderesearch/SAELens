@@ -1,16 +1,16 @@
 format:
-	poetry run ruff format .
-	poetry run ruff check --fix-only .
+	uv run ruff format .
+	uv run ruff check --fix-only .
 
 check-format:
-	poetry run ruff check .
-	poetry run ruff format --check .
+	uv run ruff check .
+	uv run ruff format --check .
 
 check-type:
-	poetry run pyright .
+	uv run pyright .
 
 test:
-	poetry run pytest -v --cov=sae_lens/ --cov-report=term-missing --cov-branch tests
+	uv run pytest -v --cov=sae_lens/ --cov-report=term-missing --cov-branch tests
 
 check-ci:
 	make check-format
@@ -18,7 +18,7 @@ check-ci:
 	make test
 
 docstring-coverage:
-	poetry run docstr-coverage sae_lens --skip-file-doc
+	uv run docstr-coverage sae_lens --skip-file-doc
 
 docs-serve:
-	poetry run mkdocs serve --livereload
+	uv run mkdocs serve --livereload

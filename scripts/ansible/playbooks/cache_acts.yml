@@ -129,7 +129,7 @@
     
     - name: "Run Cache Activations Job. Log: {{ s3_bucket_name }}/cached_activations/{{ job_name }}.log"
       ansible.builtin.shell:
-        cmd: "poetry run python util/cache_acts.py {{ job_name }} } 2>&1 \
+        cmd: "uv run --no-dev python util/cache_acts.py {{ job_name }} } 2>&1 \
                 | tee -a {{ local_s3_mount_path }}/{{ s3_bucket_name }}/cached_activations/{{ job_name }}.log"
         chdir: /home/ubuntu/SAELens/scripts/ansible
       changed_when: true

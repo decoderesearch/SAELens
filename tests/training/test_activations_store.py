@@ -131,7 +131,7 @@ def model(cfg: LanguageModelSAERunnerConfig[StandardTrainingSAEConfig]):
 
 # tests involving loading real models / real datasets are very slow
 # so do lots of stuff in this one test to make each load of model / data count
-# poetry run py.test tests/training/test_activations_store.py -k 'test_activations_store__shapes_look_correct_with_real_models_and_datasets' --profile-svg -s
+# uv run pytest tests/training/test_activations_store.py -k 'test_activations_store__shapes_look_correct_with_real_models_and_datasets' --profile-svg -s
 def test_activations_store__shapes_look_correct_with_real_models_and_datasets(
     cfg: LanguageModelSAERunnerConfig[StandardTrainingSAEConfig],
     model: HookedTransformer,
