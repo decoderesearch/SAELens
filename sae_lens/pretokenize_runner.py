@@ -146,7 +146,9 @@ def pretokenize_dataset(
             process_examples,
             batched=True,
             batch_size=cfg.pretokenize_batch_size,
-            num_proc=cfg.num_proc,
+            # datasets starts a worker pool for any num_proc >= 1, so pass None
+            # to run in-process when only one process is requested
+            num_proc=cfg.num_proc if cfg.num_proc > 1 else None,
             remove_columns=dataset.column_names,
         )
 
