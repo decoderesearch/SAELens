@@ -51,6 +51,7 @@ dev = [
     "pytest-cov>=4.1.0,<5.0.0",
     "pytest-profiling>=1.8.1,<2.0.0",
     "pytest-randomly>=4.1.0,<5.0.0",
+    "pytest-xdist>=3.8.0,<4.0.0",
     "pre-commit>=3.6.2,<4.0.0",
     "pyright==1.1.365",
     "mamba-lens>=0.0.4,<0.0.5",
