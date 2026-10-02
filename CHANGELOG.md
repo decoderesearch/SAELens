@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## v6.51.8 (2026-10-02)
+
+### Ci
+
+* ci: run tests in parallel with pytest-xdist (#750) ([`c69fdef`](https://github.com/decoderesearch/SAELens/commit/c69fdef342e3be782a144857074eeb283f8373f0))
+
+### Fix
+
+* fix: load dictionary_learning AutoEncoderTopK SAEs that save a threshold (#749) ([`896ffb4`](https://github.com/decoderesearch/SAELens/commit/896ffb42fa55d01af738a86c9225aa53b7943962))
+
+### Test
+
+* test: speed up slow tests (#748) ([`729393f`](https://github.com/decoderesearch/SAELens/commit/729393f56511d1291558520e737fb637fd036dde))
+
 ## v6.51.7 (2026-10-01)
 
 ### Ci
