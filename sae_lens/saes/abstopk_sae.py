@@ -79,7 +79,7 @@ class AbsTopKSAEConfig(TopKSAEConfig):
         device (str): Device to place the SAE on. Inherited from SAEConfig.
         apply_b_dec_to_input (bool): Whether to apply decoder bias to the input
             before encoding. Inherited from SAEConfig.
-        normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm"]):
+        normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm", "covariance_whitening"]):
             Normalization strategy for input activations. Inherited from SAEConfig.
         reshape_activations (Literal["none", "hook_z"]): How to reshape activations
             (useful for attention head outputs). Inherited from SAEConfig.
@@ -153,7 +153,7 @@ class AbsTopKTrainingSAEConfig(TopKTrainingSAEConfig):
         device (str): Device to place the SAE on. Inherited from SAEConfig.
         apply_b_dec_to_input (bool): Whether to apply decoder bias to the input
             before encoding. Inherited from SAEConfig.
-        normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm"]):
+        normalize_activations (Literal["none", "expected_average_only_in", "constant_norm_rescale", "layer_norm", "covariance_whitening"]):
             Normalization strategy for input activations. Inherited from
             SAEConfig.
         reshape_activations (Literal["none", "hook_z"]): How to reshape activations
