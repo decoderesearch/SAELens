@@ -122,7 +122,9 @@ class L0Calculator:
 
     def add_batch(self, activations: torch.Tensor) -> None:
         """Add a batch of activations. Shape: (batch_size, num_features)."""
-        self.total_l0 += (activations > 0).float().sum().item()
+        # != 0 rather than > 0 so negative-but-active latents (bidirectional
+        # architectures like AbsTopK) are counted; no-op for ReLU-based SAEs.
+        self.total_l0 += (activations != 0).float().sum().item()
         self.num_samples += activations.shape[0]
 
     def compute(self) -> float:
@@ -140,7 +142,8 @@ class DeadLatentsCalculator:
 
     def add_batch(self, sae_latents: torch.Tensor) -> None:
         """Add a batch of SAE latents. Shape: (batch_size, num_latents)."""
-        self.latent_ever_fired |= (sae_latents > 0).any(dim=0).cpu()
+        # != 0 so negative-but-active latents (e.g. AbsTopK) count as fired.
+        self.latent_ever_fired |= (sae_latents != 0).any(dim=0).cpu()
 
     def compute(self) -> int:
         """Return count of latents that never fired."""
@@ -228,7 +231,9 @@ class ClassificationMetricsCalculator:
         if self.num_sae_latents == 0:
             return
 
-        sae_fires = sae_latents > 0
+        # sae_fires uses != 0 so negative-but-active latents (e.g. AbsTopK) count
+        # as fired; ground-truth acts are non-negative so > 0 is unchanged there.
+        sae_fires = sae_latents != 0
         gt_fires = gt_feature_acts[:, self.best_matches] > 0
 
         self.tp += (sae_fires & gt_fires).float().sum(dim=0).cpu()
