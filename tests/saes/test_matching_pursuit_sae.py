@@ -279,3 +279,21 @@ def test_MatchingPursuitTrainingSAE_training_forward_pass_populates_metrics_only
         assert "residual_threshold_converged_portion" in output.metrics
     else:
         assert len(output.metrics) == 0
+
+
+def test_MatchingPursuitTrainingSAEConfig_rejects_covariance_whitening():
+    with pytest.raises(ValueError, match="covariance_whitening"):
+        build_matching_pursuit_sae_training_cfg(
+            normalize_activations="covariance_whitening"
+        )
+
+
+def test_MatchingPursuitTrainingSAE_fold_activation_whitening_raises():
+    sae = MatchingPursuitTrainingSAE(build_matching_pursuit_sae_training_cfg())
+    d_in = sae.cfg.d_in
+    with pytest.raises(NotImplementedError):
+        sae.fold_activation_whitening(
+            mean=torch.zeros(d_in),
+            whitening_matrix=torch.eye(d_in),
+            unwhitening_matrix=torch.eye(d_in),
+        )

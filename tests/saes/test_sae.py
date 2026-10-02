@@ -19,13 +19,17 @@ from sae_lens.saes.sae import (
     TrainingSAE,
     TrainingSAEConfig,
 )
+from sae_lens.saes.standard_sae import StandardTrainingSAE
+from sae_lens.training.activation_scaler import ActivationScaler
 from tests.helpers import (
     ALL_ARCHITECTURES,
     ALL_FOLDABLE_ARCHITECTURES,
     ALL_TRAINING_ARCHITECTURES,
     assert_close,
     build_sae_cfg_for_arch,
+    build_sae_training_cfg,
     build_sae_training_cfg_for_arch,
+    correlated_activations,
     random_params,
 )
 
@@ -285,6 +289,139 @@ def test_TrainingSAE_fold_activation_norm_scaling_factor_all_architectures(
         assert_close(folded_features, original_features / 2.0)
     else:
         assert_close(folded_features, original_features)
+
+
+# matching pursuit rejects covariance_whitening in its config, see test_matching_pursuit_sae
+WHITENING_TRAINING_ARCHITECTURES = [
+    arch for arch in ALL_TRAINING_ARCHITECTURES if arch != "matching_pursuit"
+]
+
+
+def _estimate_whitening_scaler(d_in: int) -> tuple[ActivationScaler, torch.Tensor]:
+    provider = correlated_activations(d_in, batch_size=256)
+    scaler = ActivationScaler()
+    scaler.estimate_whitening(
+        d_in=d_in, data_provider=provider, n_batches_for_norm_estimate=4
+    )
+    return scaler, next(provider)
+
+
+def _fold_scaler_whitening(sae: SAE[Any], scaler: ActivationScaler) -> None:
+    assert scaler.whitening is not None
+    sae.fold_activation_whitening(
+        mean=scaler.whitening.mean,
+        whitening_matrix=scaler.whitening.matrix,
+        unwhitening_matrix=scaler.whitening.inverse_matrix,
+    )
+
+
+@pytest.mark.parametrize("apply_b_dec_to_input", [True, False])
+@pytest.mark.parametrize("architecture", WHITENING_TRAINING_ARCHITECTURES)
+def test_TrainingSAE_fold_activation_whitening_all_architectures(
+    architecture: str, apply_b_dec_to_input: bool
+):
+    # float64 so that a threshold or topk decision cannot flip from rounding alone
+    cfg = build_sae_training_cfg_for_arch(
+        architecture,
+        normalize_activations="covariance_whitening",
+        apply_b_dec_to_input=apply_b_dec_to_input,
+        dtype="float64",
+    )
+    sae = get_sae_training_class(architecture)[0](cfg)
+    random_params(sae)
+    scaler, inputs = _estimate_whitening_scaler(cfg.d_in)
+    inputs = inputs.to(torch.float64)
+
+    # random_params leaves b_dec in [0, 1), which with apply_b_dec_to_input pushes
+    # nearly every pre-activation negative. Center it so the encoder path is exercised.
+    sae.b_dec.data -= 0.5
+    whitened_features = sae.encode(scaler.scale(inputs))
+    whitened_outputs = scaler.unscale(sae(scaler.scale(inputs)))
+    # a few percent of features must be active, otherwise the encoder check is vacuous
+    assert (whitened_features != 0).double().mean() > 0.01
+
+    _fold_scaler_whitening(sae, scaler)
+
+    assert sae.cfg.normalize_activations == "none"
+    assert_close(sae.encode(inputs), whitened_features)
+    assert_close(sae(inputs), whitened_outputs)
+
+
+@pytest.mark.parametrize("apply_b_dec_to_input", [True, False])
+@pytest.mark.parametrize("architecture", ALL_ARCHITECTURES)
+@torch.no_grad()
+def test_SAE_fold_activation_whitening_all_architectures(
+    architecture: str, apply_b_dec_to_input: bool
+):
+    cfg = build_sae_cfg_for_arch(
+        architecture, apply_b_dec_to_input=apply_b_dec_to_input, dtype="float64"
+    )
+    sae = get_sae_class(architecture)[0](cfg)
+    random_params(sae)
+    scaler, inputs = _estimate_whitening_scaler(cfg.d_in)
+    inputs = inputs.to(torch.float64)
+
+    if architecture in {"temporal", "matching_pursuit"}:
+        with pytest.raises(NotImplementedError):
+            _fold_scaler_whitening(sae, scaler)
+        return
+
+    # random_params leaves b_dec in [0, 1), which with apply_b_dec_to_input pushes
+    # nearly every pre-activation negative. Center it so the encoder path is exercised.
+    sae.b_dec.data -= 0.5
+    whitened_features = sae.encode(scaler.scale(inputs))
+    whitened_outputs = scaler.unscale(sae(scaler.scale(inputs)))
+    # a few percent of features must be active, otherwise the encoder check is vacuous
+    assert (whitened_features != 0).double().mean() > 0.01
+
+    _fold_scaler_whitening(sae, scaler)
+
+    assert sae.cfg.normalize_activations == "none"
+    assert_close(sae.encode(inputs), whitened_features)
+    assert_close(sae(inputs), whitened_outputs)
+
+
+@pytest.mark.parametrize("architecture", WHITENING_TRAINING_ARCHITECTURES)
+def test_TrainingSAE_fold_activation_whitening_then_save_inference_model_matches_whitened_inference(
+    architecture: str, tmp_path: Path
+):
+    cfg = build_sae_training_cfg_for_arch(
+        architecture, normalize_activations="covariance_whitening", dtype="float64"
+    )
+    sae = get_sae_training_class(architecture)[0](cfg)
+    random_params(sae)
+    scaler, inputs = _estimate_whitening_scaler(cfg.d_in)
+    inputs = inputs.to(torch.float64)
+
+    sae.save_inference_model(tmp_path / "unfolded")
+    unfolded = SAE.load_from_disk(str(tmp_path / "unfolded"), dtype="float64")
+    whitened_features = unfolded.encode(scaler.scale(inputs))
+    whitened_outputs = scaler.unscale(unfolded(scaler.scale(inputs)))
+    # a few percent of features must be active, otherwise the encoder check is vacuous
+    assert (whitened_features != 0).double().mean() > 0.01
+
+    _fold_scaler_whitening(sae, scaler)
+    sae.save_inference_model(tmp_path / "folded")
+    folded = SAE.load_from_disk(str(tmp_path / "folded"), dtype="float64")
+
+    assert folded.cfg.normalize_activations == "none"
+    assert_close(folded.encode(inputs), whitened_features)
+    assert_close(folded(inputs), whitened_outputs)
+
+
+def test_TrainingSAE_fold_activation_whitening_float32_matches_within_1e_5():
+    cfg = build_sae_training_cfg(normalize_activations="covariance_whitening")
+    sae = StandardTrainingSAE(cfg)
+    random_params(sae)
+    scaler, inputs = _estimate_whitening_scaler(cfg.d_in)
+
+    whitened_outputs = scaler.unscale(sae(scaler.scale(inputs)))
+    _fold_scaler_whitening(sae, scaler)
+
+    assert sae.W_enc.dtype == torch.float32
+    # float32 rounding scales with the largest outputs, not with each element
+    output_scale = whitened_outputs.abs().max().item()
+    assert_close(sae(inputs), whitened_outputs, atol=1e-5 * output_scale, rtol=1e-5)
 
 
 @pytest.mark.parametrize("architecture", ALL_ARCHITECTURES)

@@ -99,6 +99,22 @@ class GatedSAE(SAE[GatedSAEConfig]):
         self.b_gate.data.mul_(W_dec_norms)
         self.b_mag.data.mul_(W_dec_norms)
 
+    @override
+    @torch.no_grad()
+    def fold_activation_whitening(
+        self,
+        mean: torch.Tensor,
+        whitening_matrix: torch.Tensor,
+        unwhitening_matrix: torch.Tensor,
+    ) -> None:
+        super().fold_activation_whitening(mean, whitening_matrix, unwhitening_matrix)
+        if not self.cfg.apply_b_dec_to_input:
+            # Same shift the base class applies to b_enc. The magnitude path uses
+            # W_enc * exp(r_mag), so its bias shift is scaled by exp(r_mag) too.
+            shift = mean.to(self.W_enc) @ self.W_enc
+            self.b_gate.data.sub_(shift)
+            self.b_mag.data.sub_(shift * self.r_mag.exp())
+
 
 @dataclass
 class GatedTrainingSAEConfig(TrainingSAEConfig):
@@ -230,6 +246,22 @@ class GatedTrainingSAE(TrainingSAE[GatedTrainingSAEConfig]):
         # r_mag doesn't need scaling since W_enc scaling is sufficient for magnitude path
         self.b_gate.data.mul_(W_dec_norms)
         self.b_mag.data.mul_(W_dec_norms)
+
+    @override
+    @torch.no_grad()
+    def fold_activation_whitening(
+        self,
+        mean: torch.Tensor,
+        whitening_matrix: torch.Tensor,
+        unwhitening_matrix: torch.Tensor,
+    ) -> None:
+        super().fold_activation_whitening(mean, whitening_matrix, unwhitening_matrix)
+        if not self.cfg.apply_b_dec_to_input:
+            # Same shift the base class applies to b_enc. The magnitude path uses
+            # W_enc * exp(r_mag), so its bias shift is scaled by exp(r_mag) too.
+            shift = mean.to(self.W_enc) @ self.W_enc
+            self.b_gate.data.sub_(shift)
+            self.b_mag.data.sub_(shift * self.r_mag.exp())
 
 
 def _init_weights_gated(

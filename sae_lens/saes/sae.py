@@ -159,6 +159,7 @@ class SAEConfig(ABC):
         "none",
         "expected_average_only_in",  # (Anthropic April 2024 Update)
         "layer_norm",
+        "covariance_whitening",  # (https://arxiv.org/abs/2511.13981)
     ] = "none"
     reshape_activations: Literal["none", "hook_z"] = "none"
     metadata: SAEMetadata = field(default_factory=SAEMetadata)
@@ -192,9 +193,10 @@ class SAEConfig(ABC):
             "expected_average_only_in",
             "constant_norm_rescale",
             "layer_norm",
+            "covariance_whitening",
         ]:
             raise ValueError(
-                f"normalize_activations must be none, expected_average_only_in, layer_norm, or constant_norm_rescale. Got {self.normalize_activations}"
+                f"normalize_activations must be none, expected_average_only_in, layer_norm, constant_norm_rescale, or covariance_whitening. Got {self.normalize_activations}"
             )
 
 
@@ -311,6 +313,52 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         self.W_enc.data *= scaling_factor  # type: ignore
         self.W_dec.data /= scaling_factor  # type: ignore
         self.b_dec.data /= scaling_factor  # type: ignore
+        self.cfg.normalize_activations = "none"
+
+    @torch.no_grad()
+    def fold_activation_whitening(
+        self,
+        mean: torch.Tensor,
+        whitening_matrix: torch.Tensor,
+        unwhitening_matrix: torch.Tensor,
+    ) -> None:
+        """
+        Fold an affine whitening of the input activations into the SAE weights.
+
+        When training with ``normalize_activations="covariance_whitening"`` the SAE
+        sees whitened activations z = (x - mean) @ M and its reconstructions are
+        mapped back with x_hat = z_hat @ M^-1 + mean. Both maps are affine, so they
+        can be absorbed into the weights and the folded SAE produces identical
+        feature activations and outputs from the raw activations x:
+
+        - W_enc <- M @ W_enc
+        - b_enc <- b_enc - mean @ (M @ W_enc), only if apply_b_dec_to_input is False
+          (otherwise the folded b_dec below already subtracts mean from the input)
+        - W_dec <- W_dec @ M^-1
+        - b_dec <- b_dec @ M^-1 + mean
+
+        Subclasses with additional encoder biases must apply the same shift as b_enc.
+
+        Args:
+            mean: Activation mean of shape (d_in,).
+            whitening_matrix: Matrix M of shape (d_in, d_in), applied as z = (x - mean) @ M.
+            unwhitening_matrix: Its inverse M^-1, applied as x = z @ M^-1 + mean.
+        """
+        # Compute in at least the precision of the whitening statistics, so bf16
+        # weights are folded in float32 and float64 weights stay float64.
+        dtype = torch.promote_types(self.W_enc.dtype, whitening_matrix.dtype)
+        mean = mean.to(self.device, dtype)
+        whitening_matrix = whitening_matrix.to(self.device, dtype)
+        unwhitening_matrix = unwhitening_matrix.to(self.device, dtype)
+        self.W_enc.data.copy_(whitening_matrix @ self.W_enc.data.to(dtype))
+        if (
+            not self.cfg.apply_b_dec_to_input
+            and hasattr(self, "b_enc")
+            and isinstance(self.b_enc, nn.Parameter)
+        ):
+            self.b_enc.data.sub_(mean @ self.W_enc.data.to(dtype))
+        self.W_dec.data.copy_(self.W_dec.data.to(dtype) @ unwhitening_matrix)
+        self.b_dec.data.copy_(self.b_dec.data.to(dtype) @ unwhitening_matrix + mean)
         self.cfg.normalize_activations = "none"
 
     def get_activation_fn(self) -> Callable[[torch.Tensor], torch.Tensor]:
