@@ -18,6 +18,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # A full run takes well under 10 minutes, so fail fast if something hangs
+    timeout-minutes: 30
     strategy:
       matrix:
         # Huggingface gets mad about us spamming them in CI, so try to run fewer versions of tests
@@ -81,9 +83,10 @@ jobs:
       - name: Run Unit Tests
         #   Would use make, but want cov report in xml format
         #   TRACK_DISK_USAGE=1 enables per-test disk usage tracking (see tests/conftest.py)
-        #   -n auto runs tests in parallel across the runner's CPUs. worksteal
-        #   rebalances work since test durations vary a lot.
-        run: pytest -v -n auto --dist worksteal --durations=20 --cov=sae_lens/ --cov-report=term-missing --cov-branch tests --cov-report=xml
+        #   -n logical runs one test worker per vCPU, which is faster than one per
+        #   physical core since many tests wait on network or subprocesses.
+        #   worksteal rebalances work since test durations vary a lot.
+        run: pytest -v -n logical --dist worksteal --durations=20 --cov=sae_lens/ --cov-report=term-missing --cov-branch tests --cov-report=xml
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           TRACK_DISK_USAGE: "1"

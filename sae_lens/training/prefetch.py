@@ -89,7 +89,9 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
         Acquires the lock that the producer holds while calling
         ``next(source)``, so callers can drive ``source`` from another thread
         (e.g. for eval) without racing. Acquiring the lock can stall for up to
-        one ``next(source)`` step.
+        one ``next(source)`` step. Don't pull from this iterator inside the
+        ``with``-block: the paused producer can't refill the queue, so once it's
+        empty ``next()`` blocks forever.
         """
         with self._lock:
             yield

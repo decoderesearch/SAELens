@@ -1,3 +1,4 @@
+import threading
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -18,8 +19,10 @@ from sae_lens.config import LoggingConfig
 from sae_lens.multi_sae_training_runner import InterruptedException, PerSAEEvaluator
 from sae_lens.saes.sae import TrainingSAE, TrainingSAEConfig
 from sae_lens.saes.standard_sae import StandardTrainingSAE
+from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.multi_sae_trainer import MultiSAETrainer
+from sae_lens.training.prefetch import PrefetchingIterator
 from tests.helpers import TINYSTORIES_MODEL, load_model_cached
 
 
@@ -415,6 +418,57 @@ def test_multi_sae_runner_logs_per_sae_metrics_to_wandb(
     assert "b/custom/batch_abs_mean" in all_keys
     # sparsity reset (feature_sampling_window=2) logs mean log10 feature sparsity
     assert "a/metrics/mean_log10_feature_sparsity" in all_keys
+
+
+def test_MultiSAEEvaluator_user_evaluator_can_pull_more_batches_than_are_prefetched(
+    ts_model: HookedTransformer, dataset: Dataset
+):
+    d_in = ts_model.cfg.d_model
+    n_batches_per_sae = 3
+
+    def user_evaluator(
+        _sae: TrainingSAE[Any], data_view: Any, _scaler: Any
+    ) -> dict[str, float]:
+        batches = [next(data_view) for _ in range(n_batches_per_sae)]
+        return {"custom/n_batches": float(len(batches))}
+
+    cfg = _build_cfg(
+        saes={"a": _std_sae_cfg(d_in), "b": _std_sae_cfg(d_in)},
+        hook_names="blocks.0.hook_mlp_out",
+        evaluator=user_evaluator,
+        n_eval_batches=1,
+    )
+    runner = MultiSAETrainingRunner(
+        cfg, override_model=ts_model, override_dataset=dataset
+    )
+    # run() does this before training, and run_evals needs each SAE's hook name
+    runner._set_sae_metadata()
+    # A queue of 1 holds fewer batches than the user evaluator pulls
+    data_provider = PrefetchingIterator(
+        runner.activations_store.get_multi_hook_data_loader(), prefetch=1
+    )
+
+    metrics: dict[str, Any] = {}
+
+    def run_evaluator() -> None:
+        metrics.update(
+            runner.evaluator(
+                saes=runner.saes,
+                data_provider=data_provider,
+                activation_scalers={name: ActivationScaler() for name in runner.saes},
+                hook_names=cfg.hook_names_per_sae,
+            )
+        )
+
+    # Run in a daemon thread so a deadlock fails the test instead of hanging it
+    thread = threading.Thread(target=run_evaluator, daemon=True)
+    thread.start()
+    thread.join(timeout=60)
+
+    assert not thread.is_alive(), "evaluator deadlocked on the paused prefetcher"
+    assert metrics["a/custom/n_batches"] == n_batches_per_sae
+    assert metrics["b/custom/n_batches"] == n_batches_per_sae
+    assert "a/model_performance_preservation" in metrics
 
 
 def test_multi_sae_runner_rejects_mismatched_override_saes(
