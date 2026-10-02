@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v6.53.0 (2026-10-02)
+
+### Feature
+
+* feat: add AbsTopK bidirectional SAE variant (#736) ([`1579edc`](https://github.com/decoderesearch/SAELens/commit/1579edce2ebcef6d99eee142bf66bfac506df545))
+
+### Test
+
+* test: memoize HfApi.list_repo_files to avoid HF rate limits in CI (#752) ([`89307d8`](https://github.com/decoderesearch/SAELens/commit/89307d892c1e3bfb4d626c523dd233e75f70ffda))
+
 ## v6.52.0 (2026-10-02)
 
 ### Feature
