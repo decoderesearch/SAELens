@@ -1187,7 +1187,7 @@
 <li>For Gated SAEs: <code>l1_coefficient</code> (controls L1-like penalty on gate activations), <code>l1_warm_up_steps</code>.</li>
 <li>For JumpReLU SAEs: <code>l0_coefficient</code> (controls L0-like penalty), <code>l0_warm_up_steps</code>, <code>jumprelu_init_threshold</code>, <code>jumprelu_bandwidth</code>.</li>
 <li>For TopK and BatchTopK SAEs: <code>k</code> (the number of features to keep active). Sparsity is enforced structurally.</li>
-<li><code>normalize_activations</code>: Strategy for normalizing activations before they enter the SAE (e.g., <code>"expected_average_only_in"</code>).</li>
+<li><code>normalize_activations</code>: Strategy for normalizing activations before they enter the SAE (e.g., <code>"expected_average_only_in"</code>). <code>"covariance_whitening"</code> whitens the activations using their estimated mean and covariance during training, following <a href="https://arxiv.org/abs/2511.13981">Data Whitening Improves Sparse Autoencoder Learning</a>. Like <code>"expected_average_only_in"</code>, the whitening is folded into the SAE weights at the end of training, so the saved SAE takes raw activations and needs no extra compute at inference.</li>
 </ul>
 <p>A sample training run from the <a href="https://github.com/decoderesearch/SAELens/blob/main/tutorials/training_a_sparse_autoencoder.ipynb">tutorial</a> is shown below. Note how SAE-specific parameters are nested within the <code>sae</code> field:</p>
 <div class="highlight"><pre><span></span><code><span id="__span-0-1"><a href="#__codelineno-0-1" id="__codelineno-0-1" name="__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
