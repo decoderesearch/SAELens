@@ -471,6 +471,35 @@ def test_MultiSAEEvaluator_user_evaluator_can_pull_more_batches_than_are_prefetc
     assert "a/model_performance_preservation" in metrics
 
 
+def test_MultiSAEEvaluator_runs_only_built_in_evals_without_a_user_evaluator(
+    ts_model: HookedTransformer, dataset: Dataset
+):
+    d_in = ts_model.cfg.d_model
+    cfg = _build_cfg(
+        saes={"a": _std_sae_cfg(d_in), "b": _std_sae_cfg(d_in)},
+        hook_names="blocks.0.hook_mlp_out",
+        n_eval_batches=1,
+    )
+    runner = MultiSAETrainingRunner(
+        cfg, override_model=ts_model, override_dataset=dataset
+    )
+    runner._set_sae_metadata()
+    data_provider = PrefetchingIterator(
+        runner.activations_store.get_multi_hook_data_loader(), prefetch=1
+    )
+
+    metrics = runner.evaluator(
+        saes=runner.saes,
+        data_provider=data_provider,
+        activation_scalers={name: ActivationScaler() for name in runner.saes},
+        hook_names=cfg.hook_names_per_sae,
+    )
+
+    for name in ["a", "b"]:
+        assert "ce_loss_score" in metrics[f"{name}/model_performance_preservation"]
+    assert not any("custom" in k for k in metrics)
+
+
 def test_multi_sae_runner_rejects_mismatched_override_saes(
     ts_model: HookedTransformer, dataset: Dataset
 ):
