@@ -9,7 +9,7 @@ from torch.optim.lr_scheduler import (
     LRScheduler,
 )
 
-from sae_lens.training.optim import get_lr_scheduler
+from sae_lens.training.optim import CoefficientScheduler, get_lr_scheduler
 
 LR = 0.1
 
@@ -197,3 +197,21 @@ def test_get_scheduler_cosineannealingwarmrestarts(optimizer: Adam):
     assert isinstance(main_scheduler, CosineAnnealingWarmRestarts)
     assert main_scheduler.T_0 == 4
     assert main_scheduler.eta_min == 0.05
+
+
+@pytest.mark.parametrize(
+    "steps_taken, expected_value", [(0, 0.0), (4, 2.0), (10, 5.0), (20, 5.0)]
+)
+def test_CoefficientScheduler_load_state_dict_restores_current_value(
+    steps_taken: int, expected_value: float
+):
+    original = CoefficientScheduler(warm_up_steps=10, final_value=5.0)
+    for _ in range(steps_taken):
+        original.step()
+    assert original.value == pytest.approx(expected_value)
+
+    restored = CoefficientScheduler(warm_up_steps=10, final_value=5.0)
+    restored.load_state_dict(original.state_dict())
+
+    assert restored.current_step == original.current_step
+    assert restored.value == pytest.approx(original.value)

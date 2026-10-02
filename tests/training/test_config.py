@@ -185,6 +185,16 @@ def test_LanguageModelSAERunnerConfig_generates_checkpoint_id_without_wandb_util
     assert cfg.checkpoint_path == "checkpoints/12345678"
 
 
+def test_LanguageModelSAERunnerConfig_keeps_checkpoint_path_none():
+    cfg = LanguageModelSAERunnerConfig(
+        sae=StandardTrainingSAEConfig(d_in=5, d_sae=10),
+        checkpoint_path=None,
+    )
+
+    assert cfg.checkpoint_path is None
+    assert cfg.to_sae_trainer_config().checkpoint_path is None
+
+
 def test_LanguageModelSAERunnerConfig_to_dict_and_from_dict():
     cfg = LanguageModelSAERunnerConfig(
         sae=JumpReLUTrainingSAEConfig(

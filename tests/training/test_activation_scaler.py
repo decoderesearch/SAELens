@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Generator
 
 import numpy as np
@@ -7,7 +8,7 @@ from transformer_lens import HookedTransformer
 
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
-from tests.helpers import assert_close, build_runner_cfg
+from tests.helpers import assert_close, build_runner_cfg, correlated_activations
 
 
 def test_ActivationScaler_scale_without_scaling_factor():
@@ -189,3 +190,78 @@ def test_ActivationScaler_estimates_norm_scaling_factor_from_activations_store(
     combined = torch.cat(batches, dim=0)
     scaled_norm = combined.norm(dim=-1).mean() * scaler.scaling_factor
     assert scaled_norm == pytest.approx(np.sqrt(store.d_in), abs=5)
+
+
+def test_ActivationScaler_estimate_whitening_gives_zero_mean_and_identity_covariance():
+    d_in = 16
+    acts = next(correlated_activations(d_in, batch_size=1536))
+
+    scaler = ActivationScaler()
+    scaler.estimate_whitening(
+        d_in=d_in,
+        data_provider=iter(acts.split(512)),
+        n_batches_for_norm_estimate=3,
+        eps=0.0,
+    )
+    whitened = scaler.scale(acts)
+
+    # The statistics were estimated from exactly these samples, so this is exact algebra.
+    assert_close(whitened.mean(dim=0), torch.zeros(d_in), atol=1e-4, rtol=0)
+    assert_close(torch.cov(whitened.T), torch.eye(d_in), atol=1e-4, rtol=0)
+    assert scaler.whitening is not None
+    assert_close(
+        scaler.whitening.matrix @ scaler.whitening.inverse_matrix,
+        torch.eye(d_in, dtype=torch.float64),
+        atol=1e-10,
+        rtol=0,
+    )
+
+
+def test_ActivationScaler_scale_unscale_roundtrip_with_whitening():
+    d_in = 16
+    provider = correlated_activations(d_in, batch_size=256)
+    scaler = ActivationScaler()
+    scaler.estimate_whitening(
+        d_in=d_in, data_provider=provider, n_batches_for_norm_estimate=4
+    )
+
+    acts = next(provider)
+    assert_close(scaler.unscale(scaler.scale(acts)), acts, atol=1e-5, rtol=1e-5)
+
+
+def test_ActivationScaler_save_and_load_roundtrip_with_whitening(tmp_path: Path):
+    d_in = 16
+    provider = correlated_activations(d_in, batch_size=256)
+    scaler = ActivationScaler()
+    scaler.estimate_whitening(
+        d_in=d_in, data_provider=provider, n_batches_for_norm_estimate=4
+    )
+    scaler.save(str(tmp_path / "activation_scaler.json"))
+
+    loaded = ActivationScaler(scaling_factor=3.0)
+    loaded.load(tmp_path / "activation_scaler.json")
+
+    assert loaded.scaling_factor is None
+    acts = next(provider)
+    assert_close(loaded.scale(acts), scaler.scale(acts))
+    assert_close(loaded.unscale(acts), scaler.unscale(acts))
+
+
+def test_ActivationScaler_load_without_whitening_file_clears_whitening(
+    tmp_path: Path,
+):
+    scaler = ActivationScaler(scaling_factor=2.0)
+    scaler.save(str(tmp_path / "activation_scaler.json"))
+    assert list(tmp_path.iterdir()) == [tmp_path / "activation_scaler.json"]
+
+    d_in = 16
+    loaded = ActivationScaler()
+    loaded.estimate_whitening(
+        d_in=d_in,
+        data_provider=correlated_activations(d_in, batch_size=256),
+        n_batches_for_norm_estimate=2,
+    )
+    loaded.load(tmp_path / "activation_scaler.json")
+
+    assert loaded.scaling_factor == 2.0
+    assert loaded.whitening is None

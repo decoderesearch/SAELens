@@ -11,7 +11,7 @@ from tests.helpers import build_runner_cfg
 
 
 # The way to run this with this command:
-# poetry run -k test_benchmark_activations_store_get_batch_tokens_pretokenized_vs_raw -ss
+# uv run pytest -k test_benchmark_activations_store_get_batch_tokens_pretokenized_vs_raw -ss
 def test_benchmark_activations_store_get_batch_tokens_pretokenized_vs_raw():
     model = HookedTransformer.from_pretrained("gpt2")
     tokenizer = model.tokenizer

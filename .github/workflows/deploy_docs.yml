@@ -30,15 +30,20 @@ jobs:
     env:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       SAE_CONFIG_CACHE_DIR: ~/.cache/sae_config_cache
+      # Building the docs doesn't need a GPU, so skip the multi-GB CUDA torch build
+      UV_TORCH_BACKEND: cpu
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Important for mike to work properly
-      - name: Install Python
-        uses: actions/setup-python@v5
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v10.2.0
         with:
-          python-version: 3.11
+          python-version: "3.11"
+          # Creates .venv and puts it on PATH for later steps
+          activate-environment: true
+          enable-cache: false
       - name: Cache Huggingface assets
         uses: actions/cache@v4
         with:
@@ -60,30 +65,8 @@ jobs:
           restore-keys: |
             sae-config-cache-v1-${{ hashFiles('sae_lens/pretrained_saes.yaml') }}-
             sae-config-cache-v1-
-      - name: Load cached Poetry installation
-        id: cached-poetry
-        uses: actions/cache@v4
-        with:
-          path: ~/.local
-          key: poetry-${{ runner.os }}-3.11-0
-      - name: Install Poetry
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-3.11-${{ hashFiles('**/pyproject.toml') }}
-          restore-keys: |
-            venv-${{ runner.os }}-3.11-
       - name: Install dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction
+        run: uv pip install -e . --group dev
       - name: Set Python Path
         run: echo "PYTHONPATH=$PYTHONPATH:$PWD" >> $GITHUB_ENV
       - name: Configure Git
@@ -129,22 +112,22 @@ jobs:
           fi
 
           # Deploy the version (this will overwrite if it exists)
-          poetry run mike deploy --push $RELEASE_TAG
+          mike deploy --push $RELEASE_TAG
 
           # If stable release (no pre-release identifiers), also update latest alias
           if [[ ! "$RELEASE_TAG" =~ (alpha|beta|rc) ]]; then
-            poetry run mike alias -u --push $RELEASE_TAG latest
-            poetry run mike set-default --push latest
+            mike alias -u --push $RELEASE_TAG latest
+            mike set-default --push latest
           fi
       - name: Deploy main branch docs
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          poetry run mike deploy --push --update-aliases dev main
+          mike deploy --push --update-aliases dev main
           # Only set as default if no stable release exists
-          if ! poetry run mike list | grep -q "latest"; then
-            poetry run mike set-default --push dev
+          if ! mike list | grep -q "latest"; then
+            mike set-default --push dev
           fi
       - name: Save SAE config cache
         if: always()

@@ -95,6 +95,17 @@ class MatchingPursuitSAE(SAE[MatchingPursuitSAEConfig]):
         )
 
     @override
+    def fold_activation_whitening(
+        self,
+        mean: torch.Tensor,
+        whitening_matrix: torch.Tensor,
+        unwhitening_matrix: torch.Tensor,
+    ) -> None:
+        raise NotImplementedError(
+            "Folding activation whitening is not supported for MatchingPursuit SAEs, as the encoder is tied to the decoder"
+        )
+
+    @override
     def decode(self, feature_acts: torch.Tensor) -> torch.Tensor:
         """
         Decode the feature activations back to the input space.
@@ -151,6 +162,12 @@ class MatchingPursuitTrainingSAEConfig(TrainingSAEConfig):
 
     @override
     def __post_init__(self):
+        if self.normalize_activations == "covariance_whitening":
+            raise ValueError(
+                "normalize_activations='covariance_whitening' is not supported for "
+                "MatchingPursuitTrainingSAE, since the whitening cannot be folded into "
+                "its tied encoder after training"
+            )
         if self.decoder_init_norm != 1.0:
             self.decoder_init_norm = 1.0
             warnings.warn(
@@ -197,6 +214,17 @@ class MatchingPursuitTrainingSAE(TrainingSAE[MatchingPursuitTrainingSAEConfig]):
     def fold_W_dec_norm(self) -> None:
         raise NotImplementedError(
             "Folding W_dec_norm is not safe for MatchingPursuit SAEs, as this may change the resulting activations"
+        )
+
+    @override
+    def fold_activation_whitening(
+        self,
+        mean: torch.Tensor,
+        whitening_matrix: torch.Tensor,
+        unwhitening_matrix: torch.Tensor,
+    ) -> None:
+        raise NotImplementedError(
+            "Folding activation whitening is not supported for MatchingPursuit SAEs, as the encoder is tied to the decoder"
         )
 
     @override

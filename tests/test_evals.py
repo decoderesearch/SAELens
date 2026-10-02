@@ -866,6 +866,40 @@ def test_explained_variance_batched_matches_unbatched_with_unequal_batch_sizes()
     assert ev_batched == pytest.approx(ev_single, rel=1e-12)
 
 
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
+)
+def test_explained_variance_low_precision_reductions_are_batch_invariant(
+    dtype: torch.dtype,
+):
+    # Each coordinate has variance 1 and squared reconstruction error 0.25.
+    # The full squared-norm sum exceeds float16's range even though every
+    # activation is only +/-1. Casting after the reduction is too late.
+    x = torch.tensor([-1, 1], dtype=dtype).repeat(128)[:, None].repeat(1, 768)
+    x_hat = x + 0.5
+
+    for batch_size in [16, 64, 128, 256]:
+        assert _explained_variance(
+            list(x.split(batch_size)), list(x_hat.split(batch_size))
+        ) == pytest.approx(0.75)
+
+
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
+)
+def test_explained_variance_low_precision_with_nonzero_mean(dtype: torch.dtype):
+    # These inputs and errors are exactly representable even in bfloat16.
+    # Squaring them in bfloat16 loses the unit variance around the mean;
+    # float16 sums overflow for larger batches.
+    x = torch.tensor([[99, 101], [101, 99]], dtype=dtype).repeat(512, 1)
+    x_hat = x + torch.tensor([0.5, -0.5], dtype=dtype)
+
+    for batch_size in [1, 16, 128, 1024]:
+        assert _explained_variance(
+            list(x.split(batch_size)), list(x_hat.split(batch_size))
+        ) == pytest.approx(0.75)
+
+
 def test_explained_variance_invariant_to_input_bias():
     # Use float64 to avoid catastrophic cancellation with large biases
     d_model = 8

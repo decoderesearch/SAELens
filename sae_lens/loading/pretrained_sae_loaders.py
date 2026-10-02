@@ -965,10 +965,15 @@ def get_dictionary_learning_config_1_from_hf(
     activation_fn_kwargs = {"k": trainer["k"]} if activation_fn == "topk" else {}
 
     architecture = "standard"
+    apply_b_dec_to_input = True
     if trainer["dict_class"] == "GatedAutoEncoder":
         architecture = "gated"
     elif trainer["dict_class"] in ["MatryoshkaBatchTopKSAE", "BatchTopKSAE"]:
         architecture = "jumprelu"
+    elif trainer["dict_class"] == "JumpReluAutoEncoder":
+        architecture = "jumprelu"
+        # dictionary_learning's JumpReluAutoEncoder does not subtract b_dec before encoding
+        apply_b_dec_to_input = False
 
     return {
         "architecture": architecture,
@@ -981,7 +986,7 @@ def get_dictionary_learning_config_1_from_hf(
         "hook_head_index": None,
         "activation_fn": activation_fn,
         "activation_fn_kwargs": activation_fn_kwargs,
-        "apply_b_dec_to_input": True,
+        "apply_b_dec_to_input": apply_b_dec_to_input,
         "finetuning_scaling_factor": False,
         "sae_lens_training_version": None,
         "prepend_bos": True,
@@ -1257,7 +1262,8 @@ def dictionary_learning_sae_huggingface_loader_1(
     if "r_mag" in encoder:
         state_dict["r_mag"] = encoder["r_mag"]
 
-    if "threshold" in encoder:
+    # AutoEncoderTopK also saves a threshold, but its encode uses per-token top-k
+    if "threshold" in encoder and cfg_dict["architecture"] == "jumprelu":
         threshold = encoder["threshold"]
         if threshold.ndim == 0:
             threshold = torch.full((W_enc.size(1),), threshold)

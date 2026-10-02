@@ -164,8 +164,22 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
             desc="Training SAE",
         )
 
-        if self.sae.cfg.normalize_activations == "expected_average_only_in":
+        # Statistics loaded from a checkpoint are kept: the weights were trained
+        # against them, and a fresh estimate would not match them.
+        if (
+            self.sae.cfg.normalize_activations == "expected_average_only_in"
+            and self.activation_scaler.scaling_factor is None
+        ):
             self.activation_scaler.estimate_scaling_factor(
+                d_in=self.sae.cfg.d_in,
+                data_provider=self.data_provider,
+                n_batches_for_norm_estimate=self.cfg.n_batches_for_norm_estimate,
+            )
+        elif (
+            self.sae.cfg.normalize_activations == "covariance_whitening"
+            and self.activation_scaler.whitening is None
+        ):
+            self.activation_scaler.estimate_whitening(
                 d_in=self.sae.cfg.d_in,
                 data_provider=self.data_provider,
                 n_batches_for_norm_estimate=self.cfg.n_batches_for_norm_estimate,
@@ -187,12 +201,19 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
             self.n_training_steps += 1
             self._update_pbar(step_output, pbar)
 
-        # fold the estimated norm scaling factor into the sae weights
+        # fold the estimated activation normalization into the sae weights
         if self.activation_scaler.scaling_factor is not None:
             self.sae.fold_activation_norm_scaling_factor(
                 self.activation_scaler.scaling_factor
             )
             self.activation_scaler.scaling_factor = None
+        if self.activation_scaler.whitening is not None:
+            self.sae.fold_activation_whitening(
+                mean=self.activation_scaler.whitening.mean,
+                whitening_matrix=self.activation_scaler.whitening.matrix,
+                unwhitening_matrix=self.activation_scaler.whitening.inverse_matrix,
+            )
+            self.activation_scaler.whitening = None
 
         self.set_final_sae_metadata()
 
@@ -256,7 +277,11 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
                     )
 
         if self.save_checkpoint_fn is not None:
-            self.save_checkpoint_fn(checkpoint_path=checkpoint_path)
+            # Without a base path, the checkpoint above only went to a temp dir
+            # for the wandb upload, and that dir has been deleted.
+            self.save_checkpoint_fn(
+                checkpoint_path=checkpoint_path if base is not None else None
+            )
 
     def step(self, batch: torch.Tensor) -> TrainStepOutput:
         """
@@ -401,7 +426,11 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
         output: TrainStepOutput,
         n_training_samples: int,
     ) -> dict[str, Any]:
-        sae_in = output.sae_in
+        # Promote before squaring or reducing: low-precision sums can overflow,
+        # and low-precision results are too coarse to track explained variance.
+        sae_in = output.sae_in.to(
+            torch.promote_types(output.sae_in.dtype, torch.float32)
+        )
         sae_out = output.sae_out
         feature_acts = output.feature_acts
         loss = output.loss.item()

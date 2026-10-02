@@ -18,22 +18,35 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # A full run takes well under 10 minutes, so fail fast if something hangs
+    timeout-minutes: 30
     strategy:
       matrix:
         # Huggingface gets mad about us spamming them in CI, so try to run fewer versions of tests
         python-version: ["3.10"] # , "3.11", "3.12"]
 
     env:
-      # Increment this number to bust all caches (HuggingFace, Poetry, venv)
+      # Increment this number to bust all caches
       CACHE_VERSION: 10
+      # CI has no GPU, so install CPU-only torch instead of the multi-GB CUDA build
+      UV_TORCH_BACKEND: cpu
 
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - name: Install uv and Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: ${{ matrix.python-version }}
+          # Creates .venv and puts it on PATH for later steps
+          activate-environment: true
+          enable-cache: false
+      - name: Check available disk space
+        id: disk
+        run: echo "avail_gb=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')" >> "$GITHUB_OUTPUT"
       - name: Free Disk Space (Ubuntu)
+        # This job uses ~16GB of disk, and freeing space takes ~1.5 minutes, so
+        # only free space on runners that are short on it.
+        if: steps.disk.outputs.avail_gb < 40
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
           large-packages: false
@@ -44,32 +57,13 @@ jobs:
           path: ~/.cache/huggingface/hub
           restore-keys: |
             huggingface-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ matrix.python-version }}-
-      - name: Load cached Poetry installation
-        id: cached-poetry
-        uses: actions/cache@v4
-        with:
-          path: ~/.local # the path depends on the OS
-          key: poetry-${{ runner.os }}-${{ matrix.python-version }}-${{ env.CACHE_VERSION }}
-      - name: Install Poetry
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: venv-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
-          restore-keys: |
-            venv-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ matrix.python-version }}-
       - name: Install dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction
+        # There's no lockfile, so this resolves the latest versions on every run.
+        # Don't use `uv sync` or `uv run` here: they lock and sync the project,
+        # which would reinstall CUDA torch.
+        run: uv pip install -e . --group dev
       - name: Install TransformerLens dev-3.x
-        run: poetry run pip install git+https://github.com/TransformerLensOrg/TransformerLens.git@dev-3.x
+        run: uv pip install git+https://github.com/TransformerLensOrg/TransformerLens.git@dev-3.x
       - name: Check disk space before tests
         run: |
           echo "=== Disk Space Summary ==="
@@ -81,15 +75,18 @@ jobs:
           echo "=== Huggingface Cache Size ==="
           du -sh ~/.cache/huggingface 2>/dev/null || echo "No HF cache yet"
       - name: Check linting
-        run: poetry run ruff check .
+        run: ruff check .
       - name: Check formatting
-        run: poetry run ruff format --check .
+        run: ruff format --check .
       - name: type checking
-        run: poetry run pyright
+        run: pyright
       - name: Run Unit Tests
         #   Would use make, but want cov report in xml format
         #   TRACK_DISK_USAGE=1 enables per-test disk usage tracking (see tests/conftest.py)
-        run: poetry run pytest -v --cov=sae_lens/ --cov-report=term-missing --cov-branch tests --cov-report=xml
+        #   -n logical runs one test worker per vCPU, which is faster than one per
+        #   physical core since many tests wait on network or subprocesses.
+        #   worksteal rebalances work since test durations vary a lot.
+        run: pytest -v -n logical --dist worksteal --durations=20 --cov=sae_lens/ --cov-report=term-missing --cov-branch tests --cov-report=xml
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           TRACK_DISK_USAGE: "1"

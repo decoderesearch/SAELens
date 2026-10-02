@@ -148,6 +148,13 @@ class MultiSAETrainer:
                     trainer.activation_scaler.scaling_factor
                 )
                 trainer.activation_scaler.scaling_factor = None
+            if trainer.activation_scaler.whitening is not None:
+                self.saes[name].fold_activation_whitening(
+                    mean=trainer.activation_scaler.whitening.mean,
+                    whitening_matrix=trainer.activation_scaler.whitening.matrix,
+                    unwhitening_matrix=trainer.activation_scaler.whitening.inverse_matrix,
+                )
+                trainer.activation_scaler.whitening = None
 
         for trainer in self.trainers.values():
             trainer.set_final_sae_metadata()
@@ -161,10 +168,18 @@ class MultiSAETrainer:
     @torch.no_grad()
     def _estimate_scaling_factors(self) -> None:
         """Estimate per-SAE activation scaling from a shared set of multi-hook batches."""
+        # Statistics loaded from a checkpoint are kept, as in SAETrainer.fit.
         needs = [
             name
             for name, sae in self.saes.items()
-            if sae.cfg.normalize_activations == "expected_average_only_in"
+            if (
+                sae.cfg.normalize_activations == "expected_average_only_in"
+                and self.trainers[name].activation_scaler.scaling_factor is None
+            )
+            or (
+                sae.cfg.normalize_activations == "covariance_whitening"
+                and self.trainers[name].activation_scaler.whitening is None
+            )
         ]
         if not needs:
             return
@@ -174,11 +189,20 @@ class MultiSAETrainer:
         ]
         for name in needs:
             hook = self.hook_names[name]
-            self.trainers[name].activation_scaler.estimate_scaling_factor(
-                d_in=self.saes[name].cfg.d_in,
-                data_provider=iter([batch[hook] for batch in cached]),
-                n_batches_for_norm_estimate=n,
-            )
+            scaler = self.trainers[name].activation_scaler
+            data_provider = iter([batch[hook] for batch in cached])
+            if self.saes[name].cfg.normalize_activations == "expected_average_only_in":
+                scaler.estimate_scaling_factor(
+                    d_in=self.saes[name].cfg.d_in,
+                    data_provider=data_provider,
+                    n_batches_for_norm_estimate=n,
+                )
+            else:
+                scaler.estimate_whitening(
+                    d_in=self.saes[name].cfg.d_in,
+                    data_provider=data_provider,
+                    n_batches_for_norm_estimate=n,
+                )
 
     def _is_logging_step(self) -> bool:
         return (

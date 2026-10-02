@@ -1,5 +1,76 @@
 # CHANGELOG
 
+## v6.52.0 (2026-10-02)
+
+### Feature
+
+* feat: Add covariance whitening normalization option (#697) ([`e378d01`](https://github.com/decoderesearch/SAELens/commit/e378d019155a551799c87e198a766336e7a9b479))
+
+### Fix
+
+* fix: avoid deadlock when a multi-SAE user evaluator reads from the prefetcher (#751) ([`772379e`](https://github.com/decoderesearch/SAELens/commit/772379ec6bdefe2aedeb2552b0211b9327e53268))
+
+## v6.51.8 (2026-10-02)
+
+### Ci
+
+* ci: run tests in parallel with pytest-xdist (#750) ([`c69fdef`](https://github.com/decoderesearch/SAELens/commit/c69fdef342e3be782a144857074eeb283f8373f0))
+
+### Fix
+
+* fix: load dictionary_learning AutoEncoderTopK SAEs that save a threshold (#749) ([`896ffb4`](https://github.com/decoderesearch/SAELens/commit/896ffb42fa55d01af738a86c9225aa53b7943962))
+
+### Test
+
+* test: speed up slow tests (#748) ([`729393f`](https://github.com/decoderesearch/SAELens/commit/729393f56511d1291558520e737fb637fd036dde))
+
+## v6.51.7 (2026-10-01)
+
+### Ci
+
+* ci: switch from Poetry to uv and speed up CI (#746) ([`af8fbed`](https://github.com/decoderesearch/SAELens/commit/af8fbed0c3663d6f57a3ff36b7a7301da912f0a6))
+
+### Fix
+
+* fix: load dictionary_learning JumpReluAutoEncoder SAEs in dictionary_learning_1 converter (#747) ([`2607aa0`](https://github.com/decoderesearch/SAELens/commit/2607aa027da834e9df9c4d614d1d80ab732b9902))
+
+## v6.51.6 (2026-10-01)
+
+### Fix
+
+* fix: restore coefficient scheduler value when loading trainer state (#745) ([`51aafc7`](https://github.com/decoderesearch/SAELens/commit/51aafc7851ff2a4c5408b3c24123e296cf3b7c83))
+
+## v6.51.5 (2026-10-01)
+
+### Fix
+
+* fix: keep checkpoint_path=None so checkpoint saving can be disabled (#743) ([`0df2c95`](https://github.com/decoderesearch/SAELens/commit/0df2c95ad1e034ee328957f2ade6434b8f782f5c))
+
+## v6.51.4 (2026-10-01)
+
+### Fix
+
+* fix: promote low-precision explained variance arithmetic in training logs (#744) ([`821498c`](https://github.com/decoderesearch/SAELens/commit/821498cda0706a063c140aa50f7cb9f843afef9a))
+
+* fix: promote low-precision explained variance arithmetic (#742) ([`5ee19f8`](https://github.com/decoderesearch/SAELens/commit/5ee19f80c5d016c1a5bc71c31d5c1cf172c800b4))
+
+## v6.51.3 (2026-09-25)
+
+### Fix
+
+* fix: fix attn only hooked sae transformer (#741) ([`1de2390`](https://github.com/decoderesearch/SAELens/commit/1de2390cafcb2061532047b96810bb8044181121))
+
+## v6.51.2 (2026-09-24)
+
+### Fix
+
+* fix: pin transformer-lens to &lt;4.0.0
+
+transformer-lens 4.0 introduces breaking changes that are incompatible
+with SAELens.
+
+Co-Authored-By: Claude Fable 5.1 &lt;noreply@anthropic.com&gt; ([`3d35942`](https://github.com/decoderesearch/SAELens/commit/3d35942e9009b2cfcd2caa7d111070f31b0679b5))
+
 ## v6.51.1 (2026-09-18)
 
 ### Fix

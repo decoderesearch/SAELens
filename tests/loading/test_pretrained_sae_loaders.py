@@ -8,6 +8,16 @@ import pytest
 import requests
 import torch
 import yaml
+from dictionary_learning.trainers import (
+    BatchTopKTrainer,
+    GatedSAETrainer,
+    JumpReluTrainer,
+    StandardTrainer,
+    TopKTrainer,
+)
+from dictionary_learning.trainers.matryoshka_batch_top_k import (
+    MatryoshkaBatchTopKTrainer,
+)
 from huggingface_hub import hf_hub_download as real_hf_hub_download
 from huggingface_hub.utils import EntryNotFoundError
 from safetensors.torch import save_file
@@ -336,9 +346,10 @@ def test_gemma_3_sae_huggingface_loader_with_mocked_download(
     folder_name = "resid_post_all/layer_10_width_262k_l0_small"
     device = "cpu"
 
-    # These dimensions match the real SAE
+    # The loader infers d_in and d_sae from the tensor shapes rather than the
+    # folder name, so small weights work and avoid writing GBs to disk.
     d_in = 1152
-    d_sae = 262144
+    d_sae = 512
 
     # Create mock weights matching the expected safetensors format
     W_enc = torch.randn(d_in, d_sae, dtype=torch.float32)
@@ -1827,6 +1838,181 @@ def test_dictionary_learning_sae_huggingface_loader_1_matryoshka(
     torch.testing.assert_close(state_dict["b_enc"], b_enc)
     assert state_dict["threshold"].shape == (D_SAE,)
     assert torch.all(state_dict["threshold"] == threshold_scalar)
+
+
+def _mock_dictionary_learning_jumprelu_download(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    raw_state_dict: dict[str, torch.Tensor],
+) -> None:
+    d_sae, d_in = raw_state_dict["W_dec"].shape
+    config = {
+        "trainer": {
+            "trainer_class": "JumpReluTrainer",
+            "dict_class": "JumpReluAutoEncoder",
+            "activation_dim": d_in,
+            "dict_size": d_sae,
+            "layer": 8,
+            "lm_name": "EleutherAI/pythia-160m-deduped",
+        },
+        "buffer": {"ctx_len": 1024},
+    }
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config))
+    sae_path = tmp_path / "ae.pt"
+    torch.save(raw_state_dict, sae_path)
+
+    def mock_hf_hub_download(
+        repo_id: str,  # noqa: ARG001
+        filename: str,
+        force_download: bool = False,  # noqa: ARG001
+    ) -> str:
+        return str(sae_path if filename.endswith("ae.pt") else config_path)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+
+def test_dictionary_learning_sae_huggingface_loader_1_jumprelu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    D_IN = 64
+    D_SAE = 256
+    raw_state_dict = {
+        "W_enc": torch.randn(D_IN, D_SAE),
+        "b_enc": torch.randn(D_SAE),
+        "W_dec": torch.randn(D_SAE, D_IN),
+        "b_dec": torch.randn(D_IN),
+        "threshold": torch.rand(D_SAE) + 0.1,
+    }
+    _mock_dictionary_learning_jumprelu_download(tmp_path, monkeypatch, raw_state_dict)
+
+    cfg_dict, state_dict, sparsity = dictionary_learning_sae_huggingface_loader_1(
+        "adamkarvonen/saebench_pythia-160m-deduped_width-2pow14_date-0108",
+        "JumpRelu_pythia-160m-deduped__0108/resid_post_layer_8/trainer_0",
+    )
+
+    assert sparsity is None
+    assert cfg_dict["architecture"] == "jumprelu"
+    assert cfg_dict["apply_b_dec_to_input"] is False
+    assert state_dict.keys() == {"W_enc", "W_dec", "b_dec", "b_enc", "threshold"}
+    torch.testing.assert_close(state_dict["threshold"], raw_state_dict["threshold"])
+
+
+def test_from_pretrained_dictionary_learning_jumprelu_matches_reference_encoding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    D_IN = 64
+    D_SAE = 256
+    W_enc = torch.randn(D_IN, D_SAE) / D_IN**0.5
+    b_enc = torch.randn(D_SAE) * 0.3
+    W_dec = torch.randn(D_SAE, D_IN)
+    b_dec = torch.randn(D_IN)
+    threshold = torch.rand(D_SAE) + 0.2
+    _mock_dictionary_learning_jumprelu_download(
+        tmp_path,
+        monkeypatch,
+        {
+            "W_enc": W_enc,
+            "b_enc": b_enc,
+            "W_dec": W_dec,
+            "b_dec": b_dec,
+            "threshold": threshold,
+        },
+    )
+
+    sae = SAE.from_pretrained(
+        "adamkarvonen/saebench_pythia-160m-deduped_width-2pow14_date-0108",
+        "JumpRelu_pythia-160m-deduped__0108/resid_post_layer_8/trainer_0",
+        converter=dictionary_learning_sae_huggingface_loader_1,
+    )
+
+    # Reference: dictionary_learning's JumpReluAutoEncoder.encode / decode
+    x = torch.randn(1000, D_IN) * 2
+    pre_jump = x @ W_enc + b_enc
+    expected_feats = torch.relu(pre_jump * (pre_jump > threshold))
+    # the threshold must actually zero out some positive pre-activations
+    assert ((pre_jump > 0) & (pre_jump <= threshold)).any()
+    assert (expected_feats > 0).any()
+
+    with torch.no_grad():
+        feats = sae.encode(x)
+        recons = sae.decode(feats)
+    torch.testing.assert_close(feats, expected_feats)
+    torch.testing.assert_close(recons, expected_feats @ W_dec + b_dec)
+
+
+# steps must exceed the trainers' default warmup_steps
+DL_TRAINER_KWARGS: dict[str, Any] = {
+    "steps": 10_000,
+    "activation_dim": 32,
+    "dict_size": 128,
+    "layer": 3,
+    "lm_name": "EleutherAI/pythia-70m-deduped",
+    "device": "cpu",
+}
+
+
+@pytest.mark.parametrize(
+    "make_trainer",
+    [
+        lambda: StandardTrainer(**DL_TRAINER_KWARGS),
+        lambda: GatedSAETrainer(**DL_TRAINER_KWARGS),
+        lambda: JumpReluTrainer(**DL_TRAINER_KWARGS),
+        lambda: TopKTrainer(k=8, **DL_TRAINER_KWARGS),
+        lambda: BatchTopKTrainer(k=8, **DL_TRAINER_KWARGS),
+        lambda: MatryoshkaBatchTopKTrainer(
+            k=8, group_fractions=[0.25, 0.75], **DL_TRAINER_KWARGS
+        ),
+    ],
+    ids=["standard", "gated", "jumprelu", "topk", "batchtopk", "matryoshka"],
+)
+def test_from_pretrained_dictionary_learning_sae_matches_dictionary_learning(
+    make_trainer: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    trainer = make_trainer()
+    ae = trainer.ae
+    with torch.no_grad():
+        for param in ae.parameters():
+            param.copy_(torch.randn_like(param))
+        # JumpReLU, BatchTopK and Matryoshka gate on this threshold; TopK ignores it
+        if hasattr(ae, "threshold"):
+            ae.threshold.copy_(torch.rand_like(ae.threshold) + 0.5)
+
+    # save the same files as dictionary_learning's trainSAE
+    (tmp_path / "trainer_0").mkdir()
+    config = {"trainer": trainer.config, "buffer": {"ctx_len": 128}}
+    (tmp_path / "trainer_0" / "config.json").write_text(json.dumps(config))
+    torch.save(ae.state_dict(), tmp_path / "trainer_0" / "ae.pt")
+
+    def mock_hf_hub_download(
+        repo_id: str,  # noqa: ARG001
+        filename: str,
+        force_download: bool = False,  # noqa: ARG001
+    ) -> str:
+        return str(tmp_path / filename)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+    # compare in float64 so differing matmul orders don't cause rounding mismatches
+    sae = SAE.from_pretrained(
+        "fake/dictionary-learning-saes",
+        "trainer_0",
+        dtype="float64",
+        converter=dictionary_learning_sae_huggingface_loader_1,
+    )
+    ae.double()
+
+    x = torch.randn(500, 32, dtype=torch.float64)
+    with torch.no_grad():
+        expected_feats = ae.encode(x)
+        feats = sae.encode(x)
+        assert (expected_feats > 0).any()
+        torch.testing.assert_close(feats, expected_feats)
+        torch.testing.assert_close(sae.decode(feats), ae.decode(expected_feats))
 
 
 def test_from_pretrained_warns_when_using_registered_repo_id_directly(

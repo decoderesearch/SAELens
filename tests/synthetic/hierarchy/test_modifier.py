@@ -1122,13 +1122,15 @@ def test_hierarchy_modifier_large_hierarchy_performance():
                 active_counts <= 1
             ), "ME should enforce at most one child active"
 
-    # Performance assertions (generous bounds for CI variability)
+    # Performance assertions. Creation takes ~0.25s on a laptop and ~1-1.5s on a
+    # CI runner, and parallel test workers can slow it down further. These
+    # bounds are meant to catch algorithmic regressions, not small slowdowns.
     assert (
-        creation_time < 2.0
-    ), f"Modifier creation took {creation_time:.2f}s, expected < 2s"
+        creation_time < 5.0
+    ), f"Modifier creation took {creation_time:.2f}s, expected < 5s"
     assert (
-        apply_time < 2.0
-    ), f"Modifier application took {apply_time:.2f}s, expected < 2s"
+        apply_time < 5.0
+    ), f"Modifier application took {apply_time:.2f}s, expected < 5s"
 
 
 class TestHierarchyModifierStatistical:

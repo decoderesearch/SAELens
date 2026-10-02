@@ -84,7 +84,7 @@ def _default_cfg(
 
 
 # The way to run this with this command:
-# poetry run py.test tests/test_cache_activations_runner.py --profile-svg -s
+# uv run pytest tests/test_cache_activations_runner.py --profile-svg -s
 def test_cache_activations_runner(tmp_path: Path):
     cfg = _default_cfg(tmp_path)
     runner = CacheActivationsRunner(cfg)

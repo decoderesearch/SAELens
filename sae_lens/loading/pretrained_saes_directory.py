@@ -27,8 +27,9 @@ def get_pretrained_saes_directory() -> dict[str, PretrainedSAELookup]:
     directory: dict[str, PretrainedSAELookup] = {}
     yaml_file = files(package).joinpath("pretrained_saes.yaml")
     with yaml_file.open("r") as file:
-        # Load the YAML file content
-        data = yaml.safe_load(file)
+        # The C loader parses this large file ~5x faster, but PyYAML can be
+        # built without libyaml
+        data = yaml.load(file, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
         for release, value in data.items():
             saes_map: dict[str, str] = {}
             var_explained_map: dict[str, float] = {}
