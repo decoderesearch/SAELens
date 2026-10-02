@@ -542,8 +542,9 @@ def test_training_sae_fold_w_dec_norm_all_architectures(architecture: str):
     sae_out_1 = sae.decode(feature_activations_1)
     sae_out_2 = sae2.decode(feature_activations_2)
 
-    # but actual outputs should be the same
-    assert_close(sae_out_1, sae_out_2)
+    # but actual outputs should be the same. Signed activations (e.g. AbsTopK) can
+    # cancel to near-zero outputs, where rtol alone can't absorb float32 rounding.
+    assert_close(sae_out_1, sae_out_2, atol=1e-4)
 
 
 @pytest.mark.parametrize("architecture", ALL_FOLDABLE_ARCHITECTURES)
