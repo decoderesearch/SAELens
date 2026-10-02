@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v6.52.0 (2026-10-02)
+
+### Feature
+
+* feat: Add covariance whitening normalization option (#697) ([`e378d01`](https://github.com/decoderesearch/SAELens/commit/e378d019155a551799c87e198a766336e7a9b479))
+
+### Fix
+
+* fix: avoid deadlock when a multi-SAE user evaluator reads from the prefetcher (#751) ([`772379e`](https://github.com/decoderesearch/SAELens/commit/772379ec6bdefe2aedeb2552b0211b9327e53268))
+
 ## v6.51.8 (2026-10-02)
 
 ### Ci
