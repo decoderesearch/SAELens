@@ -117,17 +117,21 @@ class ActivationsStore:
         model: HookedRootModule,
         cfg: LanguageModelSAERunnerConfig[T_TRAINING_SAE_CONFIG]
         | CacheActivationsRunnerConfig,
-        override_dataset: HfDataset | None = None,
+        override_dataset: HfDataset | str | None = None,
+        dataset_split: str = "train",
+        use_cached_activations: bool | None = None,
+        dataset_trust_remote_code: bool | None = None,
     ) -> ActivationsStore:
         if isinstance(cfg, CacheActivationsRunnerConfig):
             return cls.from_cache_activations(model, cfg)
 
         cached_activations_path = cfg.cached_activations_path
+        if use_cached_activations is None:
+            use_cached_activations = cfg.use_cached_activations
+        if dataset_trust_remote_code is None:
+            dataset_trust_remote_code = cfg.dataset_trust_remote_code
         # set cached_activations_path to None if we're not using cached activations
-        if (
-            isinstance(cfg, LanguageModelSAERunnerConfig)
-            and not cfg.use_cached_activations
-        ):
+        if isinstance(cfg, LanguageModelSAERunnerConfig) and not use_cached_activations:
             cached_activations_path = None
 
         if override_dataset is None and cfg.dataset_path == "":
@@ -148,7 +152,9 @@ class ActivationsStore:
             )
         return cls(
             model=model,
-            dataset=override_dataset or cfg.dataset_path,
+            dataset=override_dataset
+            if override_dataset is not None
+            else cfg.dataset_path,
             streaming=cfg.streaming,
             hook_name=cfg.hook_name,
             hook_head_index=cfg.hook_head_index,
@@ -167,7 +173,8 @@ class ActivationsStore:
             cached_activations_path=cached_activations_path,
             model_kwargs=cfg.model_kwargs,
             autocast_lm=cfg.autocast_lm,
-            dataset_trust_remote_code=cfg.dataset_trust_remote_code,
+            dataset_trust_remote_code=dataset_trust_remote_code,
+            dataset_split=dataset_split,
             seqpos_slice=cfg.seqpos_slice,
             exclude_special_tokens=exclude_special_tokens,
             disable_concat_sequences=cfg.disable_concat_sequences,
@@ -334,6 +341,7 @@ class ActivationsStore:
         sequence_separator_token: int | Literal["bos", "eos", "sep"] | None = "bos",
         activations_mixing_fraction: float = 0.5,
         use_chat_formatting: bool = False,
+        dataset_split: str = "train",
     ):
         self.model = model
         if model_kwargs is None:
@@ -342,7 +350,7 @@ class ActivationsStore:
         self.dataset = (
             load_dataset(
                 dataset,
-                split="train",
+                split=dataset_split,
                 streaming=streaming,  # type: ignore
                 trust_remote_code=dataset_trust_remote_code,  # type: ignore
             )
