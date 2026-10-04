@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.54.0 (2026-10-04)
+
+### Feature
+
+* feat: fold decoder norms at load time via fold_W_dec_norm=True (#735) ([`33ea55f`](https://github.com/decoderesearch/SAELens/commit/33ea55f7b31ea3b448b0c0696bf9d4deaef5da5c))
+
 ## v6.53.1 (2026-10-04)
 
 ### Documentation
