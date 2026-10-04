@@ -67,16 +67,10 @@ sae = SAE.from_pretrained(...)
 sae.fold_W_dec_norm()
 ```
 
-The flag defaults to `False`, and is not merely a conservative default: folding is not
-defined for every architecture.
-
-- `standard`, `gated` and `jumprelu` support it.
-- `matching_pursuit` and `temporal` reject it outright.
-- `topk` rejects it unless the SAE was configured with `rescale_acts_by_decoder_norm`,
-  because rescaling activations can change which features survive the top-k.
-
-Requesting a fold on an SAE that does not support it raises `NotImplementedError` rather
-than silently returning differently-scaled weights.
+Folding is not supported for every architecture, so the flag defaults to `False`.
+Requesting a fold on an SAE that does not support it raises `NotImplementedError`. This
+includes TopK SAEs without `rescale_acts_by_decoder_norm` and matching pursuit SAEs,
+where rescaling activations could change which features are selected.
 
 ## Running SAEs Directly
 

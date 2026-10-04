@@ -581,19 +581,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
             device: The device to load the SAE on, defaults to "cpu".
             dtype: The dtype to load the SAE on, defaults to None. If None, the dtype will be inferred from the SAE config.
             converter: The converter to use to load the SAE, defaults to sae_lens_disk_loader.
-            fold_W_dec_norm: Whether to call `fold_W_dec_norm()` on the loaded SAE, defaults to False.
-
-                Most SAEs are not trained with a unit-norm decoder, so a feature's activation
-                magnitude and its decoder direction's length are entangled: activations are not
-                comparable between features, and published dashboards that assume a unit-norm
-                decoder (for example Neuronpedia's) will not reproduce. Folding rescales each
-                decoder row to unit norm and moves the norm into the encoder, which leaves the
-                SAE's output unchanged while making activations comparable.
-
-                Left off by default because it is not a safe no-op everywhere: the
-                `matching_pursuit` and `temporal` architectures reject it outright, and `topk`
-                rejects it unless `rescale_acts_by_decoder_norm` is set, since rescaling
-                activations can change which features survive the top-k.
+            fold_W_dec_norm: Whether to call `fold_W_dec_norm()` on the loaded SAE, defaults to False. Not supported for all SAE architectures.
         """
         overrides = {"dtype": dtype} if dtype is not None else None
         cfg_dict, state_dict = converter(path, device, cfg_overrides=overrides)
@@ -639,19 +627,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
             dtype: The dtype to load the SAE on, defaults to "float32".
             force_download: Whether to force download the SAE weights and config, defaults to False.
             converter: The converter to use to load the SAE, defaults to None. If None, the converter will be inferred from the release.
-            fold_W_dec_norm: Whether to call `fold_W_dec_norm()` on the loaded SAE, defaults to False.
-
-                Most SAEs are not trained with a unit-norm decoder, so a feature's activation
-                magnitude and its decoder direction's length are entangled: activations are not
-                comparable between features, and published dashboards that assume a unit-norm
-                decoder (for example Neuronpedia's) will not reproduce. Folding rescales each
-                decoder row to unit norm and moves the norm into the encoder, which leaves the
-                SAE's output unchanged while making activations comparable.
-
-                Left off by default because it is not a safe no-op everywhere: the
-                `matching_pursuit` and `temporal` architectures reject it outright, and `topk`
-                rejects it unless `rescale_acts_by_decoder_norm` is set, since rescaling
-                activations can change which features survive the top-k.
+            fold_W_dec_norm: Whether to call `fold_W_dec_norm()` on the loaded SAE, defaults to False. Not supported for all SAE architectures.
         """
         return cls.from_pretrained_with_cfg_and_sparsity(
             release,
@@ -685,19 +661,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
             dtype: The dtype to load the SAE on, defaults to "float32".
             force_download: Whether to force download the SAE weights and config, defaults to False.
             converter: The converter to use to load the SAE, defaults to None. If None, the converter will be inferred from the release.
-            fold_W_dec_norm: Whether to call `fold_W_dec_norm()` on the loaded SAE, defaults to False.
-
-                Most SAEs are not trained with a unit-norm decoder, so a feature's activation
-                magnitude and its decoder direction's length are entangled: activations are not
-                comparable between features, and published dashboards that assume a unit-norm
-                decoder (for example Neuronpedia's) will not reproduce. Folding rescales each
-                decoder row to unit norm and moves the norm into the encoder, which leaves the
-                SAE's output unchanged while making activations comparable.
-
-                Left off by default because it is not a safe no-op everywhere: the
-                `matching_pursuit` and `temporal` architectures reject it outright, and `topk`
-                rejects it unless `rescale_acts_by_decoder_norm` is set, since rescaling
-                activations can change which features survive the top-k.
+            fold_W_dec_norm: Whether to call `fold_W_dec_norm()` on the loaded SAE, defaults to False. Not supported for all SAE architectures.
         """
 
         # get sae directory
