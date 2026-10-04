@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v6.53.1 (2026-10-04)
+
+### Documentation
+
+* docs: point SynthSAEBench-16k docs to the v2 model (#753) ([`a4d3881`](https://github.com/decoderesearch/SAELens/commit/a4d3881306d6ea31ded22eb18af6a97a89378204))
+
+### Fix
+
+* fix(evals): preserve excluded tokens during SAE reconstruction (#754)
+
+] ([`191d44e`](https://github.com/decoderesearch/SAELens/commit/191d44ebd67e8dd6e065015a12b6d0fb6bd42e54))
+
 ## v6.53.0 (2026-10-02)
 
 ### Feature

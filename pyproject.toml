@@ -1,6 +1,6 @@
 [project]
 name = "sae-lens"
-version = "6.53.0"
+version = "6.53.1"
 description = "Training and Analyzing Sparse Autoencoders (SAEs)"
 authors = [{ name = "Joseph Bloom" }]
 readme = "README.md"
