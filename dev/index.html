@@ -961,6 +961,7 @@
 </span><span id="__span-1-7"><a href="#__codelineno-1-7" id="__codelineno-1-7" name="__codelineno-1-7"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>You can see other importable SAEs on <a href="https://decoderesearch.github.io/SAELens/latest/pretrained_saes/">this page</a>.</p>
+<p>If you are comparing activations between features, or trying to reproduce values from another tool, you likely want a unit-norm decoder: pass <code>fold_W_dec_norm=True</code>. See <a href="usage/#folding-decoder-norms">Folding Decoder Norms</a>.</p>
 <p>Any SAE on Huggingface that's trained using SAELens can also be loaded using <code>SAE.from_pretrained()</code>. In this case, <code>release</code> is the name of the Huggingface repo, and <code>sae_id</code> is the path to the SAE in the repo. You can see a list of SAEs listed on Huggingface with the <a href="https://huggingface.co/models?library=saelens">saelens tag</a>.</p>
 <h3 id="loading-sparse-autoencoders-from-disk">Loading Sparse Autoencoders from Disk</h3>
 <p>To load a pretrained sparse autoencoder from disk that you've trained yourself, you can use <code>SAE.load_from_disk()</code> as below.</p>
