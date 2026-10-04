@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 from datasets import Dataset
-from transformer_lens import HookedTransformer
+from transformer_lens import HookedTransformer, HookedTransformerConfig
 
 from sae_lens.config import LanguageModelSAERunnerConfig
 from sae_lens.evals import (
@@ -18,6 +18,7 @@ from sae_lens.evals import (
     all_loadable_saes,
     get_downstream_reconstruction_metrics,
     get_eval_everything_config,
+    get_recons_loss,
     get_saes_from_regex,
     get_sparsity_and_variance_metrics,
     process_args,
@@ -34,7 +35,7 @@ from sae_lens.saes.batchtopk_sae import (
 from sae_lens.saes.sae import SAE, TrainingSAE
 from sae_lens.saes.standard_sae import StandardSAE, StandardTrainingSAE
 from sae_lens.saes.topk_sae import TopKTrainingSAE
-from sae_lens.training.activation_scaler import ActivationScaler
+from sae_lens.training.activation_scaler import ActivationScaler, ActivationWhitening
 from sae_lens.training.activations_store import ActivationsStore
 from tests.helpers import (
     NEEL_NANDA_C4_10K_DATASET,
@@ -244,6 +245,161 @@ def test_run_evals_training_sae_ignore_bos(
 
     assert set(eval_metrics.keys()).issubset(set(all_possible_keys))
     assert len(eval_metrics) > 0
+
+
+@pytest.mark.parametrize(
+    "hook_name,head_index",
+    [
+        ("blocks.0.hook_resid_pre", None),
+        ("blocks.0.attn.hook_z", None),
+        ("blocks.0.attn.hook_v", 1),
+    ],
+)
+@pytest.mark.parametrize("normalization", ["none", "scaling", "whitening"])
+def test_reconstruction_preserves_excluded_tokens_and_other_heads(
+    hook_name: str, head_index: int | None, normalization: str
+):
+    tokens = torch.tensor([[0, 2, 9], [4, 0, 5]])
+    activations = torch.arange(1, 25, dtype=torch.float32).reshape(2, 3, 4)
+    if "attn" in hook_name:
+        activations = activations.reshape(2, 3, 2, 2)
+    d_in = 2 if head_index is not None else 4
+    scaler = ActivationScaler()
+    replacement = torch.full((d_in,), 6.0)
+    if normalization == "scaling":
+        scaler.scaling_factor = 3.0
+        replacement = torch.full((d_in,), 2.0)
+    elif normalization == "whitening":
+        mean = torch.arange(d_in, dtype=torch.float32)
+        scaler.whitening = ActivationWhitening(
+            mean=mean,
+            matrix=2 * torch.eye(d_in),
+            inverse_matrix=0.5 * torch.eye(d_in),
+        )
+        replacement = 3 + mean
+
+    sae_inputs: list[torch.Tensor] = []
+
+    def encode(x: torch.Tensor) -> torch.Tensor:
+        sae_inputs.append(x.clone())
+        return torch.zeros_like(x)
+
+    sae = MagicMock()
+    sae.cfg.metadata.hook_name = hook_name
+    sae.cfg.metadata.hook_head_index = head_index
+    sae.device = torch.device("cpu")
+    sae.encode.side_effect = encode
+    sae.decode.side_effect = lambda x: torch.full_like(x, 6.0)
+
+    hook_outputs: list[torch.Tensor] = []
+
+    def run_with_hooks(*_args: Any, fwd_hooks: Any, **_kwargs: Any):
+        hook_outputs.append(fwd_hooks[0][1](activations.clone(), None))
+        return torch.zeros(2, 3, 4), torch.zeros(2, 2)
+
+    model = MagicMock(return_value=(torch.zeros(2, 3, 4), torch.zeros(2, 2)))
+    model.run_with_hooks.side_effect = run_with_hooks
+    get_recons_loss(
+        sae,
+        model,
+        scaler,
+        tokens,
+        compute_kl=False,
+        compute_ce_loss=True,
+        ignore_tokens=[0, 9],
+    )
+
+    expected = activations.clone()
+    included = (tokens != 0) & (tokens != 9)
+    if head_index is not None:
+        expected[:, :, head_index][included] = replacement
+    else:
+        expected[included] = replacement.reshape(expected.shape[2:])
+    assert torch.equal(hook_outputs[0], expected)
+
+    sae_input = (
+        activations.flatten(2) if head_index is None else activations[:, :, head_index]
+    )
+    assert torch.equal(sae_inputs[0], scaler.scale(sae_input))
+
+
+def test_run_evals_reconstructs_and_scores_only_non_excluded_tokens(
+    model: HookedTransformer,
+):
+    hook_name = "blocks.0.hook_resid_pre"
+    tokens = torch.tensor([[0, 2, 3, 4], [0, 5, 0, 6]])
+    included = tokens != 0
+
+    sae = MagicMock()
+    sae.cfg.metadata.hook_name = hook_name
+    sae.cfg.metadata.hook_head_index = None
+    sae.device = torch.device("cpu")
+    sae.encode.side_effect = lambda x: x
+    sae.decode.side_effect = torch.zeros_like
+    activation_store = MagicMock()
+    activation_store.get_batch_tokens.return_value = tokens
+
+    def zero_included_tokens(activations: torch.Tensor, hook: Any):  # noqa: ARG001
+        return torch.where(included[..., None], 0, activations)
+
+    expected_ce_loss = model.run_with_hooks(
+        tokens,
+        return_type="loss",
+        loss_per_token=True,
+        fwd_hooks=[(hook_name, zero_included_tokens)],
+    )[included[:, :-1]].mean()
+
+    metrics, _ = run_evals(
+        sae=sae,
+        activation_store=activation_store,
+        model=model,
+        activation_scaler=ActivationScaler(),
+        eval_config=EvalConfig(
+            batch_size_prompts=2,
+            n_eval_reconstruction_batches=1,
+            compute_ce_loss=True,
+        ),
+        exclude_special_tokens=[0],
+    )
+    assert metrics["model_performance_preservation"][
+        "ce_loss_with_sae"
+    ] == pytest.approx(expected_ce_loss.item())
+
+
+def test_identity_reconstruction_preserves_predictions_with_excluded_tokens():
+    model = HookedTransformer(
+        HookedTransformerConfig(
+            n_layers=2,
+            d_model=8,
+            n_ctx=8,
+            d_head=4,
+            n_heads=2,
+            d_mlp=16,
+            d_vocab=20,
+            act_fn="relu",
+            device="cpu",
+        )
+    )
+    sae = MagicMock()
+    sae.cfg.metadata.hook_name = "blocks.0.hook_resid_pre"
+    sae.cfg.metadata.hook_head_index = None
+    sae.device = torch.device("cpu")
+    sae.encode.side_effect = lambda x: x
+    sae.decode.side_effect = lambda x: x
+
+    metrics = get_recons_loss(
+        sae,
+        model,
+        ActivationScaler(3.0),
+        torch.tensor([[0, 2, 3, 4]]),
+        compute_kl=True,
+        compute_ce_loss=True,
+        ignore_tokens=[0],
+    )
+    assert metrics["ce_loss_with_sae"].numpy() == pytest.approx(
+        metrics["ce_loss_without_sae"].numpy()
+    )
+    assert metrics["kl_div_with_sae"].numpy() == pytest.approx(0, abs=1e-6)
 
 
 def test_training_eval_config(

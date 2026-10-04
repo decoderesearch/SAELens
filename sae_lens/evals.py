@@ -692,10 +692,12 @@ def get_recons_loss(
         activations = activations.to(sae.device)
 
         # Handle rescaling if SAE expects it
-        activations = activation_scaler.scale(activations)
+        scaled_activations = activation_scaler.scale(activations)
 
         # SAE class agnost forward forward pass.
-        new_activations = sae.decode(sae.encode(activations)).to(activations.dtype)
+        new_activations = sae.decode(sae.encode(scaled_activations)).to(
+            activations.dtype
+        )
 
         # Unscale if activations were scaled prior to going into the SAE
         new_activations = activation_scaler.unscale(new_activations)
@@ -704,43 +706,17 @@ def get_recons_loss(
 
         return new_activations.to(original_device)
 
-    def all_head_replacement_hook(activations: torch.Tensor, hook: Any):  # noqa: ARG001
-        original_device = activations.device
-        activations = activations.to(sae.device)
-
-        # Handle rescaling if SAE expects it
-        activations = activation_scaler.scale(activations)
-
-        # SAE class agnost forward forward pass.
-        new_activations = sae.decode(sae.encode(activations.flatten(-2, -1))).to(
-            activations.dtype
-        )
-
-        new_activations = new_activations.reshape(
+    def all_head_replacement_hook(activations: torch.Tensor, hook: Any):
+        return standard_replacement_hook(activations.flatten(-2, -1), hook).reshape(
             activations.shape
-        )  # reshape to match original shape
-
-        # Unscale if activations were scaled prior to going into the SAE
-        new_activations = activation_scaler.unscale(new_activations)
-
-        return new_activations.to(original_device)
-
-    def single_head_replacement_hook(activations: torch.Tensor, hook: Any):  # noqa: ARG001
-        original_device = activations.device
-        activations = activations.to(sae.device)
-
-        # Handle rescaling if SAE expects it
-        activations = activation_scaler.scale(activations)
-
-        new_activations = sae.decode(sae.encode(activations[:, :, head_index])).to(
-            activations.dtype
         )
-        activations[:, :, head_index] = new_activations
 
-        # Unscale if activations were scaled prior to going into the SAE
-        activations = activation_scaler.unscale(activations)
-
-        return activations.to(original_device)
+    def single_head_replacement_hook(activations: torch.Tensor, hook: Any):
+        activations = activations.clone()
+        activations[:, :, head_index] = standard_replacement_hook(
+            activations[:, :, head_index], hook
+        )
+        return activations
 
     def standard_zero_ablate_hook(activations: torch.Tensor, hook: Any):  # noqa: ARG001
         original_device = activations.device
