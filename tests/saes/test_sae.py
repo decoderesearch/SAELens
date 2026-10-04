@@ -929,3 +929,66 @@ def test_from_pretrained_folds_norm_scaling_factor(tmp_path: Path):
     assert_close(loaded_sae.W_dec, original_W_dec / scaling_factor)
     assert_close(loaded_sae.b_dec, original_b_dec / scaling_factor)
     assert loaded_sae.cfg.normalize_activations == "none"
+
+
+@pytest.mark.parametrize("architecture", ALL_FOLDABLE_ARCHITECTURES)
+def test_SAE_load_from_disk_fold_W_dec_norm_matches_loading_then_folding(
+    tmp_path: Path, architecture: str
+):
+    cfg = build_sae_cfg_for_arch(architecture, d_in=16, d_sae=32)
+    sae = get_sae_class(architecture)[0](cfg)
+    random_params(sae)
+    sae.save_model(tmp_path)
+
+    folded_on_load = SAE.load_from_disk(tmp_path, device="cpu", fold_W_dec_norm=True)
+    folded_afterwards = SAE.load_from_disk(tmp_path, device="cpu")
+    folded_afterwards.fold_W_dec_norm()
+
+    for name, param in folded_on_load.named_parameters():
+        assert_close(param, dict(folded_afterwards.named_parameters())[name])
+
+
+def test_SAE_load_from_disk_leaves_decoder_norms_alone_by_default(tmp_path: Path):
+    cfg = build_sae_cfg_for_arch("standard", d_in=16, d_sae=32)
+    sae = get_sae_class("standard")[0](cfg)
+    random_params(sae)
+    sae.save_model(tmp_path)
+    saved_norms = sae.get_W_dec_norm().clone()
+
+    loaded = SAE.load_from_disk(tmp_path, device="cpu")
+
+    # random params give non-unit decoder norms, so an accidental fold would show
+    assert saved_norms.sub(1.0).abs().max().item() > 1e-3
+    assert_close(loaded.get_W_dec_norm(), saved_norms)
+
+
+def test_SAE_from_pretrained_fold_W_dec_norm_matches_loading_then_folding(
+    tmp_path: Path,
+):
+    cfg = build_sae_cfg_for_arch("standard", d_in=16, d_sae=32)
+    sae = get_sae_class("standard")[0](cfg)
+    random_params(sae)
+    sae.save_model(tmp_path)
+
+    def converter(
+        repo_id: str,  # noqa: ARG001
+        folder_name: str,  # noqa: ARG001
+        device: str,
+        force_download: bool,  # noqa: ARG001
+        cfg_overrides: dict[str, Any] | None,
+    ):
+        cfg_dict, state_dict = sae_lens_disk_loader(
+            tmp_path, device, cfg_overrides=cfg_overrides
+        )
+        return cfg_dict, state_dict, None
+
+    folded_on_load = SAE.from_pretrained(
+        "mock/release", "mock-sae-id", converter=converter, fold_W_dec_norm=True
+    )
+    folded_afterwards = SAE.from_pretrained(
+        "mock/release", "mock-sae-id", converter=converter
+    )
+    folded_afterwards.fold_W_dec_norm()
+
+    for name, param in folded_on_load.named_parameters():
+        assert_close(param, dict(folded_afterwards.named_parameters())[name])

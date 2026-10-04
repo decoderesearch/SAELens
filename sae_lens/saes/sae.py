@@ -619,6 +619,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         device: str = "cpu",
         dtype: str | None = None,
         converter: PretrainedSaeDiskLoader = sae_lens_disk_loader,
+        fold_W_dec_norm: bool = False,
     ) -> T_SAE:
         """
         Load a SAE from disk.
@@ -628,6 +629,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
             device: The device to load the SAE on, defaults to "cpu".
             dtype: The dtype to load the SAE on, defaults to None. If None, the dtype will be inferred from the SAE config.
             converter: The converter to use to load the SAE, defaults to sae_lens_disk_loader.
+            fold_W_dec_norm: Whether to call `fold_W_dec_norm()` on the loaded SAE, defaults to False. Not supported for all SAE architectures.
         """
         overrides = {"dtype": dtype} if dtype is not None else None
         cfg_dict, state_dict = converter(path, device, cfg_overrides=overrides)
@@ -647,7 +649,10 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         sae.load_state_dict(state_dict, assign=True)
         # the loaders should already handle the dtype / device conversion
         # but this is a fallback to guarantee the SAE is on the correct device and dtype
-        return sae.to(dtype=str_to_dtype(sae_cfg.dtype), device=device)
+        sae = sae.to(dtype=str_to_dtype(sae_cfg.dtype), device=device)
+        if fold_W_dec_norm:
+            sae.fold_W_dec_norm()
+        return sae
 
     @classmethod
     def from_pretrained(
@@ -658,6 +663,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         dtype: str = "float32",
         force_download: bool = False,
         converter: PretrainedSaeHuggingfaceLoader | None = None,
+        fold_W_dec_norm: bool = False,
     ) -> T_SAE:
         """
         Load a pretrained SAE from the Hugging Face model hub.
@@ -669,6 +675,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
             dtype: The dtype to load the SAE on, defaults to "float32".
             force_download: Whether to force download the SAE weights and config, defaults to False.
             converter: The converter to use to load the SAE, defaults to None. If None, the converter will be inferred from the release.
+            fold_W_dec_norm: Whether to call `fold_W_dec_norm()` on the loaded SAE, defaults to False. Not supported for all SAE architectures.
         """
         return cls.from_pretrained_with_cfg_and_sparsity(
             release,
@@ -677,6 +684,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
             force_download=force_download,
             dtype=dtype,
             converter=converter,
+            fold_W_dec_norm=fold_W_dec_norm,
         )[0]
 
     @classmethod
@@ -688,6 +696,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         dtype: str = "float32",
         force_download: bool = False,
         converter: PretrainedSaeHuggingfaceLoader | None = None,
+        fold_W_dec_norm: bool = False,
     ) -> tuple[T_SAE, dict[str, Any], torch.Tensor | None]:
         """
         Load a pretrained SAE from the Hugging Face model hub, along with its config dict and sparsity, if present.
@@ -700,6 +709,7 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
             dtype: The dtype to load the SAE on, defaults to "float32".
             force_download: Whether to force download the SAE weights and config, defaults to False.
             converter: The converter to use to load the SAE, defaults to None. If None, the converter will be inferred from the release.
+            fold_W_dec_norm: Whether to call `fold_W_dec_norm()` on the loaded SAE, defaults to False. Not supported for all SAE architectures.
         """
 
         # get sae directory
@@ -782,8 +792,11 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         # the loaders should already handle the dtype / device conversion
         # but this is a fallback to guarantee the SAE is on the correct device and dtype
+        sae = sae.to(dtype=str_to_dtype(dtype), device=device)
+        if fold_W_dec_norm:
+            sae.fold_W_dec_norm()
         return (
-            sae.to(dtype=str_to_dtype(dtype), device=device),
+            sae,
             cfg_dict,
             log_sparsities,
         )
