@@ -741,6 +741,71 @@ def test_get_saes_from_regex_multiple_matches(mock_all_loadable_saes: MagicMock)
     assert result == expected
 
 
+@pytest.mark.parametrize("compute_density", [False, True])
+def test_density_mask_is_only_allocated_when_requested(compute_density: bool):
+    hook_name = "blocks.0.hook_resid_pre"
+    tokens = torch.tensor([[0, 1, 2], [1, 2, 0]])
+    inputs = torch.tensor(
+        [[[1.0, 2.0], [2.0, 1.0], [3.0, 4.0]], [[4.0, 3.0], [1.0, 4.0], [2.0, 5.0]]]
+    )
+    features = torch.tensor(
+        [
+            [[9.0, 9.0, 9.0, 9.0], [1.0, -2.0, 0.0, 0.0], [0.0, 3.0, 4.0, 0.0]],
+            [[-1.0, 0.0, 0.0, 0.0], [2.0, -3.0, 0.0, 0.0], [9.0, 9.0, 9.0, 9.0]],
+        ]
+    )
+    sae = MagicMock()
+    sae.cfg.d_sae = features.shape[-1]
+    sae.cfg.metadata.hook_name = hook_name
+    sae.cfg.metadata.hook_head_index = None
+    sae.device = torch.device("cpu")
+    sae.encode.return_value = features
+    sae.decode.return_value = inputs * 0.5
+    model = MagicMock()
+    model.run_with_cache.return_value = (None, {hook_name: inputs})
+    store = MagicMock()
+    store.get_batch_tokens.return_value = tokens
+
+    with torch.profiler.profile(
+        activities=[torch.profiler.ProfilerActivity.CPU],
+        profile_memory=True,
+        record_shapes=True,
+    ) as profile:
+        metrics, feature_metrics = get_sparsity_and_variance_metrics(
+            sae=sae,
+            model=model,
+            activation_store=store,
+            activation_scaler=ActivationScaler(),
+            n_batches=1,
+            compute_l2_norms=True,
+            compute_sparsity_metrics=True,
+            compute_variance_metrics=True,
+            compute_featurewise_density_statistics=compute_density,
+            eval_batch_size_prompts=2,
+            model_kwargs={},
+            ignore_tokens=[0],
+        )
+
+    assert metrics["l0"] == pytest.approx(1.75)
+    assert metrics["l1"] == pytest.approx(4.0)
+    assert metrics["l2_ratio"] == pytest.approx(0.5)
+    assert metrics["mse"] == pytest.approx(4.5)
+    if compute_density:
+        assert feature_metrics["feature_density"] == pytest.approx(
+            [0.75, 0.75, 0.25, 0]
+        )
+        assert feature_metrics["consistent_activation_heuristic"] == pytest.approx(
+            [1.5, 1.5, 1.0, float("nan")], nan_ok=True
+        )
+    else:
+        assert not any(
+            event.key == "aten::mul"
+            and event.input_shapes[0] == list(features.shape)
+            and event.cpu_memory_usage > 0
+            for event in profile.key_averages(group_by_input_shape=True)
+        )
+
+
 @pytest.mark.parametrize("scaling_factor", [None, 3.0])
 def test_get_sparsity_and_variance_metrics_identity_sae_perfect_reconstruction(
     model: HookedTransformer,

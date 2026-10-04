@@ -535,12 +535,7 @@ def get_sparsity_and_variance_metrics(
         flattened_sae_out = einops.rearrange(sae_out, "b ctx d -> (b ctx) d")
 
         # TODO: Clean this up.
-        # apply mask. mask is built from batch_tokens on the LLM device, but
-        # sae_feature_activations live on the SAE device (post sae.encode), so
-        # mirror the per-use .to() pattern used for flattened_mask below.
-        masked_sae_feature_activations = sae_feature_activations * mask.unsqueeze(
-            -1
-        ).to(sae_feature_activations.device)
+        # apply mask.
         flattened_sae_input = flattened_sae_input[
             flattened_mask.to(flattened_sae_input.device)
         ]
@@ -617,6 +612,9 @@ def get_sparsity_and_variance_metrics(
             metric_dict["cossim"].append(cossim)
 
         if compute_featurewise_density_statistics:
+            masked_sae_feature_activations = sae_feature_activations * mask.unsqueeze(
+                -1
+            ).to(sae_feature_activations.device)
             # != 0 rather than > 0 so that negative-but-active features (e.g.
             # bidirectional architectures like AbsTopK) are counted. This is a
             # no-op for ReLU-based architectures, whose activations are >= 0.
