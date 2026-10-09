@@ -165,7 +165,7 @@ def test_activations_store_requires_dataset_or_cache_path():
             hook_head_index=None,
             context_size=8,
             d_in=512,
-            n_batches_in_buffer=2,
+            n_sequences_in_buffer=2,
             total_training_tokens=16,
             store_batch_size_prompts=8,
             train_batch_size_tokens=8,
@@ -200,7 +200,7 @@ def test_cache_activations_runner_to_string():
 
 def test_activations_store_refreshes_dataset_when_it_runs_out(tmp_path: Path):
     context_size = 8
-    n_batches_in_buffer = 4
+    n_sequences_in_buffer = 4
     store_batch_size = 1
     total_training_steps = 4
     batch_size = 4
@@ -222,7 +222,7 @@ def test_activations_store_refreshes_dataset_when_it_runs_out(tmp_path: Path):
         prepend_bos=True,
         training_tokens=total_training_tokens // 2,
         train_batch_size_tokens=8,
-        n_batches_in_buffer=n_batches_in_buffer,
+        n_sequences_in_buffer=n_sequences_in_buffer,
         store_batch_size_prompts=store_batch_size,
         device="cpu",
         seed=42,

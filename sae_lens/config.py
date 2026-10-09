@@ -146,7 +146,8 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
         use_cached_activations (bool): Whether to use cached activations. This is useful when doing sweeps over the same activations.
         cached_activations_path (str, optional): The path to the cached activations. Defaults to "activations/{dataset_path}/{model_name}/{hook_name}_{hook_head_index}".
         from_pretrained_path (str, optional): The path to a pretrained SAE. We can finetune an existing SAE if needed.
-        n_batches_in_buffer (int): The number of batches in the buffer. When not using cached activations, a buffer in RAM is used. The larger it is, the better shuffled the activations will be.
+        n_sequences_in_buffer (int): The number of sequences in the buffer. When not using cached activations, a buffer in RAM holding `n_sequences_in_buffer * context_size` activations is used to shuffle them, and it must hold at least `train_batch_size_tokens` activations. The larger it is, the better shuffled the activations will be.
+        n_batches_in_buffer (int, optional): Deprecated alias for `n_sequences_in_buffer`. Despite its name, it counts sequences, not batches.
         training_tokens (int): The number of training tokens.
         store_batch_size_prompts (int): The batch size for storing activations. This controls how many prompts are in the batch of the language model when generating activations.
         seqpos_slice (tuple[int | None, ...]): Determines slicing of activations when constructing batches during training. The slice should be (start_pos, end_pos, optional[step_size]), e.g. for Othello we sometimes use (5, -5). Note, step_size > 0.
@@ -218,7 +219,9 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     from_pretrained_path: str | None = None
 
     # Activation Store Parameters
-    n_batches_in_buffer: int = 20
+    # 32 * 128 tokens = 4096 tokens, the minimum to hold one training batch
+    n_sequences_in_buffer: int = 32
+    n_batches_in_buffer: int | None = None  # deprecated alias for n_sequences_in_buffer
     training_tokens: int = 2_000_000
     store_batch_size_prompts: int = 32
     seqpos_slice: tuple[int | None, ...] = (None,)
@@ -306,6 +309,12 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
                 stacklevel=2,
             )
 
+        if self.n_batches_in_buffer is not None:
+            _warn_n_batches_in_buffer_deprecated(
+                self.n_batches_in_buffer, self.store_batch_size_prompts
+            )
+            self.n_sequences_in_buffer = self.n_batches_in_buffer
+
         if self.use_chat_formatting and self.is_dataset_tokenized:
             raise ValueError(
                 "use_chat_formatting and is_dataset_tokenized cannot both be True. "
@@ -319,9 +328,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
                 self.hook_name,
                 self.hook_head_index,
             )
-        self.tokens_per_buffer = (
-            self.train_batch_size_tokens * self.context_size * self.n_batches_in_buffer
-        )
+        self.tokens_per_buffer = self.n_sequences_in_buffer * self.context_size
 
         if self.logger.run_name is None:
             self.logger.run_name = f"{self.sae.architecture()}-{self.sae.d_sae}-LR-{self.lr}-Tokens-{self.training_tokens:3.3e}"
@@ -365,17 +372,11 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
                 f"Run name: {self.sae.architecture()}-{self.sae.d_sae}-LR-{self.lr}-Tokens-{self.training_tokens:3.3e}"
             )
             # Print out some useful info:
-            n_tokens_per_buffer = (
-                self.store_batch_size_prompts
-                * self.context_size
-                * self.n_batches_in_buffer
-            )
+            n_tokens_per_buffer = self.tokens_per_buffer
             logger.info(
                 f"n_tokens_per_buffer (millions): {n_tokens_per_buffer / 10**6}"
             )
-            n_contexts_per_buffer = (
-                self.store_batch_size_prompts * self.n_batches_in_buffer
-            )
+            n_contexts_per_buffer = self.n_sequences_in_buffer
             logger.info(
                 f"Lower bound: n_contexts_per_buffer (millions): {n_contexts_per_buffer / 10**6}"
             )
@@ -677,6 +678,26 @@ def _validate_seqpos(seqpos: tuple[int | None, ...], context_size: int) -> None:
         raise ValueError(
             f"The slice {seqpos} results in an empty range. Please adjust your seqpos or context_size."
         )
+
+
+def _warn_n_batches_in_buffer_deprecated(
+    n_batches_in_buffer: int, store_batch_size_prompts: int
+) -> None:
+    # stacklevel=4 skips this helper, __post_init__ and the dataclass __init__, so the
+    # warning points at the line that builds the config
+    warnings.warn(
+        "'n_batches_in_buffer' is deprecated and will be removed in v7.0.0. Use "
+        "'n_sequences_in_buffer' instead. Despite its name, it has always set the number "
+        "of sequences in the activation buffer, not the number of batches of "
+        f"store_batch_size_prompts sequences: n_batches_in_buffer={n_batches_in_buffer} "
+        f"buffers {n_batches_in_buffer} sequences, and n_sequences_in_buffer="
+        f"{n_batches_in_buffer} keeps exactly that behavior. Buffering "
+        f"{n_batches_in_buffer} batches would take n_sequences_in_buffer="
+        f"{n_batches_in_buffer * store_batch_size_prompts} "
+        f"({store_batch_size_prompts}x the memory).",
+        DeprecationWarning,
+        stacklevel=4,
+    )
 
 
 @dataclass

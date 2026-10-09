@@ -14,7 +14,7 @@ def _common_kwargs(dataset: Dataset) -> dict[str, Any]:
         dataset=dataset,
         streaming=False,
         context_size=8,
-        n_batches_in_buffer=2,
+        n_sequences_in_buffer=2,
         total_training_tokens=10_000,
         store_batch_size_prompts=4,
         train_batch_size_tokens=4,

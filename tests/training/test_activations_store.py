@@ -141,7 +141,7 @@ def test_activations_store__shapes_look_correct_with_real_models_and_datasets(
     # config if you want to benchmark this:
     #
     # cfg.context_size = 1024
-    # cfg.n_batches_in_buffer = 64
+    # cfg.n_sequences_in_buffer = 64
     # cfg.store_batch_size_prompts = 16
 
     store = ActivationsStore.from_config(model, cfg)
@@ -204,6 +204,51 @@ def test_activations_store__get_activations_head_hook(ts_model: HookedTransforme
         activation_store_head_hook.d_in,
     )
     assert activations.device == activation_store_head_hook.device
+
+
+def test_activations_store__buffer_holds_n_sequences_in_buffer_sequences(
+    ts_model: HookedTransformer,
+):
+    dataset = Dataset.from_list([{"text": "hello world"}] * 100)
+    buffer_size = 4 * 5  # n_sequences_in_buffer * context_size
+    fits_buffer_cfg = build_runner_cfg(
+        n_sequences_in_buffer=4,
+        context_size=5,
+        store_batch_size_prompts=8,
+        train_batch_size_tokens=buffer_size,
+    )
+    exceeds_buffer_cfg = build_runner_cfg(
+        n_sequences_in_buffer=4,
+        context_size=5,
+        store_batch_size_prompts=8,
+        train_batch_size_tokens=buffer_size + 1,
+    )
+
+    fits_buffer_store = ActivationsStore.from_config(
+        ts_model, fits_buffer_cfg, override_dataset=dataset
+    )
+    assert fits_buffer_store.next_batch().shape[0] == buffer_size
+
+    exceeds_buffer_store = ActivationsStore.from_config(
+        ts_model, exceeds_buffer_cfg, override_dataset=dataset
+    )
+    with pytest.raises(ValueError, match="Buffer size must be greater than or equal"):
+        exceeds_buffer_store.next_batch()
+
+
+def test_activations_store__default_buffer_holds_a_default_training_batch(
+    ts_model: HookedTransformer,
+):
+    dataset = Dataset.from_list([{"text": "hello world " * 100}] * 100)
+    cfg = LanguageModelSAERunnerConfig(
+        sae=StandardTrainingSAEConfig(d_in=ts_model.cfg.d_model, d_sae=128),
+        is_dataset_tokenized=False,
+    )
+    store = ActivationsStore.from_config(ts_model, cfg, override_dataset=dataset)
+    assert store.next_batch().shape == (
+        cfg.train_batch_size_tokens,
+        ts_model.cfg.d_model,
+    )
 
 
 def test_activations_store__get_activations__autocast_lm_runs_the_llm_in_bfloat16(
@@ -846,7 +891,7 @@ def test_activations_store_get_batch_tokens_disable_concat_sequences(
         context_size=5,
         disable_concat_sequences=True,
         store_batch_size_prompts=2,
-        n_batches_in_buffer=2,
+        n_sequences_in_buffer=2,
     )
 
     dataset = Dataset.from_list(
@@ -891,7 +936,7 @@ def test_activations_store_get_batch_tokens_disable_concat_sequences_no_bos(
         disable_concat_sequences=True,
         prepend_bos=False,  # Explicitly disable BOS
         store_batch_size_prompts=2,
-        n_batches_in_buffer=2,
+        n_sequences_in_buffer=2,
     )
 
     dataset = Dataset.from_list(
@@ -959,6 +1004,25 @@ def test_activations_store_from_sae_defaults_to_context_size_from_sae_config(
         dataset="NeelNanda/c4-10k",
     )
     assert store.context_size == 1234
+
+
+def test_activations_store_from_sae_n_batches_in_buffer_deprecated_usage(
+    ts_model: HookedTransformer, gpt2_res_jb_l4_sae: SAE[StandardSAEConfig]
+):
+    dataset = Dataset.from_list([{"text": "hello world"}] * 10)
+    with pytest.warns(
+        DeprecationWarning, match="Use 'n_sequences_in_buffer' instead"
+    ) as record:
+        store = ActivationsStore.from_sae(
+            model=ts_model,
+            sae=gpt2_res_jb_l4_sae,
+            dataset=dataset,
+            n_batches_in_buffer=6,  # type: ignore[call-arg]
+        )
+    assert record[0].filename == __file__
+    assert store.n_sequences_in_buffer == 6
+    with pytest.warns(DeprecationWarning, match="Use 'n_sequences_in_buffer' instead"):
+        assert store.n_batches_in_buffer == 6
 
 
 def test_activations_store_from_sae_allows_null_context_size_with_override(
