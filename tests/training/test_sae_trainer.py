@@ -738,6 +738,43 @@ def test_fit_records_l0_and_dead_latents_matching_actual_sae_firing() -> None:
     assert trainer.dead_neurons.nonzero().flatten().tolist() == [d_sae - 1]
 
 
+def test_fit_sparsity_windows_each_cover_feature_sampling_window_steps() -> None:
+    d_in = 4
+    d_sae = 10
+    batch_size = 32
+    window = 5
+    n_windows = 3
+    sae = StandardTrainingSAE(build_sae_training_cfg(d_in=d_in, d_sae=d_sae))
+    trainer = SAETrainer(
+        cfg=SAETrainerConfig(
+            total_training_samples=batch_size * window * n_windows,
+            train_batch_size_samples=batch_size,
+            lr_end=1e-4,
+            feature_sampling_window=window,
+        ),
+        sae=sae,
+        data_provider=iter(lambda: torch.randn(batch_size, d_in), None),
+    )
+    window_sizes: list[int] = []
+    reset_stats = trainer._reset_running_sparsity_stats
+
+    def record_window_and_reset() -> None:
+        window_sizes.append(trainer.n_frac_active_samples)
+        reset_stats()
+
+    with patch.object(
+        trainer,
+        "_reset_running_sparsity_stats",
+        side_effect=record_window_and_reset,
+    ):
+        trainer.fit()
+
+    assert window_sizes == [batch_size * window] * (n_windows - 1)
+    # the sparsity saved with the final SAE covers the full last window,
+    # not just the final step
+    assert trainer.n_frac_active_samples == batch_size * window
+
+
 def test_sae_trainer_skips_final_checkpoint_when_disabled(
     ts_model: HookedTransformer,
     tmp_path: Path,
