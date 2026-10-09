@@ -70,7 +70,7 @@ BASE_CFG = dict(
     adam_beta1=0.9,
     adam_beta2=0.999,
     # Buffer details won't matter in we cache / shuffle our activations ahead of time.
-    n_batches_in_buffer=16,
+    n_sequences_in_buffer=16,
     store_batch_size_prompts=4,
     normalize_activations="constant_norm_rescale",
     n_eval_batches=3,

@@ -167,14 +167,14 @@ def test_ActivationScaler_estimates_norm_scaling_factor_from_activations_store(
     # config if you want to benchmark this:
     #
     # cfg.context_size = 1024
-    # cfg.n_batches_in_buffer = 64
+    # cfg.n_sequences_in_buffer = 64
     # cfg.store_batch_size_prompts = 16
 
     cfg = build_runner_cfg(
         d_in=64,
         streaming=False,
         context_size=128,
-        n_batches_in_buffer=64,
+        n_sequences_in_buffer=64,
         store_batch_size_prompts=16,
     )
 

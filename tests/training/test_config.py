@@ -44,6 +44,20 @@ def test_LanguageModelSAERunnerConfig_hook_eval_deprecated_usage():
         )
 
 
+def test_LanguageModelSAERunnerConfig_n_batches_in_buffer_deprecated_usage():
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"n_batches_in_buffer=6 buffers 6 sequences.*n_sequences_in_buffer=24 \(4x the memory\)",
+    ) as record:
+        cfg = LanguageModelSAERunnerConfig(
+            sae=StandardTrainingSAEConfig(d_in=10, d_sae=10),
+            n_batches_in_buffer=6,
+            store_batch_size_prompts=4,
+        )
+    assert cfg.n_sequences_in_buffer == 6
+    assert record[0].filename == __file__
+
+
 @pytest.mark.parametrize("seqpos_slice, expected_error", test_cases_for_seqpos)
 def test_cache_activations_runner_config_seqpos(
     seqpos_slice: tuple[int, int],

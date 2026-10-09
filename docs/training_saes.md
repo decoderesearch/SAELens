@@ -84,7 +84,7 @@ cfg = LanguageModelSAERunnerConfig(
 
     # Activation Store Parameters
     context_size=256,
-    n_batches_in_buffer=64,
+    n_sequences_in_buffer=64,
     training_tokens=total_training_tokens,
     store_batch_size_prompts=16,
 

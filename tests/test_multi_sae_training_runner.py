@@ -65,7 +65,7 @@ def _build_cfg(
         dataset_path="placeholder",  # override_dataset is used
         streaming=False,
         context_size=8,
-        n_batches_in_buffer=2,
+        n_sequences_in_buffer=2,
         training_tokens=training_tokens,
         store_batch_size_prompts=4,
         train_batch_size_tokens=4,
@@ -267,6 +267,22 @@ def test_multi_sae_runner_config_rejects_mismatched_hook_keys():
         )
 
 
+def test_multi_sae_runner_config_n_batches_in_buffer_deprecated_usage():
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"n_batches_in_buffer=6 buffers 6 sequences.*n_sequences_in_buffer=24 \(4x the memory\)",
+    ) as record:
+        cfg = MultiSAETrainingRunnerConfig(
+            saes={"a": StandardTrainingSAEConfig(d_in=64, d_sae=32)},
+            hook_names="blocks.0.hook_mlp_out",
+            n_batches_in_buffer=6,
+            store_batch_size_prompts=4,
+            logger=LoggingConfig(log_to_wandb=False),
+        )
+    assert cfg.n_sequences_in_buffer == 6
+    assert record[0].filename == __file__
+
+
 def test_multi_sae_runner_config_accepts_per_sae_hook_head_indices_dict(
     ts_model: HookedTransformer,
 ):
@@ -334,7 +350,7 @@ def test_multi_sae_runner_smoke_loss_decreases(
         hook_d_ins={hook: d_in},
         streaming=False,
         context_size=cfg.context_size,
-        n_batches_in_buffer=2,
+        n_sequences_in_buffer=2,
         total_training_tokens=cfg.training_tokens,
         store_batch_size_prompts=cfg.store_batch_size_prompts,
         train_batch_size_tokens=cfg.train_batch_size_tokens,
