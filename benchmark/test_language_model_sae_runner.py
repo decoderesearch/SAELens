@@ -70,7 +70,7 @@ def test_language_model_sae_runner():
         adam_beta1=0.9,
         adam_beta2=0.999,
         # Buffer details won't matter in we cache / shuffle our activations ahead of time.
-        n_batches_in_buffer=64,
+        n_sequences_in_buffer=64,
         store_batch_size_prompts=16,
         # Feature Store
         feature_sampling_window=1000,
@@ -153,7 +153,7 @@ def test_language_model_sae_runner_gated():
         adam_beta1=0.9,
         adam_beta2=0.999,
         # Buffer details won't matter in we cache / shuffle our activations ahead of time.
-        n_batches_in_buffer=64,
+        n_sequences_in_buffer=64,
         store_batch_size_prompts=16,
         # Feature Store
         feature_sampling_window=1000,
@@ -229,7 +229,7 @@ def test_language_model_sae_runner_top_k():
         adam_beta1=0.9,
         adam_beta2=0.999,
         # Buffer details won't matter in we cache / shuffle our activations ahead of time.
-        n_batches_in_buffer=64,
+        n_sequences_in_buffer=64,
         store_batch_size_prompts=16,
         # Feature Store
         feature_sampling_window=1000,
@@ -302,7 +302,7 @@ def test_language_model_sae_runner_othellogpt():
         context_size=59,  # will control the length of the prompts we feed to the model. Larger is better but slower. so for the tutorial we'll use a short one.
         seqpos_slice=(5, -5),
         # Activation Store Parameters
-        n_batches_in_buffer=32,  # controls how many activations we store / shuffle.
+        n_sequences_in_buffer=32,  # controls how many activations we store / shuffle.
         training_tokens=total_training_tokens,  # 100 million tokens is quite a few, but we want to see good stats. Get a coffee, come back.
         store_batch_size_prompts=32,
         # Resampling protocol

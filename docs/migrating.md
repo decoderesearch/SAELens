@@ -44,7 +44,7 @@ cfg = LanguageModelSAERunnerConfig(
     lr=5e-5,
     train_batch_size_tokens=4096,
     context_size=512,
-    n_batches_in_buffer=64,
+    n_sequences_in_buffer=64,
     training_tokens=100_000_000,
     store_batch_size_prompts=16,
     # WANDB

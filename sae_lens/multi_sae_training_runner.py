@@ -36,7 +36,12 @@ from safetensors.torch import save_file
 
 from sae_lens import __version__, logger
 from sae_lens.analysis.compat import default_model_class_name
-from sae_lens.config import HfDataset, LoggingConfig, SAETrainerConfig
+from sae_lens.config import (
+    HfDataset,
+    LoggingConfig,
+    SAETrainerConfig,
+    _warn_n_batches_in_buffer_deprecated,
+)
 from sae_lens.constants import RUNNER_CFG_FILENAME, SPARSITY_FILENAME
 from sae_lens.evals import EvalConfig, run_evals
 from sae_lens.load_model import load_model
@@ -87,7 +92,9 @@ class MultiSAETrainingRunnerConfig:
     context_size: int = 128
 
     # Activation Store Parameters
-    n_batches_in_buffer: int = 20
+    # 32 * 128 tokens = 4096 tokens, the minimum to hold one training batch
+    n_sequences_in_buffer: int = 32
+    n_batches_in_buffer: int | None = None  # deprecated alias for n_sequences_in_buffer
     training_tokens: int = 2_000_000
     store_batch_size_prompts: int = 32
     seqpos_slice: tuple[int | None, ...] = (None,)
@@ -158,6 +165,12 @@ class MultiSAETrainingRunnerConfig:
     def __post_init__(self) -> None:
         if not self.saes:
             raise ValueError("saes must contain at least one entry")
+
+        if self.n_batches_in_buffer is not None:
+            _warn_n_batches_in_buffer_deprecated(
+                self.n_batches_in_buffer, self.store_batch_size_prompts
+            )
+            self.n_sequences_in_buffer = self.n_batches_in_buffer
 
         # Normalize hook_names to a per-SAE dict.
         if isinstance(self.hook_names, str):
@@ -482,7 +495,7 @@ class MultiSAETrainingRunner:
             hook_head_indices=hook_head_indices,
             streaming=cfg.streaming,
             context_size=cfg.context_size,
-            n_batches_in_buffer=cfg.n_batches_in_buffer,
+            n_sequences_in_buffer=cfg.n_sequences_in_buffer,
             total_training_tokens=cfg.training_tokens,
             store_batch_size_prompts=cfg.store_batch_size_prompts,
             train_batch_size_tokens=cfg.train_batch_size_tokens,
