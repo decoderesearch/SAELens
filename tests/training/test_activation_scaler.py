@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Generator
 
@@ -265,3 +266,47 @@ def test_ActivationScaler_load_without_whitening_file_clears_whitening(
 
     assert loaded.scaling_factor == 2.0
     assert loaded.whitening is None
+
+
+def test_ActivationScaler_save_without_whitening_does_not_reload_stale_state(
+    tmp_path: Path,
+):
+    path = tmp_path / "activation_scaler.json"
+    scaler = ActivationScaler()
+    scaler.estimate_whitening(
+        d_in=4,
+        data_provider=correlated_activations(4, batch_size=32),
+        n_batches_for_norm_estimate=2,
+    )
+    scaler.save(str(path))
+
+    scaler.whitening = None
+    scaler.scaling_factor = 2.0
+    scaler.save(str(path))
+
+    loaded = ActivationScaler()
+    loaded.load(path)
+    assert loaded.whitening is None
+    acts = torch.tensor([[1.0, 2.0, 3.0, 4.0]])
+    assert_close(loaded.scale(acts), acts * 2)
+    assert_close(loaded.unscale(acts), acts / 2)
+
+
+def test_ActivationScaler_load_legacy_whitening_checkpoint(tmp_path: Path):
+    path = tmp_path / "activation_scaler.json"
+    scaler = ActivationScaler()
+    scaler.estimate_whitening(
+        d_in=4,
+        data_provider=correlated_activations(4, batch_size=32),
+        n_batches_for_norm_estimate=2,
+    )
+    scaler.save(str(path))
+    config = json.loads(path.read_text())
+    config.pop("has_whitening", None)
+    path.write_text(json.dumps(config))
+
+    loaded = ActivationScaler()
+    loaded.load(path)
+    assert loaded.whitening is not None
+    acts = torch.tensor([[1.0, 2.0, 3.0, 4.0]])
+    assert_close(loaded.scale(acts), scaler.scale(acts))

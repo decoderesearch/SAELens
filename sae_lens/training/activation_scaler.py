@@ -145,7 +145,13 @@ class ActivationScaler:
             raise ValueError("file_path must end with .json")
 
         with open(file_path, "w") as f:
-            json.dump({"scaling_factor": self.scaling_factor}, f)
+            json.dump(
+                {
+                    "scaling_factor": self.scaling_factor,
+                    "has_whitening": self.whitening is not None,
+                },
+                f,
+            )
         if self.whitening is not None:
             save_file(
                 {
@@ -162,7 +168,7 @@ class ActivationScaler:
             data = json.load(f)
             self.scaling_factor = data["scaling_factor"]
         whitening_path = _whitening_path(file_path)
-        if whitening_path.exists():
+        if data.get("has_whitening", True) and whitening_path.exists():
             tensors = load_file(whitening_path)
             self.whitening = ActivationWhitening(
                 mean=tensors["mean"],
