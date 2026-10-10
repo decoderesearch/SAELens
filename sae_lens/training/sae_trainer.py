@@ -307,7 +307,13 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
         `MultiSAETrainer`). Caller is responsible for emitting the returned
         dict to wandb if logging is enabled.
         """
-        if (self.n_training_steps + 1) % self.cfg.feature_sampling_window == 0:
+        # This runs before the step at `n_training_steps`, i.e. after
+        # `n_training_steps` completed steps, so each window spans exactly
+        # `feature_sampling_window` steps.
+        if (
+            self.n_training_steps > 0
+            and self.n_training_steps % self.cfg.feature_sampling_window == 0
+        ):
             log_dict = self._build_sparsity_log_dict()
             self._reset_running_sparsity_stats()
             return log_dict
