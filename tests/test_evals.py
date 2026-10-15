@@ -269,6 +269,63 @@ def test_run_evals_feature_density_requires_positive_batches(
     assert sae.hook_z_reshaping_mode is original_hook_z_reshaping_mode
 
 
+@pytest.mark.parametrize("use_attention_mask", [False, True])
+def test_run_evals_reconstruction_uses_model_kwargs(
+    feature_density_eval_inputs: tuple[
+        HookedTransformer, StandardSAE, ActivationsStore
+    ],
+    use_attention_mask: bool,
+):
+    model, sae, store = feature_density_eval_inputs
+    random_params(sae)
+    original_hook_z_reshaping_mode = sae.hook_z_reshaping_mode
+    sae.turn_off_forward_pass_hook_z_reshaping()
+    tokens = store.get_batch_tokens(2)
+    store.reset_input_dataset()
+    attention_mask = torch.tensor([[1, 0, 1, 1], [1, 1, 0, 1]])
+    model_kwargs = {"attention_mask": attention_mask} if use_attention_mask else {}
+    scaler = ActivationScaler()
+    expected = get_recons_loss(
+        sae,
+        model,
+        scaler,
+        tokens,
+        compute_kl=True,
+        compute_ce_loss=True,
+        model_kwargs=model_kwargs,
+    )
+    if use_attention_mask:
+        unmasked = get_recons_loss(
+            sae, model, scaler, tokens, compute_kl=True, compute_ce_loss=True
+        )
+        assert expected["ce_loss_without_sae"].mean().item() != pytest.approx(
+            unmasked["ce_loss_without_sae"].mean().item()
+        )
+    if original_hook_z_reshaping_mode:
+        sae.turn_on_forward_pass_hook_z_reshaping()
+
+    metrics, _ = run_evals(
+        sae,
+        store,
+        model,
+        scaler,
+        eval_config=EvalConfig(
+            n_eval_reconstruction_batches=1, compute_kl=True, compute_ce_loss=True
+        ),
+        model_kwargs=model_kwargs,
+        exclude_special_tokens=False,
+    )
+
+    actual = {
+        **metrics["model_behavior_preservation"],
+        **metrics["model_performance_preservation"],
+    }
+    for name, values in expected.items():
+        assert actual[name] == pytest.approx(values.mean().item())
+    assert sae.hook_z_reshaping_mode is original_hook_z_reshaping_mode
+    assert torch.equal(attention_mask, torch.tensor([[1, 0, 1, 1], [1, 1, 0, 1]]))
+
+
 def test_run_evals_base_sae(
     base_sae: SAE[Any],
     activation_store: ActivationsStore,

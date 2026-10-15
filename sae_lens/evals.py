@@ -21,7 +21,7 @@ from transformer_lens import HookedTransformer
 from transformer_lens.HookedTransformer import HookedRootModule
 
 from sae_lens.loading.pretrained_saes_directory import get_pretrained_saes_directory
-from sae_lens.saes.sae import SAE, SAEConfig
+from sae_lens.saes.sae import SAE
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.util import (
@@ -178,6 +178,7 @@ def run_evals(
             eval_batch_size_prompts=actual_batch_size,
             ignore_tokens=ignore_tokens,
             verbose=verbose,
+            model_kwargs=model_kwargs,
         )
 
         if eval_config.compute_kl:
@@ -332,6 +333,7 @@ def get_downstream_reconstruction_metrics(
     eval_batch_size_prompts: int,
     ignore_tokens: list[int] | None = None,
     verbose: bool = False,
+    model_kwargs: Mapping[str, Any] = {},
 ):
     metrics_dict = {}
     if compute_kl:
@@ -356,6 +358,7 @@ def get_downstream_reconstruction_metrics(
             compute_kl=compute_kl,
             compute_ce_loss=compute_ce_loss,
             ignore_tokens=ignore_tokens,
+            model_kwargs=model_kwargs,
         ).items():
             if ignore_tokens:
                 mask = torch.logical_not(
@@ -657,7 +660,7 @@ def get_sparsity_and_variance_metrics(
 
 @torch.no_grad()
 def get_recons_loss(
-    sae: SAE[SAEConfig],
+    sae: SAE[Any],
     model: HookedRootModule,
     activation_scaler: ActivationScaler,
     batch_tokens: torch.Tensor,
