@@ -545,37 +545,50 @@ class MultiSAETrainingRunner:
         data_provider: MultiHookDataProvider = (
             self.activations_store.get_multi_hook_data_loader()
         )
+        prefetcher: PrefetchingIterator[Any] | None = None
         if self.cfg.prefetch_llm_batches:
             prefetch_size = (
                 1
                 if isinstance(self.cfg.prefetch_llm_batches, bool)
                 else self.cfg.prefetch_llm_batches
             )
-            data_provider = PrefetchingIterator(data_provider, prefetch=prefetch_size)
+            prefetcher = PrefetchingIterator(data_provider, prefetch=prefetch_size)
+            data_provider = prefetcher
 
-        trainer = MultiSAETrainer(
-            cfg=self.cfg.to_sae_trainer_config(),
-            saes=self.saes,
-            hook_names=self.cfg.hook_names_per_sae,
-            data_provider=data_provider,
-            evaluator=self.evaluator,
-            save_checkpoint_fn=self._save_runner_checkpoint_files,
-        )
+        try:
+            trainer = MultiSAETrainer(
+                cfg=self.cfg.to_sae_trainer_config(),
+                saes=self.saes,
+                hook_names=self.cfg.hook_names_per_sae,
+                data_provider=data_provider,
+                evaluator=self.evaluator,
+                save_checkpoint_fn=self._save_runner_checkpoint_files,
+            )
 
-        if self.cfg.resume_from_checkpoint is not None:
-            logger.info(f"Resuming from checkpoint: {self.cfg.resume_from_checkpoint}")
-            trainer.load_checkpoint(self.cfg.resume_from_checkpoint)
-            self.activations_store.load_from_checkpoint(self.cfg.resume_from_checkpoint)
+            if self.cfg.resume_from_checkpoint is not None:
+                logger.info(
+                    f"Resuming from checkpoint: {self.cfg.resume_from_checkpoint}"
+                )
+                trainer.load_checkpoint(self.cfg.resume_from_checkpoint)
+                self.activations_store.load_from_checkpoint(
+                    self.cfg.resume_from_checkpoint
+                )
 
-        saes = self._run_with_interruption_handling(trainer)
+            saes = self._run_with_interruption_handling(trainer)
 
-        if self.cfg.output_path is not None:
-            self._save_final_outputs(saes, trainer)
+            if self.cfg.output_path is not None:
+                self._save_final_outputs(saes, trainer)
 
-        if self.cfg.logger.log_to_wandb:
-            wandb.finish()
+            if self.cfg.logger.log_to_wandb:
+                wandb.finish()
 
-        return saes
+            return saes
+        finally:
+            if prefetcher is not None and not prefetcher.close():
+                logger.warning(
+                    "Prefetch producer did not exit before the close timeout; "
+                    "an in-progress source next() call cannot be interrupted."
+                )
 
     def _run_with_interruption_handling(
         self, trainer: MultiSAETrainer

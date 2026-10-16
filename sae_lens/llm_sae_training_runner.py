@@ -196,6 +196,7 @@ class LanguageModelSAETrainingRunner:
             )
 
         data_provider: DataProvider = self.activations_store
+        prefetcher: PrefetchingIterator[Any] | None = None
         if self.cfg.prefetch_llm_batches:
             # Order matters: bool is a subclass of int, so check bool first.
             prefetch_size = (
@@ -203,38 +204,50 @@ class LanguageModelSAETrainingRunner:
                 if isinstance(self.cfg.prefetch_llm_batches, bool)
                 else self.cfg.prefetch_llm_batches
             )
-            data_provider = PrefetchingIterator(
+            prefetcher = PrefetchingIterator(
                 iter(self.activations_store), prefetch=prefetch_size
             )
+            data_provider = prefetcher
 
-        trainer = SAETrainer(
-            sae=self.sae,
-            data_provider=data_provider,
-            evaluator=self.evaluator,
-            save_checkpoint_fn=self.save_checkpoint,
-            cfg=self.cfg.to_sae_trainer_config(),
-        )
-
-        if self.cfg.resume_from_checkpoint is not None:
-            logger.info(f"Resuming from checkpoint: {self.cfg.resume_from_checkpoint}")
-            trainer.load_trainer_state(self.cfg.resume_from_checkpoint)
-            self.sae.load_weights_from_checkpoint(self.cfg.resume_from_checkpoint)
-            self.activations_store.load_from_checkpoint(self.cfg.resume_from_checkpoint)
-
-        self._compile_sae_if_needed()
-        sae = self.run_trainer_with_interruption_handling(trainer)
-
-        if self.cfg.output_path is not None:
-            self.save_final_sae(
-                sae=sae,
-                output_path=self.cfg.output_path,
-                log_feature_sparsity=trainer.log_feature_sparsity,
+        try:
+            trainer = SAETrainer(
+                sae=self.sae,
+                data_provider=data_provider,
+                evaluator=self.evaluator,
+                save_checkpoint_fn=self.save_checkpoint,
+                cfg=self.cfg.to_sae_trainer_config(),
             )
 
-        if self.cfg.logger.log_to_wandb:
-            wandb.finish()
+            if self.cfg.resume_from_checkpoint is not None:
+                logger.info(
+                    f"Resuming from checkpoint: {self.cfg.resume_from_checkpoint}"
+                )
+                trainer.load_trainer_state(self.cfg.resume_from_checkpoint)
+                self.sae.load_weights_from_checkpoint(self.cfg.resume_from_checkpoint)
+                self.activations_store.load_from_checkpoint(
+                    self.cfg.resume_from_checkpoint
+                )
 
-        return sae
+            self._compile_sae_if_needed()
+            sae = self.run_trainer_with_interruption_handling(trainer)
+
+            if self.cfg.output_path is not None:
+                self.save_final_sae(
+                    sae=sae,
+                    output_path=self.cfg.output_path,
+                    log_feature_sparsity=trainer.log_feature_sparsity,
+                )
+
+            if self.cfg.logger.log_to_wandb:
+                wandb.finish()
+
+            return sae
+        finally:
+            if prefetcher is not None and not prefetcher.close():
+                logger.warning(
+                    "Prefetch producer did not exit before the close timeout; "
+                    "an in-progress source next() call cannot be interrupted."
+                )
 
     def save_final_sae(
         self,
