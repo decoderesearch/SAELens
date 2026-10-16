@@ -66,15 +66,23 @@ class ActivationScaler:
     def _calculate_mean_norm(
         self, data_provider: DataProvider, n_batches_for_norm_estimate: int = int(1e3)
     ) -> float:
-        norms_per_batch: list[float] = []
+        norms_per_batch: list[tuple[float, int]] = []
         for _ in tqdm(
             range(n_batches_for_norm_estimate),
             desc="Estimating norm scaling factor",
             leave=False,
         ):
-            acts = next(data_provider)
-            norms_per_batch.append(acts.norm(dim=-1).mean().item())
-        return mean(norms_per_batch)
+            norms = next(data_provider).norm(dim=-1)
+            norms_per_batch.append((norms.mean().item(), norms.numel()))
+
+        if not norms_per_batch or any(count == 0 for _, count in norms_per_batch):
+            return mean(batch_mean for batch_mean, _ in norms_per_batch)
+
+        total_count = sum(count for _, count in norms_per_batch)
+        weighted_norm_sum = sum(
+            batch_mean * count for batch_mean, count in norms_per_batch
+        )
+        return weighted_norm_sum / total_count
 
     def estimate_scaling_factor(
         self,

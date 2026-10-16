@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from statistics import StatisticsError
 from typing import Generator
 
 import numpy as np
@@ -77,6 +78,90 @@ def test_ActivationScaler_calculate_mean_norm():
     )
     expected_mean = (5.0 + 10.0 + 0.0 + 1.0 + 2.0) / 5
     assert mean_norm == pytest.approx(expected_mean, abs=1e-6)
+
+
+def test_ActivationScaler_calculate_mean_norm_is_batch_partition_invariant():
+    scaler = ActivationScaler()
+    observations = torch.tensor(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0, 0.0],
+        ]
+    )
+    batches = [
+        [observations[:1], observations[1:]],
+        [observations[[1, 0]], observations[[2, 3]]],
+    ]
+
+    mean_norms = [
+        scaler._calculate_mean_norm(iter(provider_batches), 2)
+        for provider_batches in batches
+    ]
+
+    assert mean_norms == pytest.approx([1.75, 1.75], abs=1e-6)
+
+
+def test_ActivationScaler_calculate_mean_norm_preserves_equal_batch_sizes():
+    scaler = ActivationScaler()
+    batches = iter(
+        [
+            torch.tensor([[1.0, 0.0], [2.0, 0.0]]),
+            torch.tensor([[3.0, 0.0], [4.0, 0.0]]),
+        ]
+    )
+
+    mean_norm = scaler._calculate_mean_norm(batches, 2)
+
+    assert mean_norm == pytest.approx(2.5, abs=1e-6)
+
+
+def test_ActivationScaler_estimate_scaling_factor_weights_variable_batch_sizes():
+    scaler = ActivationScaler()
+    batches = iter(
+        [
+            torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+            torch.tensor(
+                [
+                    [2.0, 0.0, 0.0, 0.0],
+                    [2.0, 0.0, 0.0, 0.0],
+                    [2.0, 0.0, 0.0, 0.0],
+                ]
+            ),
+        ]
+    )
+
+    scaler.estimate_scaling_factor(
+        d_in=4, data_provider=batches, n_batches_for_norm_estimate=2
+    )
+
+    assert scaler.scaling_factor == pytest.approx(2 / 1.75, abs=1e-6)
+
+
+def test_ActivationScaler_calculate_mean_norm_does_not_overflow_float16_batch_sum():
+    scaler = ActivationScaler()
+    batch = torch.full((4, 1), 20_000.0, dtype=torch.float16)
+
+    mean_norm = scaler._calculate_mean_norm(iter([batch]), 1)
+
+    assert mean_norm == pytest.approx(20_000.0, abs=1.0)
+
+
+def test_ActivationScaler_calculate_mean_norm_preserves_zero_batch_count_error():
+    scaler = ActivationScaler()
+
+    with pytest.raises(StatisticsError, match="mean requires at least one data point"):
+        scaler._calculate_mean_norm(iter(()), n_batches_for_norm_estimate=0)
+
+
+def test_ActivationScaler_calculate_mean_norm_preserves_nan_for_empty_batch():
+    scaler = ActivationScaler()
+    batches = iter([torch.empty((0, 2)), torch.tensor([[3.0, 4.0]])])
+
+    mean_norm = scaler._calculate_mean_norm(batches, 2)
+
+    assert np.isnan(mean_norm)
 
 
 def test_ActivationScaler_estimate_scaling_factor():
