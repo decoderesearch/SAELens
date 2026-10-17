@@ -532,6 +532,10 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
 
         return sae_in - bias_term
 
+    def reconstruct(self, x: torch.Tensor) -> torch.Tensor:
+        """Encode and decode x, without an error term or hook_sae_output."""
+        return self.decode(self.encode(x))
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the SAE."""
         feature_acts = self.encode(x)

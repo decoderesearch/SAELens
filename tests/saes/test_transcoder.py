@@ -14,7 +14,7 @@ from sae_lens.saes.transcoder import (
     Transcoder,
     TranscoderConfig,
 )
-from tests.helpers import assert_close
+from tests.helpers import assert_close, random_params
 
 # pyright: reportArgumentType=false
 
@@ -634,6 +634,13 @@ class TestSkipTranscoderVariants:
 
         # Re-add skip for comparison
         assert_close(output, output_no_skip + skip_contribution, atol=1e-5)
+
+    def test_reconstruct_matches_forward_with_bfloat16_input(
+        self, skip_transcoder: SkipTranscoder | JumpReLUSkipTranscoder
+    ) -> None:
+        random_params(skip_transcoder)
+        x = torch.randn(10, 32, dtype=torch.bfloat16)
+        assert_close(skip_transcoder.reconstruct(x), skip_transcoder(x.float()))
 
     def test_forward_output_shape(
         self, skip_transcoder: SkipTranscoder | JumpReLUSkipTranscoder

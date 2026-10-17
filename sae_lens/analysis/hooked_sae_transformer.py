@@ -93,17 +93,15 @@ class _SAEWrapper(nn.Module):
                 mask = mask.unsqueeze(-1)
 
         try:
-            # Call encode and decode directly so we can control hook_sae_output
-            feature_acts = self.sae.encode(sae_input)
-            sae_out = self.sae.decode(feature_acts)
+            # Call reconstruct, not forward, so we can control hook_sae_output
+            sae_out = self.sae.reconstruct(sae_input)
 
             if self.use_error_term:
                 with torch.no_grad():
                     # Recompute without hooks to get true error term
                     # This ensures interventions on features don't get masked by error
                     with _disable_hooks(self.sae):
-                        feature_acts_clean = self.sae.encode(sae_input)
-                        sae_out_clean = self.sae.decode(feature_acts_clean)
+                        sae_out_clean = self.sae.reconstruct(sae_input)
                     sae_error = original_output - sae_out_clean
                     # Excluded positions bypass the SAE entirely, so their error is 0
                     if mask is not None:

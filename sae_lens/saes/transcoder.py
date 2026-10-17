@@ -258,6 +258,10 @@ class SkipTranscoder(Transcoder):
         return sae_out + skip_out
 
     @override
+    def reconstruct(self, x: torch.Tensor) -> torch.Tensor:
+        return super().reconstruct(x) + x.to(self.dtype) @ self.W_skip.T
+
+    @override
     def forward_with_activations(
         self,
         x: torch.Tensor,

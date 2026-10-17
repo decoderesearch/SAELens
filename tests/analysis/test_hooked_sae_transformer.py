@@ -14,8 +14,18 @@ from sae_lens.analysis.hooked_sae_transformer import (
 )
 from sae_lens.saes.sae import SAE, SAEMetadata
 from sae_lens.saes.standard_sae import StandardSAE, StandardSAEConfig
-from sae_lens.saes.transcoder import Transcoder, TranscoderConfig
-from tests.helpers import TINYSTORIES_MODEL, assert_close, assert_not_close
+from sae_lens.saes.transcoder import (
+    SkipTranscoder,
+    SkipTranscoderConfig,
+    Transcoder,
+    TranscoderConfig,
+)
+from tests.helpers import (
+    TINYSTORIES_MODEL,
+    assert_close,
+    assert_not_close,
+    random_params,
+)
 
 MODEL = TINYSTORIES_MODEL
 prompt = "Hello World!"
@@ -941,6 +951,37 @@ def test_transcoder_activations_match_manual_calculation(
     # This verifies the output hook location is correctly overridden
     cached_transcoder_output = cache_with_transcoder[output_hook + ".hook_sae_recons"]
     assert_close(manual_transcoder_output, cached_transcoder_output)
+
+
+def test_skip_transcoder_output_includes_skip_connection(
+    model: HookedSAETransformer,
+):
+    transcoder = SkipTranscoder(
+        SkipTranscoderConfig(
+            d_in=model.cfg.d_model,
+            d_sae=model.cfg.d_model * 2,
+            d_out=model.cfg.d_model,
+            apply_b_dec_to_input=False,
+            metadata=SAEMetadata(
+                hook_name="blocks.0.mlp.hook_in",
+                hook_name_out="blocks.0.hook_mlp_out",
+            ),
+        )
+    )
+    random_params(transcoder)
+    _, clean_cache = model.run_with_cache(prompt)
+    expected_output = transcoder(clean_cache["blocks.0.mlp.hook_in"])
+
+    _, cache = model.run_with_cache_with_saes(prompt, saes=[transcoder])
+    assert_close(cache["blocks.0.hook_mlp_out.hook_sae_output"], expected_output)
+
+    _, cache = model.run_with_cache_with_saes(
+        prompt, saes=[transcoder], use_error_term=True
+    )
+    assert_close(
+        cache["blocks.0.hook_mlp_out.hook_sae_error"],
+        clean_cache["blocks.0.hook_mlp_out"] - expected_output,
+    )
 
 
 def test_mixed_sae_and_transcoder(
