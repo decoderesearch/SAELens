@@ -558,6 +558,15 @@ def get_sparsity_and_variance_metrics(
             flattened_mask.to(flattened_sae_out.device)
         ]
 
+        # Promote before squaring or reducing: float16 squared norms overflow
+        # above 65504, and bfloat16 results are too coarse to compare SAEs.
+        flattened_sae_input = flattened_sae_input.to(
+            torch.promote_types(flattened_sae_input.dtype, torch.float32)
+        )
+        flattened_sae_out = flattened_sae_out.to(
+            torch.promote_types(flattened_sae_out.dtype, torch.float32)
+        )
+
         if compute_l2_norms:
             l2_norm_in = torch.norm(flattened_sae_input, dim=-1)
             l2_norm_out = torch.norm(flattened_sae_out, dim=-1)
