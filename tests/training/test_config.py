@@ -19,6 +19,15 @@ test_cases_for_seqpos = [
     ((6, 3, None), ValueError),
 ]
 
+valid_seqpos_slices = [
+    (0, 5, 1),
+    (None, 5, None),
+    (None, None, 1),
+    (1, None, 1),
+    (None,),
+    (2, 8),
+]
+
 
 @pytest.mark.parametrize("seqpos_slice, expected_error", test_cases_for_seqpos)
 def test_sae_training_runner_config_seqpos(
@@ -31,6 +40,35 @@ def test_sae_training_runner_config_seqpos(
             seqpos_slice=seqpos_slice,
             context_size=context_size,
         )
+
+
+@pytest.mark.parametrize("seqpos_slice", valid_seqpos_slices)
+def test_sae_training_runner_config_seqpos_accepts_valid_slices(
+    seqpos_slice: tuple[int | None, ...],
+):
+    cfg = LanguageModelSAERunnerConfig(
+        sae=StandardTrainingSAEConfig(d_in=10, d_sae=10),
+        seqpos_slice=seqpos_slice,
+        context_size=10,
+    )
+    assert cfg.seqpos_slice == seqpos_slice
+
+
+@pytest.mark.parametrize("seqpos_slice", valid_seqpos_slices)
+def test_cache_activations_runner_config_seqpos_accepts_valid_slices(
+    seqpos_slice: tuple[int | None, ...],
+):
+    cfg = CacheActivationsRunnerConfig(
+        dataset_path="",
+        model_name="",
+        model_batch_size=1,
+        hook_name="",
+        d_in=1,
+        training_tokens=100,
+        context_size=10,
+        seqpos_slice=seqpos_slice,
+    )
+    assert cfg.seqpos_slice == seqpos_slice
 
 
 def test_LanguageModelSAERunnerConfig_hook_eval_deprecated_usage():
