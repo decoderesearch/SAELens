@@ -120,7 +120,7 @@ def create_hierarchical_synthetic_setup(
     return feature_dict, generator, actual_num_features
 
 
-# Run with: poetry run pytest benchmark/test_synthetic_hierarchy.py -v -s
+# Run with: uv run pytest benchmark/test_synthetic_hierarchy.py -v -s
 def test_benchmark_hierarchical_synthetic_pipeline():
     num_features = 1_000_000
     hidden_dim = 1024

@@ -325,6 +325,41 @@ def test_BatchTopKTrainingSAE_save_and_load_inference_sae(
     assert_close(training_full_out, inference_full_out)
 
 
+@pytest.mark.parametrize("rescale_acts_by_decoder_norm", [True, False])
+def test_BatchTopKTrainingSAE_save_and_load_inference_sae_after_fold_activation_norm_scaling_factor(
+    tmp_path: Path, rescale_acts_by_decoder_norm: bool
+) -> None:
+    cfg = build_batchtopk_sae_training_cfg(
+        device="cpu", rescale_acts_by_decoder_norm=rescale_acts_by_decoder_norm
+    )
+    training_sae = BatchTopKTrainingSAE(cfg)
+    random_params(training_sae)
+
+    # the trainer scales activations down before the SAE sees them, then folds
+    # the scaling factor into the SAE before saving it
+    scaling_factor = 0.02
+    raw_input = torch.randn(30, training_sae.cfg.d_in) / scaling_factor
+    train_step_input = TrainStepInput(
+        sae_in=raw_input * scaling_factor,
+        coefficients={},
+        dead_neuron_mask=None,
+        n_training_steps=0,
+        is_logging_step=False,
+    )
+    for _ in range(500):
+        training_sae.training_forward_pass(train_step_input)
+    trained_feature_acts = training_sae.encode(raw_input * scaling_factor)
+
+    training_sae.fold_activation_norm_scaling_factor(scaling_factor)
+    training_sae.save_inference_model(str(tmp_path))
+    inference_sae = SAE.load_from_disk(str(tmp_path), device="cpu")
+
+    inference_feature_acts = inference_sae.encode(raw_input)
+    assert torch.equal(inference_feature_acts != 0, trained_feature_acts != 0)
+    assert_close(inference_feature_acts, training_sae.encode(raw_input))
+    assert_close(inference_sae(raw_input), training_sae(raw_input))
+
+
 def test_BatchTopKTrainingSAE_training_step_updates_threshold() -> None:
     # Create BatchTopKTrainingSAE
     cfg = build_batchtopk_sae_training_cfg(device="cpu")

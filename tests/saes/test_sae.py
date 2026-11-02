@@ -19,13 +19,17 @@ from sae_lens.saes.sae import (
     TrainingSAE,
     TrainingSAEConfig,
 )
+from sae_lens.saes.standard_sae import StandardTrainingSAE
+from sae_lens.training.activation_scaler import ActivationScaler
 from tests.helpers import (
     ALL_ARCHITECTURES,
     ALL_FOLDABLE_ARCHITECTURES,
     ALL_TRAINING_ARCHITECTURES,
     assert_close,
     build_sae_cfg_for_arch,
+    build_sae_training_cfg,
     build_sae_training_cfg_for_arch,
+    correlated_activations,
     random_params,
 )
 
@@ -278,13 +282,188 @@ def test_TrainingSAE_fold_activation_norm_scaling_factor_all_architectures(
     folded_features = sae.encode(inputs / 2.0)
 
     assert_close(folded_outputs, original_outputs)
-    if architecture in {"topk", "batchtopk", "matryoshka_batchtopk"}:
+    if architecture in {"topk", "abstopk", "batchtopk", "matryoshka_batchtopk"}:
         # Due to how rescale_acts_by_decoder_norm works in TopKSAEs, it's equivalent to
         # folding the W_dec norm after folding the activation norm scaling factor.
         # this is fine, since we just care about the ouputs being the same.
         assert_close(folded_features, original_features / 2.0)
     else:
         assert_close(folded_features, original_features)
+
+
+# matching pursuit rejects covariance_whitening in its config, see test_matching_pursuit_sae
+WHITENING_TRAINING_ARCHITECTURES = [
+    arch for arch in ALL_TRAINING_ARCHITECTURES if arch != "matching_pursuit"
+]
+
+
+def _estimate_whitening_scaler(d_in: int) -> tuple[ActivationScaler, torch.Tensor]:
+    provider = correlated_activations(d_in, batch_size=256)
+    scaler = ActivationScaler()
+    scaler.estimate_whitening(
+        d_in=d_in, data_provider=provider, n_batches_for_norm_estimate=4
+    )
+    return scaler, next(provider)
+
+
+def _fold_scaler_whitening(sae: SAE[Any], scaler: ActivationScaler) -> None:
+    assert scaler.whitening is not None
+    sae.fold_activation_whitening(
+        mean=scaler.whitening.mean,
+        whitening_matrix=scaler.whitening.matrix,
+        unwhitening_matrix=scaler.whitening.inverse_matrix,
+    )
+
+
+@pytest.mark.parametrize("apply_b_dec_to_input", [True, False])
+@pytest.mark.parametrize("architecture", WHITENING_TRAINING_ARCHITECTURES)
+def test_TrainingSAE_fold_activation_whitening_all_architectures(
+    architecture: str, apply_b_dec_to_input: bool
+):
+    # float64 so that a threshold or topk decision cannot flip from rounding alone
+    cfg = build_sae_training_cfg_for_arch(
+        architecture,
+        normalize_activations="covariance_whitening",
+        apply_b_dec_to_input=apply_b_dec_to_input,
+        dtype="float64",
+    )
+    sae = get_sae_training_class(architecture)[0](cfg)
+    random_params(sae)
+    scaler, inputs = _estimate_whitening_scaler(cfg.d_in)
+    inputs = inputs.to(torch.float64)
+
+    # random_params leaves b_dec in [0, 1), which with apply_b_dec_to_input pushes
+    # nearly every pre-activation negative. Center it so the encoder path is exercised.
+    sae.b_dec.data -= 0.5
+    whitened_features = sae.encode(scaler.scale(inputs))
+    whitened_outputs = scaler.unscale(sae(scaler.scale(inputs)))
+    # a few percent of features must be active, otherwise the encoder check is vacuous
+    assert (whitened_features != 0).double().mean() > 0.01
+
+    _fold_scaler_whitening(sae, scaler)
+
+    assert sae.cfg.normalize_activations == "none"
+    assert_close(sae.encode(inputs), whitened_features)
+    assert_close(sae(inputs), whitened_outputs)
+
+
+@pytest.mark.parametrize("apply_b_dec_to_input", [True, False])
+@pytest.mark.parametrize("architecture", ALL_ARCHITECTURES)
+@torch.no_grad()
+def test_SAE_fold_activation_whitening_all_architectures(
+    architecture: str, apply_b_dec_to_input: bool
+):
+    cfg = build_sae_cfg_for_arch(
+        architecture, apply_b_dec_to_input=apply_b_dec_to_input, dtype="float64"
+    )
+    sae = get_sae_class(architecture)[0](cfg)
+    random_params(sae)
+    scaler, inputs = _estimate_whitening_scaler(cfg.d_in)
+    inputs = inputs.to(torch.float64)
+
+    if architecture in {"temporal", "matching_pursuit"}:
+        with pytest.raises(NotImplementedError):
+            _fold_scaler_whitening(sae, scaler)
+        return
+
+    # random_params leaves b_dec in [0, 1), which with apply_b_dec_to_input pushes
+    # nearly every pre-activation negative. Center it so the encoder path is exercised.
+    sae.b_dec.data -= 0.5
+    whitened_features = sae.encode(scaler.scale(inputs))
+    whitened_outputs = scaler.unscale(sae(scaler.scale(inputs)))
+    # a few percent of features must be active, otherwise the encoder check is vacuous
+    assert (whitened_features != 0).double().mean() > 0.01
+
+    _fold_scaler_whitening(sae, scaler)
+
+    assert sae.cfg.normalize_activations == "none"
+    assert_close(sae.encode(inputs), whitened_features)
+    assert_close(sae(inputs), whitened_outputs)
+
+
+@pytest.mark.parametrize("architecture", WHITENING_TRAINING_ARCHITECTURES)
+def test_TrainingSAE_fold_activation_whitening_then_save_inference_model_matches_whitened_inference(
+    architecture: str, tmp_path: Path
+):
+    cfg = build_sae_training_cfg_for_arch(
+        architecture, normalize_activations="covariance_whitening", dtype="float64"
+    )
+    sae = get_sae_training_class(architecture)[0](cfg)
+    random_params(sae)
+    scaler, inputs = _estimate_whitening_scaler(cfg.d_in)
+    inputs = inputs.to(torch.float64)
+
+    sae.save_inference_model(tmp_path / "unfolded")
+    unfolded = SAE.load_from_disk(str(tmp_path / "unfolded"), dtype="float64")
+    whitened_features = unfolded.encode(scaler.scale(inputs))
+    whitened_outputs = scaler.unscale(unfolded(scaler.scale(inputs)))
+    # a few percent of features must be active, otherwise the encoder check is vacuous
+    assert (whitened_features != 0).double().mean() > 0.01
+
+    _fold_scaler_whitening(sae, scaler)
+    sae.save_inference_model(tmp_path / "folded")
+    folded = SAE.load_from_disk(str(tmp_path / "folded"), dtype="float64")
+
+    assert folded.cfg.normalize_activations == "none"
+    assert_close(folded.encode(inputs), whitened_features)
+    assert_close(folded(inputs), whitened_outputs)
+
+
+@pytest.mark.parametrize("architecture", ALL_TRAINING_ARCHITECTURES)
+def test_TrainingSAE_fold_activation_norm_scaling_factor_then_save_inference_model_matches_scaled_inference(
+    architecture: str, tmp_path: Path
+):
+    # big enough that matching pursuit's residual stopping rule actually triggers
+    extra_cfg = (
+        {"residual_threshold": 3.0} if architecture == "matching_pursuit" else {}
+    )
+    cfg = build_sae_training_cfg_for_arch(
+        architecture,
+        normalize_activations="expected_average_only_in",
+        dtype="float64",
+        **extra_cfg,
+    )
+    sae = get_sae_training_class(architecture)[0](cfg)
+    random_params(sae)
+    # random_params leaves everything in [0, 1), which leaves matching pursuit with
+    # nothing to select. Center the weights and use unit-norm decoder rows.
+    sae.W_dec.data -= 0.5
+    sae.W_dec.data /= sae.W_dec.data.norm(dim=-1, keepdim=True)
+    sae.b_dec.data -= 0.5
+    scaling_factor = 0.02
+    inputs = torch.randn(256, cfg.d_in, dtype=torch.float64) / scaling_factor
+
+    sae.save_inference_model(tmp_path / "unfolded")
+    unfolded = SAE.load_from_disk(str(tmp_path / "unfolded"), dtype="float64")
+    scaled_features = unfolded.encode(inputs * scaling_factor)
+    scaled_outputs = unfolded(inputs * scaling_factor) / scaling_factor
+    # a few percent of features must be active, otherwise the encoder check is vacuous
+    assert (scaled_features != 0).double().mean() > 0.01
+
+    sae.fold_activation_norm_scaling_factor(scaling_factor)
+    sae.save_inference_model(tmp_path / "folded")
+    folded = SAE.load_from_disk(str(tmp_path / "folded"), dtype="float64")
+
+    assert folded.cfg.normalize_activations == "none"
+    assert_close(folded(inputs), scaled_outputs)
+    # feature magnitudes may change by the scaling factor (e.g. TopK SAEs with
+    # rescale_acts_by_decoder_norm), but the same features must fire
+    assert torch.equal(folded.encode(inputs) != 0, scaled_features != 0)
+
+
+def test_TrainingSAE_fold_activation_whitening_float32_matches_within_1e_5():
+    cfg = build_sae_training_cfg(normalize_activations="covariance_whitening")
+    sae = StandardTrainingSAE(cfg)
+    random_params(sae)
+    scaler, inputs = _estimate_whitening_scaler(cfg.d_in)
+
+    whitened_outputs = scaler.unscale(sae(scaler.scale(inputs)))
+    _fold_scaler_whitening(sae, scaler)
+
+    assert sae.W_enc.dtype == torch.float32
+    # float32 rounding scales with the largest outputs, not with each element
+    output_scale = whitened_outputs.abs().max().item()
+    assert_close(sae(inputs), whitened_outputs, atol=1e-5 * output_scale, rtol=1e-5)
 
 
 @pytest.mark.parametrize("architecture", ALL_ARCHITECTURES)
@@ -392,7 +571,7 @@ def test_training_sae_fold_w_dec_norm_all_architectures(architecture: str):
         feature_activations_2.nonzero(),
     )
 
-    if architecture in {"topk", "batchtopk", "matryoshka_batchtopk"}:
+    if architecture in {"topk", "abstopk", "batchtopk", "matryoshka_batchtopk"}:
         # Due to how rescale_acts_by_decoder_norm works in TopKSAEs, it's like the
         # SAE has the norm folded in throughout the entire training process.
         assert_close(feature_activations_2, feature_activations_1, atol=1e-4, rtol=1e-4)
@@ -405,8 +584,9 @@ def test_training_sae_fold_w_dec_norm_all_architectures(architecture: str):
     sae_out_1 = sae.decode(feature_activations_1)
     sae_out_2 = sae2.decode(feature_activations_2)
 
-    # but actual outputs should be the same
-    assert_close(sae_out_1, sae_out_2)
+    # but actual outputs should be the same. Signed activations (e.g. AbsTopK) can
+    # cancel to near-zero outputs, where rtol alone can't absorb float32 rounding.
+    assert_close(sae_out_1, sae_out_2, atol=1e-4)
 
 
 @pytest.mark.parametrize("architecture", ALL_FOLDABLE_ARCHITECTURES)
@@ -791,3 +971,66 @@ def test_from_pretrained_folds_norm_scaling_factor(tmp_path: Path):
     assert_close(loaded_sae.W_dec, original_W_dec / scaling_factor)
     assert_close(loaded_sae.b_dec, original_b_dec / scaling_factor)
     assert loaded_sae.cfg.normalize_activations == "none"
+
+
+@pytest.mark.parametrize("architecture", ALL_FOLDABLE_ARCHITECTURES)
+def test_SAE_load_from_disk_fold_W_dec_norm_matches_loading_then_folding(
+    tmp_path: Path, architecture: str
+):
+    cfg = build_sae_cfg_for_arch(architecture, d_in=16, d_sae=32)
+    sae = get_sae_class(architecture)[0](cfg)
+    random_params(sae)
+    sae.save_model(tmp_path)
+
+    folded_on_load = SAE.load_from_disk(tmp_path, device="cpu", fold_W_dec_norm=True)
+    folded_afterwards = SAE.load_from_disk(tmp_path, device="cpu")
+    folded_afterwards.fold_W_dec_norm()
+
+    for name, param in folded_on_load.named_parameters():
+        assert_close(param, dict(folded_afterwards.named_parameters())[name])
+
+
+def test_SAE_load_from_disk_leaves_decoder_norms_alone_by_default(tmp_path: Path):
+    cfg = build_sae_cfg_for_arch("standard", d_in=16, d_sae=32)
+    sae = get_sae_class("standard")[0](cfg)
+    random_params(sae)
+    sae.save_model(tmp_path)
+    saved_norms = sae.get_W_dec_norm().clone()
+
+    loaded = SAE.load_from_disk(tmp_path, device="cpu")
+
+    # random params give non-unit decoder norms, so an accidental fold would show
+    assert saved_norms.sub(1.0).abs().max().item() > 1e-3
+    assert_close(loaded.get_W_dec_norm(), saved_norms)
+
+
+def test_SAE_from_pretrained_fold_W_dec_norm_matches_loading_then_folding(
+    tmp_path: Path,
+):
+    cfg = build_sae_cfg_for_arch("standard", d_in=16, d_sae=32)
+    sae = get_sae_class("standard")[0](cfg)
+    random_params(sae)
+    sae.save_model(tmp_path)
+
+    def converter(
+        repo_id: str,  # noqa: ARG001
+        folder_name: str,  # noqa: ARG001
+        device: str,
+        force_download: bool,  # noqa: ARG001
+        cfg_overrides: dict[str, Any] | None,
+    ):
+        cfg_dict, state_dict = sae_lens_disk_loader(
+            tmp_path, device, cfg_overrides=cfg_overrides
+        )
+        return cfg_dict, state_dict, None
+
+    folded_on_load = SAE.from_pretrained(
+        "mock/release", "mock-sae-id", converter=converter, fold_W_dec_norm=True
+    )
+    folded_afterwards = SAE.from_pretrained(
+        "mock/release", "mock-sae-id", converter=converter
+    )
+    folded_afterwards.fold_W_dec_norm()
+
+    for name, param in folded_on_load.named_parameters():
+        assert_close(param, dict(folded_afterwards.named_parameters())[name])

@@ -46,6 +46,58 @@ def test_prefetching_iterator_rejects_invalid_prefetch():
         PrefetchingIterator(iter([1, 2]), prefetch=0)
 
 
+def test_prefetching_iterator_close_stops_producer_blocked_on_full_queue():
+    second_item_requested = threading.Event()
+
+    def source() -> Iterator[int]:
+        yield 0
+        # With prefetch=1 the queue already holds 0, so the producer blocks
+        # trying to put 1.
+        second_item_requested.set()
+        yield 1
+        yield 2
+
+    prefetcher = PrefetchingIterator(source(), prefetch=1)
+    assert second_item_requested.wait(timeout=1)
+
+    prefetcher.close()
+
+    assert not prefetcher._thread.is_alive()
+    assert prefetcher._queue.empty()
+    with pytest.raises(StopIteration):
+        next(prefetcher)
+
+
+def test_prefetching_iterator_close_waits_for_in_flight_source_call():
+    source_entered = threading.Event()
+    release_source = threading.Event()
+    log: list[str] = []
+
+    def source() -> Iterator[int]:
+        while True:
+            log.append("start")
+            source_entered.set()
+            release_source.wait()
+            log.append("end")
+            yield 0
+
+    prefetcher = PrefetchingIterator(source(), prefetch=1)
+    assert source_entered.wait(timeout=1)
+
+    def release_after_close() -> None:
+        prefetcher._closed.wait()
+        time.sleep(0.05)
+        release_source.set()
+
+    threading.Thread(target=release_after_close).start()
+    prefetcher.close()
+
+    # close() returned only after the in-flight call finished, and the
+    # producer didn't start another one.
+    assert log == ["start", "end"]
+    assert not prefetcher._thread.is_alive()
+
+
 def test_prefetching_iterator_runs_producer_concurrently():
     # Source sleeps before yielding each item; if the prefetcher works the
     # producer fills the queue while the consumer is "busy", so wall time

@@ -20,7 +20,7 @@ from tqdm.auto import tqdm
 
 from sae_lens.load_model import load_model
 from sae_lens.loading.pretrained_saes_directory import get_pretrained_saes_directory
-from sae_lens.saes.sae import SAE, SAEConfig
+from sae_lens.saes.sae import SAE
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.transformer_lens_compat import HookedRootModule
@@ -126,6 +126,29 @@ def run_evals(
         eval_config.batch_size_prompts or activation_store.store_batch_size_prompts
     )
 
+    if (
+        eval_config.compute_kl or eval_config.compute_ce_loss
+    ) and eval_config.n_eval_reconstruction_batches <= 0:
+        raise ValueError(
+            "eval_config.n_eval_reconstruction_batches must be > 0 when "
+            "compute_kl or compute_ce_loss is True."
+        )
+    compute_sparsity_variance_metrics = (
+        eval_config.compute_l2_norms
+        or eval_config.compute_sparsity_metrics
+        or eval_config.compute_variance_metrics
+        or eval_config.compute_featurewise_density_statistics
+    )
+    if (
+        compute_sparsity_variance_metrics
+        and eval_config.n_eval_sparsity_variance_batches <= 0
+    ):
+        raise ValueError(
+            "eval_config.n_eval_sparsity_variance_batches must be > 0 when "
+            "compute_l2_norms, compute_sparsity_metrics, compute_variance_metrics, "
+            "or compute_featurewise_density_statistics is True."
+        )
+
     # TODO: Come up with a cleaner long term strategy here for SAEs that do reshaping.
     # turn off hook_z reshaping mode if it's on, and restore it after evals
     if "hook_z" in hook_name:
@@ -144,11 +167,6 @@ def run_evals(
     }
 
     if eval_config.compute_kl or eval_config.compute_ce_loss:
-        if eval_config.n_eval_reconstruction_batches <= 0:
-            raise ValueError(
-                "eval_config.n_eval_reconstruction_batches must be > 0 when "
-                "compute_kl or compute_ce_loss is True."
-            )
         reconstruction_metrics = get_downstream_reconstruction_metrics(
             sae,
             model,
@@ -160,6 +178,7 @@ def run_evals(
             eval_batch_size_prompts=actual_batch_size,
             ignore_tokens=ignore_tokens,
             verbose=verbose,
+            model_kwargs=model_kwargs,
         )
 
         if eval_config.compute_kl:
@@ -189,16 +208,7 @@ def run_evals(
 
         activation_store.reset_input_dataset()
 
-    if (
-        eval_config.compute_l2_norms
-        or eval_config.compute_sparsity_metrics
-        or eval_config.compute_variance_metrics
-    ):
-        if eval_config.n_eval_sparsity_variance_batches <= 0:
-            raise ValueError(
-                "eval_config.n_eval_sparsity_variance_batches must be > 0 when "
-                "compute_l2_norms, compute_sparsity_metrics, or compute_variance_metrics is True."
-            )
+    if compute_sparsity_variance_metrics:
         sparsity_variance_metrics, feature_metrics = get_sparsity_and_variance_metrics(
             sae,
             model,
@@ -323,6 +333,7 @@ def get_downstream_reconstruction_metrics(
     eval_batch_size_prompts: int,
     ignore_tokens: list[int] | None = None,
     verbose: bool = False,
+    model_kwargs: Mapping[str, Any] = {},
 ):
     metrics_dict = {}
     if compute_kl:
@@ -347,6 +358,7 @@ def get_downstream_reconstruction_metrics(
             compute_kl=compute_kl,
             compute_ce_loss=compute_ce_loss,
             ignore_tokens=ignore_tokens,
+            model_kwargs=model_kwargs,
         ).items():
             if ignore_tokens:
                 mask = torch.logical_not(
@@ -401,6 +413,11 @@ class ExplainedVarianceCalculator:
 
     def add_batch(self, sae_output: torch.Tensor, hidden_acts: torch.Tensor) -> None:
         """Add a batch. Both shapes: (batch_size, hidden_dim)."""
+        # Promote before squaring or reducing: converting a low-precision sum
+        # afterwards cannot recover overflow or variance lost to rounding.
+        hidden_acts = hidden_acts.to(
+            torch.promote_types(hidden_acts.dtype, torch.float32)
+        )
         batch_sum = hidden_acts.sum(dim=0).to(device="cpu", dtype=torch.float64)
         self.sum_x = batch_sum if self.sum_x is None else self.sum_x + batch_sum
         self.sum_squared_norm += hidden_acts.pow(2).sum().item()
@@ -530,12 +547,7 @@ def get_sparsity_and_variance_metrics(
         flattened_sae_out = einops.rearrange(sae_out, "b ctx d -> (b ctx) d")
 
         # TODO: Clean this up.
-        # apply mask. mask is built from batch_tokens on the LLM device, but
-        # sae_feature_activations live on the SAE device (post sae.encode), so
-        # mirror the per-use .to() pattern used for flattened_mask below.
-        masked_sae_feature_activations = sae_feature_activations * mask.unsqueeze(
-            -1
-        ).to(sae_feature_activations.device)
+        # apply mask.
         flattened_sae_input = flattened_sae_input[
             flattened_mask.to(flattened_sae_input.device)
         ]
@@ -545,6 +557,15 @@ def get_sparsity_and_variance_metrics(
         flattened_sae_out = flattened_sae_out[
             flattened_mask.to(flattened_sae_out.device)
         ]
+
+        # Promote before squaring or reducing: float16 squared norms overflow
+        # above 65504, and bfloat16 results are too coarse to compare SAEs.
+        flattened_sae_input = flattened_sae_input.to(
+            torch.promote_types(flattened_sae_input.dtype, torch.float32)
+        )
+        flattened_sae_out = flattened_sae_out.to(
+            torch.promote_types(flattened_sae_out.dtype, torch.float32)
+        )
 
         if compute_l2_norms:
             l2_norm_in = torch.norm(flattened_sae_input, dim=-1)
@@ -569,8 +590,14 @@ def get_sparsity_and_variance_metrics(
             )
 
         if compute_sparsity_metrics:
-            l0 = (flattened_sae_feature_acts > 0).sum(dim=-1).float()
-            l1 = flattened_sae_feature_acts.sum(dim=-1)
+            # != 0 rather than > 0 so that negative-but-active features (e.g.
+            # bidirectional architectures like AbsTopK) are counted. This is a
+            # no-op for ReLU-based architectures, whose activations are >= 0.
+            l0 = (flattened_sae_feature_acts != 0).sum(dim=-1).float()
+            # abs() before summing so the L1 metric aggregates activation
+            # magnitudes; without it, signed activations (e.g. AbsTopK) can
+            # cancel or yield a negative "L1". No-op for ReLU-based SAEs (>= 0).
+            l1 = flattened_sae_feature_acts.abs().sum(dim=-1)
             metric_dict["l0"].append(l0)
             metric_dict["l1"].append(l1)
 
@@ -606,7 +633,13 @@ def get_sparsity_and_variance_metrics(
             metric_dict["cossim"].append(cossim)
 
         if compute_featurewise_density_statistics:
-            sae_feature_activations_bool = (masked_sae_feature_activations > 0).float()
+            masked_sae_feature_activations = sae_feature_activations * mask.unsqueeze(
+                -1
+            ).to(sae_feature_activations.device)
+            # != 0 rather than > 0 so that negative-but-active features (e.g.
+            # bidirectional architectures like AbsTopK) are counted. This is a
+            # no-op for ReLU-based architectures, whose activations are >= 0.
+            sae_feature_activations_bool = (masked_sae_feature_activations != 0).float()
             total_feature_acts += sae_feature_activations_bool.sum(dim=1).sum(dim=0)
             total_feature_prompts += (sae_feature_activations_bool.sum(dim=1) > 0).sum(
                 dim=0
@@ -636,7 +669,7 @@ def get_sparsity_and_variance_metrics(
 
 @torch.no_grad()
 def get_recons_loss(
-    sae: SAE[SAEConfig],
+    sae: SAE[Any],
     model: HookedRootModule,
     activation_scaler: ActivationScaler,
     batch_tokens: torch.Tensor,
@@ -678,10 +711,12 @@ def get_recons_loss(
         activations = activations.to(sae.device)
 
         # Handle rescaling if SAE expects it
-        activations = activation_scaler.scale(activations)
+        scaled_activations = activation_scaler.scale(activations)
 
         # SAE class agnost forward forward pass.
-        new_activations = sae.decode(sae.encode(activations)).to(activations.dtype)
+        new_activations = sae.decode(sae.encode(scaled_activations)).to(
+            activations.dtype
+        )
 
         # Unscale if activations were scaled prior to going into the SAE
         new_activations = activation_scaler.unscale(new_activations)
@@ -690,55 +725,32 @@ def get_recons_loss(
 
         return new_activations.to(original_device)
 
-    def all_head_replacement_hook(activations: torch.Tensor, hook: Any):  # noqa: ARG001
-        original_device = activations.device
-        activations = activations.to(sae.device)
-
-        # Handle rescaling if SAE expects it
-        activations = activation_scaler.scale(activations)
-
-        # SAE class agnost forward forward pass.
-        new_activations = sae.decode(sae.encode(activations.flatten(-2, -1))).to(
-            activations.dtype
-        )
-
-        new_activations = new_activations.reshape(
+    def all_head_replacement_hook(activations: torch.Tensor, hook: Any):
+        return standard_replacement_hook(activations.flatten(-2, -1), hook).reshape(
             activations.shape
-        )  # reshape to match original shape
-
-        # Unscale if activations were scaled prior to going into the SAE
-        new_activations = activation_scaler.unscale(new_activations)
-
-        return new_activations.to(original_device)
-
-    def single_head_replacement_hook(activations: torch.Tensor, hook: Any):  # noqa: ARG001
-        original_device = activations.device
-        activations = activations.to(sae.device)
-
-        # Handle rescaling if SAE expects it
-        activations = activation_scaler.scale(activations)
-
-        new_activations = sae.decode(sae.encode(activations[:, :, head_index])).to(
-            activations.dtype
         )
-        activations[:, :, head_index] = new_activations
 
-        # Unscale if activations were scaled prior to going into the SAE
-        activations = activation_scaler.unscale(activations)
+    def single_head_replacement_hook(activations: torch.Tensor, hook: Any):
+        activations = activations.clone()
+        activations[:, :, head_index] = standard_replacement_hook(
+            activations[:, :, head_index], hook
+        )
+        return activations
 
-        return activations.to(original_device)
-
+    # The ablation baseline zeroes the same positions the SAE replaces, so excluded
+    # tokens (e.g. BOS) keep their original activations in both runs.
     def standard_zero_ablate_hook(activations: torch.Tensor, hook: Any):  # noqa: ARG001
         original_device = activations.device
         activations = activations.to(sae.device)
-        activations = torch.zeros_like(activations)
-        return activations.to(original_device)
+        token_mask = mask.reshape(mask.shape + (1,) * (activations.ndim - mask.ndim))
+        return activations.masked_fill(token_mask, 0).to(original_device)
 
     def single_head_zero_ablate_hook(activations: torch.Tensor, hook: Any):  # noqa: ARG001
-        original_device = activations.device
-        activations = activations.to(sae.device)
-        activations[:, :, head_index] = torch.zeros_like(activations[:, :, head_index])
-        return activations.to(original_device)
+        activations = activations.clone()
+        activations[:, :, head_index] = standard_zero_ablate_hook(
+            activations[:, :, head_index], hook
+        )
+        return activations
 
     # we would include hook z, except that we now have base SAE's
     # which will do their own reshaping for hook z.
@@ -833,7 +845,7 @@ def multiple_evals(
     n_eval_reconstruction_batches: int,
     n_eval_sparsity_variance_batches: int,
     eval_batch_size_prompts: int = 8,
-    datasets: list[str] = ["Skylion007/openwebtext", "lighteval/MATH"],
+    datasets: list[str] = ["Skylion007/openwebtext"],
     dataset_trust_remote_code: bool = False,
     ctx_lens: list[int] = [128],
     output_dir: str = "eval_results",
@@ -1062,7 +1074,7 @@ def process_args(args: list[str]) -> argparse.Namespace:
         "--datasets",
         nargs="+",
         default=["Skylion007/openwebtext"],
-        help="Datasets to evaluate on, such as 'Skylion007/openwebtext' or 'lighteval/MATH'.",
+        help="Datasets to evaluate on, such as 'Skylion007/openwebtext' or 'monology/pile-uncopyrighted'.",
     )
     arg_parser.add_argument(
         "--dataset_trust_remote_code",

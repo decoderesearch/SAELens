@@ -2,6 +2,8 @@ import os
 import random
 import shutil
 import subprocess
+from collections.abc import Iterator
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +11,7 @@ import numpy as np
 import pytest
 import torch
 import wandb
+from huggingface_hub import HfApi
 
 from sae_lens.saes.sae import SAE
 from sae_lens.saes.standard_sae import StandardSAEConfig
@@ -18,6 +21,27 @@ torch.set_grad_enabled(True)
 
 # sparsify's triton implementation breaks in CI, so just disable it
 os.environ["SPARSIFY_DISABLE_TRITON"] = "1"
+
+
+@pytest.fixture(autouse=True, scope="session")
+def memoize_hf_list_repo_files() -> Iterator[None]:
+    # TransformerLens calls HfApi.list_repo_files every time it loads a NeelNanda/*
+    # model (e.g. gelu-1l). This API call bypasses the HF cache, so CI hits HF's
+    # rate limit, especially on fork PRs which don't get HF_TOKEN. Repo file lists
+    # don't change during a test run, so fetch each one once per worker.
+    original = HfApi.list_repo_files
+    cache: dict[tuple[str, frozenset[tuple[str, Any]]], list[str]] = {}
+
+    @wraps(original)
+    def memoized(self: HfApi, repo_id: str, **kwargs: Any) -> list[str]:
+        key = (repo_id, frozenset(kwargs.items()))
+        if key not in cache:
+            cache[key] = original(self, repo_id, **kwargs)
+        return list(cache[key])
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(HfApi, "list_repo_files", memoized)
+        yield
 
 
 @pytest.fixture(autouse=True)

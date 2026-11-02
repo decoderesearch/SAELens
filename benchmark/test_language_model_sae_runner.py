@@ -10,7 +10,7 @@ from sae_lens.saes.topk_sae import TopKTrainingSAEConfig
 
 
 # The way to run this with this command:
-# poetry run py.test benchmark/test_language_model_sae_runner.py --profile-svg -s
+# uv run pytest benchmark/test_language_model_sae_runner.py --profile-svg -s
 def test_language_model_sae_runner():
     if torch.cuda.is_available():
         device = "cuda"

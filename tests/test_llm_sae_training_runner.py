@@ -30,6 +30,7 @@ from sae_lens.saes.standard_sae import StandardTrainingSAEConfig
 from sae_lens.saes.topk_sae import TopKTrainingSAEConfig
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
+from sae_lens.training.prefetch import PrefetchingIterator
 from tests.helpers import (
     ALL_TRAINING_ARCHITECTURES,
     NEEL_NANDA_C4_10K_DATASET,
@@ -173,10 +174,20 @@ def test_LanguageModelSAETrainingRunner_trains_on_unprocessed_transformer_bridge
 
 @pytest.mark.parametrize("prefetch_llm_batches", [True, 2])
 def test_LanguageModelSAETrainingRunner_runs_with_prefetch_llm_batches(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     ts_model: HookedTransformer,
     prefetch_llm_batches: bool | int,
 ):
+    prefetchers: list[PrefetchingIterator[Any]] = []
+    original_init = PrefetchingIterator.__init__
+
+    def init_and_record(self: PrefetchingIterator[Any], *args: Any, **kwargs: Any):
+        original_init(self, *args, **kwargs)
+        prefetchers.append(self)
+
+    monkeypatch.setattr(PrefetchingIterator, "__init__", init_and_record)
+
     cfg = build_runner_cfg_for_arch(
         d_in=64,
         d_sae=128,
@@ -198,6 +209,10 @@ def test_LanguageModelSAETrainingRunner_runs_with_prefetch_llm_batches(
     runner = LanguageModelSAETrainingRunner(cfg, override_model=ts_model)
     sae = runner.run()
     assert sae.cfg.architecture() == "standard"
+    # the runner must stop the prefetch thread so it doesn't hold the
+    # activations store and buffered batches alive after training
+    assert len(prefetchers) == 1
+    assert not prefetchers[0]._thread.is_alive()
 
 
 class _CompiledCallable:

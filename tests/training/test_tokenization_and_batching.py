@@ -229,6 +229,30 @@ def test_concat_and_batch_sequences_drops_the_final_batch_if_too_small():
     assert torch.all(batches == all_toks[:15].reshape(3, 5))
 
 
+@pytest.mark.parametrize("context_size", [0, -1])
+@pytest.mark.parametrize("disable_concat_sequences", [False, True])
+def test_concat_and_batch_sequences_rejects_non_positive_context_size(
+    context_size: int, disable_concat_sequences: bool
+):
+    batches = concat_and_batch_sequences(
+        tokens_iterator=iter([torch.tensor([1, 2])]),
+        context_size=context_size,
+        disable_concat_sequences=disable_concat_sequences,
+    )
+    with pytest.raises(ValueError, match="context_size must be positive"):
+        next(batches)
+
+
+def test_concat_and_batch_sequences_accepts_minimum_positive_context_size():
+    batches = list(
+        concat_and_batch_sequences(
+            tokens_iterator=iter([torch.tensor([5, 6])]),
+            context_size=1,
+        )
+    )
+    assert [batch.tolist() for batch in batches] == [[5], [6]]
+
+
 def test_concat_and_batch_sequences_can_ensure_everything_starts_with_bos():
     all_toks = torch.arange(19)
     seqs = [all_toks[:3], all_toks[3:10], all_toks[10:17], all_toks[17:]]

@@ -133,6 +133,16 @@ def test_get_repo_id_and_folder_name_release_found():
     assert folder_name == "blocks.0.hook_resid_pre"
 
 
+def test_get_pretrained_saes_directory_saes_map_paths_are_all_str():
+    non_str_paths = [
+        (release, sae_id, path)
+        for release, lookup in get_pretrained_saes_directory().items()
+        for sae_id, path in lookup.saes_map.items()
+        if not isinstance(path, str)
+    ]
+    assert non_str_paths == []
+
+
 def test_get_repo_id_and_folder_name_release_not_found():
     repo_id, folder_name = get_repo_id_and_folder_name("release1", "sae1")
     assert repo_id == "release1"

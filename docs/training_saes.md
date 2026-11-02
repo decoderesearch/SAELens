@@ -33,7 +33,7 @@ Core options typically configured within the architecture-specific `sae` object 
   - For Gated SAEs: `l1_coefficient` (controls L1-like penalty on gate activations), `l1_warm_up_steps`.
   - For JumpReLU SAEs: `l0_coefficient` (controls L0-like penalty), `l0_warm_up_steps`, `jumprelu_init_threshold`, `jumprelu_bandwidth`.
   - For TopK and BatchTopK SAEs: `k` (the number of features to keep active). Sparsity is enforced structurally.
-- `normalize_activations`: Strategy for normalizing activations before they enter the SAE (e.g., `"expected_average_only_in"`).
+- `normalize_activations`: Strategy for normalizing activations before they enter the SAE (e.g., `"expected_average_only_in"`). `"covariance_whitening"` whitens the activations using their estimated mean and covariance during training, following [Data Whitening Improves Sparse Autoencoder Learning](https://arxiv.org/abs/2511.13981). Like `"expected_average_only_in"`, the whitening is folded into the SAE weights at the end of training, so the saved SAE takes raw activations and needs no extra compute at inference.
 
 A sample training run from the [tutorial](https://github.com/decoderesearch/SAELens/blob/main/tutorials/training_a_sparse_autoencoder.ipynb) is shown below. Note how SAE-specific parameters are nested within the `sae` field:
 
@@ -284,6 +284,31 @@ from sae_lens import LanguageModelSAERunnerConfig, LanguageModelSAETrainingRunne
 cfg = LanguageModelSAERunnerConfig( # Full config would be defined here
     # ... other LanguageModelSAERunnerConfig parameters ...
     sae=TopKTrainingSAEConfig(
+        k=100, # Set the number of active features
+        d_in=1024, # Must match your hook point
+        d_sae=16 * 1024,
+        # ... other common SAE parameters from SAEConfig if needed ...
+    ),
+    # ...
+)
+sparse_autoencoder = LanguageModelSAETrainingRunner(cfg).run()
+```
+
+### Training AbsTopK SAEs
+
+<!-- prettier-ignore-start -->
+!!! warning "Warning: research architecture"
+    AbsTopK SAEs are mainly interesting for researchers studying bidirectional features. If you are looking for a standard, state-of-the-art SAE for most use-cases, we recommend using BatchTopK or JumpReLU SAEs.
+<!-- prettier-ignore-end -->
+
+[AbsTopK SAEs](https://arxiv.org/abs/2510.00404) are a variant of TopK SAEs whose latents can fire negatively as well as positively. Instead of keeping the `k` largest pre-activations and applying a ReLU, AbsTopK keeps the `k` pre-activations with the largest magnitude and preserves their sign. This lets a single latent represent both ends of a bidirectional concept (e.g. male vs. female) rather than splitting it across two latents. To train an AbsTopK SAE, provide an `AbsTopKTrainingSAEConfig` instance to the `sae` field. It takes the same parameters as `TopKTrainingSAEConfig`, with `k` setting the number of active latents per sample. Since latent activations can be negative, check `acts != 0` rather than `acts > 0` when testing whether a latent fires.
+
+```python
+from sae_lens import LanguageModelSAERunnerConfig, LanguageModelSAETrainingRunner, AbsTopKTrainingSAEConfig
+
+cfg = LanguageModelSAERunnerConfig( # Full config would be defined here
+    # ... other LanguageModelSAERunnerConfig parameters ...
+    sae=AbsTopKTrainingSAEConfig(
         k=100, # Set the number of active features
         d_in=1024, # Must match your hook point
         d_sae=16 * 1024,

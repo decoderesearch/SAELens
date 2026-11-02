@@ -123,6 +123,16 @@ class BatchTopKTrainingSAE(TopKTrainingSAE):
                 self.topk_threshold = (1 - lr) * self.topk_threshold + lr * min_positive
 
     @override
+    @torch.no_grad()
+    def fold_activation_norm_scaling_factor(self, scaling_factor: float) -> None:
+        super().fold_activation_norm_scaling_factor(scaling_factor)
+        if self.cfg.rescale_acts_by_decoder_norm:
+            # The threshold is in units of hidden_pre * W_dec.norm(), and the fold
+            # just divided W_dec by the scaling factor. Without this the saved
+            # JumpReLU threshold is off by that factor (#763).
+            self.topk_threshold /= scaling_factor
+
+    @override
     def process_state_dict_for_saving_inference(
         self, state_dict: dict[str, Any]
     ) -> None:

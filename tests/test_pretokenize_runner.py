@@ -249,7 +249,7 @@ def test_pretokenize_runner_streaming_dataset():
         context_size=10,
         num_proc=2,
         dataset_path="NeelNanda/c4-10k",
-        split="train",
+        split="train[:20]",
         streaming=False,
     )
     dataset = PretokenizeRunner(cfg).run()

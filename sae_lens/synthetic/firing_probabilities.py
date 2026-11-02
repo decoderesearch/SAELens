@@ -178,7 +178,8 @@ def random_firing_probabilities(
         num_features: Number of features to generate probabilities for
         max_prob: Maximum firing probability
         min_prob: Minimum firing probability
-        seed: Optional random seed for reproducibility
+        seed: Optional random seed for reproducibility. Without one, the global
+            torch RNG is used, so each call draws different probabilities.
 
     Returns:
         Tensor of shape [num_features] with random firing probabilities
@@ -188,9 +189,9 @@ def random_firing_probabilities(
     if not 0 < min_prob < max_prob <= 1:
         raise ValueError("Must have 0 < min_prob < max_prob <= 1")
 
-    generator = torch.Generator()
+    generator = None
     if seed is not None:
-        generator.manual_seed(seed)
+        generator = torch.Generator().manual_seed(seed)
 
     probs = torch.rand(num_features, generator=generator, dtype=torch.float32)
     return min_prob + (max_prob - min_prob) * probs

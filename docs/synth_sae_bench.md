@@ -17,9 +17,12 @@ SynthSAEBench-16k is the standardized benchmark model — a pretrained `Syntheti
 from sae_lens.synthetic import SyntheticModel
 
 model = SyntheticModel.from_pretrained(
-    "decoderesearch/synth-sae-bench-16k-v1", device="cuda"
+    "decoderesearch/synth-sae-bench-16k-v2", device="cuda"
 )
 ```
+
+!!! info "Use v2 of SynthSAEBench-16k"
+    Due to an upload error, [v1](https://huggingface.co/decoderesearch/synth-sae-bench-16k-v1) of SynthSAEBench-16k is missing `scale_children_by_parent=True`, so it does not exactly match the model used in the SynthSAEBench paper and the results on this page. [v2](https://huggingface.co/decoderesearch/synth-sae-bench-16k-v2) is identical to v1 except for this fix. We strongly recommend using v2.
 
 **Configuration:**
 
@@ -31,6 +34,7 @@ model = SyntheticModel.from_pretrained(
 | Average L0 | ~34 active features per sample |
 | Hierarchy | 128 root nodes, branching factor 4, max depth 3 |
 | Mutual exclusion | All hierarchical children are mutually exclusive |
+| Child scaling | Child activations scaled by parent activation / parent mean (`scale_children_by_parent=True`) |
 | Correlations | Low-rank (rank=25, scale=0.1) |
 | Orthogonalization | 100 steps, lr=3e-4 |
 | Mean magnitudes | Linear from 5.0 (frequent) to 4.0 (rare) |
@@ -48,7 +52,7 @@ from sae_lens import BatchTopKTrainingSAEConfig, LoggingConfig
 
 runner_cfg = SyntheticSAERunnerConfig(
     # Load the pretrained benchmark model
-    synthetic_model="decoderesearch/synth-sae-bench-16k-v1",
+    synthetic_model="decoderesearch/synth-sae-bench-16k-v2",
 
     # Configure the SAE
     sae=BatchTopKTrainingSAEConfig(

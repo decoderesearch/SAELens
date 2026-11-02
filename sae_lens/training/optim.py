@@ -161,3 +161,10 @@ class CoefficientScheduler:
     def load_state_dict(self, state_dict: dict[str, Any]):
         for k in state_dict:
             setattr(self, k, state_dict[k])
+        # current_value is not saved, so recompute it from the restored step
+        if self.current_step < self.warm_up_steps:
+            self.current_value = self.final_value * (
+                self.current_step / self.warm_up_steps
+            )
+        else:
+            self.current_value = self.final_value

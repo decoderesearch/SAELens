@@ -380,7 +380,7 @@ from sae_lens import BatchTopKTrainingSAEConfig, LoggingConfig
 
 runner_cfg = SyntheticSAERunnerConfig(
     # Load a pretrained synthetic model from HuggingFace
-    synthetic_model="decoderesearch/synth-sae-bench-16k-v1",
+    synthetic_model="decoderesearch/synth-sae-bench-16k-v2",
 
     sae=BatchTopKTrainingSAEConfig(
         d_in=768,   # Must match hidden_dim of the synthetic model
@@ -507,7 +507,7 @@ An example of this is the [SynthSAEBench-16k](synth_sae_bench.md) model, which i
 ```python
 from sae_lens.synthetic import SyntheticModel
 
-model = SyntheticModel.from_pretrained("decoderesearch/synth-sae-bench-16k-v1")
+model = SyntheticModel.from_pretrained("decoderesearch/synth-sae-bench-16k-v2")
 ```
 
 ### Using Pretrained Synthetic Models with Runner

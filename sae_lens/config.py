@@ -356,8 +356,9 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
         if self.lr_end is None:
             self.lr_end = self.lr / 10
 
-        unique_id = self.logger.wandb_id or uuid.uuid4().hex[:8]
-        self.checkpoint_path = f"{self.checkpoint_path}/{unique_id}"
+        if self.checkpoint_path is not None:
+            unique_id = self.logger.wandb_id or uuid.uuid4().hex[:8]
+            self.checkpoint_path = f"{self.checkpoint_path}/{unique_id}"
 
         if self.verbose:
             logger.info(

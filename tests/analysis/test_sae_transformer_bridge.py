@@ -26,8 +26,18 @@ from sae_lens.analysis.sae_transformer_bridge import SAETransformerBridge
 from sae_lens.analysis.sae_wrapper import _SAEWrapper, get_deep_attr, set_deep_attr
 from sae_lens.saes.sae import SAEMetadata
 from sae_lens.saes.standard_sae import StandardSAE, StandardSAEConfig
-from sae_lens.saes.transcoder import Transcoder, TranscoderConfig
-from tests.helpers import TINYSTORIES_MODEL, assert_close, assert_not_close
+from sae_lens.saes.transcoder import (
+    SkipTranscoder,
+    SkipTranscoderConfig,
+    Transcoder,
+    TranscoderConfig,
+)
+from tests.helpers import (
+    TINYSTORIES_MODEL,
+    assert_close,
+    assert_not_close,
+    random_params,
+)
 
 MODEL = TINYSTORIES_MODEL
 PROMPT = "Hello World!"
@@ -728,6 +738,39 @@ def test_transcoder_activations_match_manual_calculation(
         output_hook_actual + ".hook_sae_recons"
     ]
     assert_close(manual_transcoder_output, cached_transcoder_output)
+
+
+def test_skip_transcoder_output_includes_skip_connection(
+    bridge_model: SAETransformerBridge,
+) -> None:
+    transcoder = SkipTranscoder(
+        SkipTranscoderConfig(
+            d_in=bridge_model.cfg.d_model,
+            d_sae=bridge_model.cfg.d_model * 2,
+            d_out=bridge_model.cfg.d_model,
+            apply_b_dec_to_input=False,
+            metadata=SAEMetadata(
+                hook_name="blocks.0.mlp.hook_in",
+                hook_name_out="blocks.0.hook_mlp_out",
+            ),
+        )
+    )
+    random_params(transcoder)
+    input_hook = bridge_model._resolve_hook_name("blocks.0.mlp.hook_in")
+    output_hook = bridge_model._resolve_hook_name("blocks.0.hook_mlp_out")
+    _, clean_cache = bridge_model.run_with_cache(PROMPT)
+    expected_output = transcoder(clean_cache[input_hook])
+
+    _, cache = bridge_model.run_with_cache_with_saes(PROMPT, saes=[transcoder])
+    assert_close(cache[output_hook + ".hook_sae_output"], expected_output)
+
+    _, cache = bridge_model.run_with_cache_with_saes(
+        PROMPT, saes=[transcoder], use_error_term=True
+    )
+    assert_close(
+        cache[output_hook + ".hook_sae_error"],
+        clean_cache[output_hook] - expected_output,
+    )
 
 
 def test_mixed_sae_and_transcoder(

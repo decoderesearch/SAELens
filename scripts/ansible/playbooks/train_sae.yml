@@ -179,7 +179,7 @@
     
     - name: "Run Train SAE Job. Log: {{ temp_log }}"
       ansible.builtin.shell:
-        cmd: "poetry run python util/train_sae.py {{ s3_sweep_job_config }} 2>&1 \
+        cmd: "uv run --no-dev python util/train_sae.py {{ s3_sweep_job_config }} 2>&1 \
                 | tee -a {{ temp_log }}"
         chdir: /home/ubuntu/SAELens/scripts/ansible
       environment:

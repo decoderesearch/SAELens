@@ -1,5 +1,183 @@
 # CHANGELOG
 
+## v6.54.14 (2026-11-02)
+
+### Fix
+
+* fix: skip excluded tokens in the zero-ablation baseline (#773) ([`b86b53a`](https://github.com/decoderesearch/SAELens/commit/b86b53aa7ef219562733977349cd638560c1c7ee))
+
+## v6.54.13 (2026-11-02)
+
+### Fix
+
+* fix: densify sparse tensors in eval_sae_on_synthetic_data (#774) ([`679a0d2`](https://github.com/decoderesearch/SAELens/commit/679a0d2f4bfede6803e09a4bd3dbb66895fdc94e))
+
+* fix: promote low-precision activations before computing eval metrics (#775) ([`32549ce`](https://github.com/decoderesearch/SAELens/commit/32549ceb9d1534d5ac791f8ecfb8b6e00c0c6ff5))
+
+* fix: draw fresh firing probabilities when no seed is given (#776) ([`dcd9c3e`](https://github.com/decoderesearch/SAELens/commit/dcd9c3e1d38b61a14a587b43a73ea1762d7ae290))
+
+## v6.54.12 (2026-10-20)
+
+### Ci
+
+* ci: pin pymdown-extensions to fix docs build and build docs on PRs (#772) ([`3c1f18d`](https://github.com/decoderesearch/SAELens/commit/3c1f18d5859c285dfec02689d18652b5b67bbba5))
+
+### Fix
+
+* fix: drop removed lighteval/MATH from multiple_evals default datasets (#770) ([`30b944e`](https://github.com/decoderesearch/SAELens/commit/30b944e430558cc51428d18dc004768d7e9dc1d4))
+
+## v6.54.11 (2026-10-20)
+
+### Fix
+
+* fix: store pretrained SAE paths as str so the HF sync check runs again (#769) ([`b7166f1`](https://github.com/decoderesearch/SAELens/commit/b7166f1c52f17e5fcf19f718bc208a5fd6f2215c))
+
+## v6.54.10 (2026-10-20)
+
+### Fix
+
+* fix: fold activation norm scaling factor into matching pursuit residual threshold (#771) ([`ed57c7c`](https://github.com/decoderesearch/SAELens/commit/ed57c7c8a4fc2c750aabd376edd9d2e00eac7006))
+
+## v6.54.9 (2026-10-20)
+
+### Fix
+
+* fix: fold activation norm scaling factor into BatchTopK threshold (#764) ([`41dbc66`](https://github.com/decoderesearch/SAELens/commit/41dbc669f159538d332b5cc505f2a03191c1f0a2))
+
+## v6.54.8 (2026-10-20)
+
+### Fix
+
+* fix: prefetch worker cleanup after training stops (#767) ([`ba587af`](https://github.com/decoderesearch/SAELens/commit/ba587afa59b1e6394dffffa177ca38ed0cb9f67c))
+
+## v6.54.7 (2026-10-20)
+
+### Fix
+
+* fix: weight activation norm estimates by observation count (#766) ([`1815acb`](https://github.com/decoderesearch/SAELens/commit/1815acbc55b865b707a6dbbcc5a520274457219d))
+
+## v6.54.6 (2026-10-19)
+
+### Fix
+
+* fix: forward model kwargs to reconstruction evaluation (#765) ([`83c7b9b`](https://github.com/decoderesearch/SAELens/commit/83c7b9bd065e90acda5d29b32bd020192a23319c))
+
+## v6.54.5 (2026-10-14)
+
+### Fix
+
+* fix: honor standalone feature-density evaluation (#762) ([`d0f8fc1`](https://github.com/decoderesearch/SAELens/commit/d0f8fc1e7dbc254092769d6bef5cbb8adc7959dd))
+
+### Performance
+
+* perf(evals): skip unused feature-density masking (#755) ([`82fe983`](https://github.com/decoderesearch/SAELens/commit/82fe9832819839ab446d3b35990d10813c3e4db5))
+
+## v6.54.4 (2026-10-13)
+
+### Fix
+
+* fix: Preserve disabled whitening when saving activation scalers (#758) ([`15d83eb`](https://github.com/decoderesearch/SAELens/commit/15d83eb1302f34f1b2e432210da090f0f0b7fc03))
+
+## v6.54.3 (2026-10-13)
+
+### Fix
+
+* fix: reset sparsity stats after a full feature_sampling_window of steps (#757) ([`3ef8504`](https://github.com/decoderesearch/SAELens/commit/3ef8504a3390c4b4188877d226c8686d71f6786d))
+
+## v6.54.2 (2026-10-13)
+
+### Fix
+
+* fix: load Gemma Scope 2 affine skip connections in the correct orientation (#761) ([`324939e`](https://github.com/decoderesearch/SAELens/commit/324939e149c888095deb1511d04901910b431eaa))
+
+## v6.54.1 (2026-10-13)
+
+### Fix
+
+* fix: reject non-positive token batching context sizes (#759) ([`36d8663`](https://github.com/decoderesearch/SAELens/commit/36d86638a2bab9396705096d50fed943a9ce9120))
+
+## v6.54.0 (2026-10-04)
+
+### Feature
+
+* feat: fold decoder norms at load time via fold_W_dec_norm=True (#735) ([`33ea55f`](https://github.com/decoderesearch/SAELens/commit/33ea55f7b31ea3b448b0c0696bf9d4deaef5da5c))
+
+## v6.53.1 (2026-10-04)
+
+### Documentation
+
+* docs: point SynthSAEBench-16k docs to the v2 model (#753) ([`a4d3881`](https://github.com/decoderesearch/SAELens/commit/a4d3881306d6ea31ded22eb18af6a97a89378204))
+
+### Fix
+
+* fix(evals): preserve excluded tokens during SAE reconstruction (#754)
+
+] ([`191d44e`](https://github.com/decoderesearch/SAELens/commit/191d44ebd67e8dd6e065015a12b6d0fb6bd42e54))
+
+## v6.53.0 (2026-10-02)
+
+### Feature
+
+* feat: add AbsTopK bidirectional SAE variant (#736) ([`1579edc`](https://github.com/decoderesearch/SAELens/commit/1579edce2ebcef6d99eee142bf66bfac506df545))
+
+### Test
+
+* test: memoize HfApi.list_repo_files to avoid HF rate limits in CI (#752) ([`89307d8`](https://github.com/decoderesearch/SAELens/commit/89307d892c1e3bfb4d626c523dd233e75f70ffda))
+
+## v6.52.0 (2026-10-02)
+
+### Feature
+
+* feat: Add covariance whitening normalization option (#697) ([`e378d01`](https://github.com/decoderesearch/SAELens/commit/e378d019155a551799c87e198a766336e7a9b479))
+
+### Fix
+
+* fix: avoid deadlock when a multi-SAE user evaluator reads from the prefetcher (#751) ([`772379e`](https://github.com/decoderesearch/SAELens/commit/772379ec6bdefe2aedeb2552b0211b9327e53268))
+
+## v6.51.8 (2026-10-02)
+
+### Ci
+
+* ci: run tests in parallel with pytest-xdist (#750) ([`c69fdef`](https://github.com/decoderesearch/SAELens/commit/c69fdef342e3be782a144857074eeb283f8373f0))
+
+### Fix
+
+* fix: load dictionary_learning AutoEncoderTopK SAEs that save a threshold (#749) ([`896ffb4`](https://github.com/decoderesearch/SAELens/commit/896ffb42fa55d01af738a86c9225aa53b7943962))
+
+### Test
+
+* test: speed up slow tests (#748) ([`729393f`](https://github.com/decoderesearch/SAELens/commit/729393f56511d1291558520e737fb637fd036dde))
+
+## v6.51.7 (2026-10-01)
+
+### Ci
+
+* ci: switch from Poetry to uv and speed up CI (#746) ([`af8fbed`](https://github.com/decoderesearch/SAELens/commit/af8fbed0c3663d6f57a3ff36b7a7301da912f0a6))
+
+### Fix
+
+* fix: load dictionary_learning JumpReluAutoEncoder SAEs in dictionary_learning_1 converter (#747) ([`2607aa0`](https://github.com/decoderesearch/SAELens/commit/2607aa027da834e9df9c4d614d1d80ab732b9902))
+
+## v6.51.6 (2026-10-01)
+
+### Fix
+
+* fix: restore coefficient scheduler value when loading trainer state (#745) ([`51aafc7`](https://github.com/decoderesearch/SAELens/commit/51aafc7851ff2a4c5408b3c24123e296cf3b7c83))
+
+## v6.51.5 (2026-10-01)
+
+### Fix
+
+* fix: keep checkpoint_path=None so checkpoint saving can be disabled (#743) ([`0df2c95`](https://github.com/decoderesearch/SAELens/commit/0df2c95ad1e034ee328957f2ade6434b8f782f5c))
+
+## v6.51.4 (2026-10-01)
+
+### Fix
+
+* fix: promote low-precision explained variance arithmetic in training logs (#744) ([`821498c`](https://github.com/decoderesearch/SAELens/commit/821498cda0706a063c140aa50f7cb9f843afef9a))
+
+* fix: promote low-precision explained variance arithmetic (#742) ([`5ee19f8`](https://github.com/decoderesearch/SAELens/commit/5ee19f80c5d016c1a5bc71c31d5c1cf172c800b4))
+
 ## v6.51.3 (2026-09-25)
 
 ### Fix

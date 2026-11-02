@@ -30,11 +30,11 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
     Also note the queue may already contain up to ``prefetch`` items that the
     producer enqueued before ``paused()`` acquired the lock.
 
-    There is no explicit shutdown API. The producer is daemonized so it dies
-    with the process; if the consumer stops pulling early (e.g. exits the
-    training loop without exhausting the iterator), the thread will block on
-    ``queue.put`` until the process exits. Holding the buffered tensors keeps
-    GPU memory pinned, which matters in notebook/multi-run contexts.
+    Call ``close()`` when the consumer stops before exhausting the iterator
+    (e.g. training ends after a fixed number of steps). Otherwise the producer
+    blocks on the full queue until the process exits, keeping the source and
+    the buffered tensors alive, which leaks GPU memory across runs in the same
+    process.
     """
 
     def __init__(self, source: Iterator[T], prefetch: int = 4):
@@ -42,6 +42,7 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
             raise ValueError("prefetch must be >= 1")
         self._queue: queue.Queue[object] = queue.Queue(maxsize=prefetch)
         self._lock = threading.Lock()
+        self._closed = threading.Event()
         self._exception: BaseException | None = None
         self._done = False
         self._thread = threading.Thread(target=self._run, args=(source,), daemon=True)
@@ -49,19 +50,28 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
 
     def _run(self, source: Iterator[T]) -> None:
         try:
-            while True:
+            while not self._closed.is_set():
                 with self._lock:
                     try:
                         item = next(source)
                     except StopIteration:
                         break
-                self._queue.put(item)
+                self._put(item)
         # BaseException (not Exception) so KeyboardInterrupt etc. don't silently
         # kill the producer without surfacing to the consumer.
         except BaseException as e:  # noqa: BLE001
             self._exception = e
         finally:
-            self._queue.put(_SENTINEL)
+            self._put(_SENTINEL)
+
+    def _put(self, item: object) -> None:
+        # Time out periodically so a producer blocked on a full queue notices close().
+        while not self._closed.is_set():
+            try:
+                self._queue.put(item, timeout=0.1)
+                return
+            except queue.Full:
+                pass
 
     def __iter__(self) -> "PrefetchingIterator[T]":
         return self
@@ -82,6 +92,19 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
             raise StopIteration
         return item  # type: ignore[return-value]
 
+    def close(self) -> None:
+        """Stop the producer thread and drop any buffered items.
+
+        Blocks until the producer exits, which can take up to one
+        ``next(source)`` step if the producer is mid-call. After ``close()``,
+        ``next()`` raises ``StopIteration``.
+        """
+        self._closed.set()
+        self._thread.join()
+        self._done = True
+        while not self._queue.empty():
+            self._queue.get_nowait()
+
     @contextmanager
     def paused(self) -> Iterator[None]:
         """Block the background thread for the duration of the ``with``-block.
@@ -89,7 +112,9 @@ class PrefetchingIterator(Iterator[T], Generic[T]):
         Acquires the lock that the producer holds while calling
         ``next(source)``, so callers can drive ``source`` from another thread
         (e.g. for eval) without racing. Acquiring the lock can stall for up to
-        one ``next(source)`` step.
+        one ``next(source)`` step. Don't pull from this iterator inside the
+        ``with``-block: the paused producer can't refill the queue, so once it's
+        empty ``next()`` blocks forever.
         """
         with self._lock:
             yield

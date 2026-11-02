@@ -122,7 +122,9 @@ class L0Calculator:
 
     def add_batch(self, activations: torch.Tensor) -> None:
         """Add a batch of activations. Shape: (batch_size, num_features)."""
-        self.total_l0 += (activations > 0).float().sum().item()
+        # != 0 rather than > 0 so negative-but-active latents (bidirectional
+        # architectures like AbsTopK) are counted; no-op for ReLU-based SAEs.
+        self.total_l0 += (activations != 0).float().sum().item()
         self.num_samples += activations.shape[0]
 
     def compute(self) -> float:
@@ -140,7 +142,8 @@ class DeadLatentsCalculator:
 
     def add_batch(self, sae_latents: torch.Tensor) -> None:
         """Add a batch of SAE latents. Shape: (batch_size, num_latents)."""
-        self.latent_ever_fired |= (sae_latents > 0).any(dim=0).cpu()
+        # != 0 so negative-but-active latents (e.g. AbsTopK) count as fired.
+        self.latent_ever_fired |= (sae_latents != 0).any(dim=0).cpu()
 
     def compute(self) -> int:
         """Return count of latents that never fired."""
@@ -228,7 +231,9 @@ class ClassificationMetricsCalculator:
         if self.num_sae_latents == 0:
             return
 
-        sae_fires = sae_latents > 0
+        # sae_fires uses != 0 so negative-but-active latents (e.g. AbsTopK) count
+        # as fired; ground-truth acts are non-negative so > 0 is unchanged there.
+        sae_fires = sae_latents != 0
         gt_fires = gt_feature_acts[:, self.best_matches] > 0
 
         self.tp += (sae_fires & gt_fires).float().sum(dim=0).cpu()
@@ -407,8 +412,12 @@ def eval_sae_on_synthetic_data(
 
         # Generate samples for this batch
         feature_acts = activations_generator.sample(current_batch_size)
-        true_l0_calc.add_batch(feature_acts)
         hidden_acts = feature_dict(feature_acts)
+        # The metric calculators need dense tensors, but the generator returns
+        # sparse COO tensors when use_sparse_tensors=True
+        if feature_acts.is_sparse:
+            feature_acts = feature_acts.to_dense()
+        true_l0_calc.add_batch(feature_acts)
 
         # Scale activations before encoding (if scaler is configured)
         hidden_acts_scaled = activation_scaler.scale(hidden_acts)
@@ -416,6 +425,9 @@ def eval_sae_on_synthetic_data(
         # Get SAE reconstructions
         sae_latents = sae.encode(hidden_acts_scaled)
         sae_output_scaled = sae.decode(sae_latents)
+        # TopK SAEs with use_sparse_activations=True also return sparse latents
+        if sae_latents.is_sparse:
+            sae_latents = sae_latents.to_dense()
 
         # Unscale SAE output
         sae_output = activation_scaler.unscale(sae_output_scaled)

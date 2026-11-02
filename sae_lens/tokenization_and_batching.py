@@ -91,6 +91,9 @@ def concat_and_batch_sequences(
         disable_concat_sequences: If True, disable concatenating sequences and ignore sequences shorter than context_size (including BOS token if present)
         max_batches: If not provided, the iterator will be run to completion.
     """
+    if context_size <= 0:
+        raise ValueError("context_size must be positive")
+
     if disable_concat_sequences:
         if begin_batch_token_id is not None and begin_sequence_token_id is None:
             begin_sequence_token_id = begin_batch_token_id

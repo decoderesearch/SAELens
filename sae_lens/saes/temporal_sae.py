@@ -380,3 +380,14 @@ class TemporalSAE(SAE[TemporalSAEConfig]):
         raise NotImplementedError(
             "Folding activation norm scaling factor is not supported for TemporalSAE"
         )
+
+    @override
+    def fold_activation_whitening(
+        self,
+        mean: torch.Tensor,
+        whitening_matrix: torch.Tensor,
+        unwhitening_matrix: torch.Tensor,
+    ) -> None:
+        raise NotImplementedError(
+            "Folding activation whitening is not supported for TemporalSAE"
+        )

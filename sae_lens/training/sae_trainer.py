@@ -164,8 +164,22 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
             desc="Training SAE",
         )
 
-        if self.sae.cfg.normalize_activations == "expected_average_only_in":
+        # Statistics loaded from a checkpoint are kept: the weights were trained
+        # against them, and a fresh estimate would not match them.
+        if (
+            self.sae.cfg.normalize_activations == "expected_average_only_in"
+            and self.activation_scaler.scaling_factor is None
+        ):
             self.activation_scaler.estimate_scaling_factor(
+                d_in=self.sae.cfg.d_in,
+                data_provider=self.data_provider,
+                n_batches_for_norm_estimate=self.cfg.n_batches_for_norm_estimate,
+            )
+        elif (
+            self.sae.cfg.normalize_activations == "covariance_whitening"
+            and self.activation_scaler.whitening is None
+        ):
+            self.activation_scaler.estimate_whitening(
                 d_in=self.sae.cfg.d_in,
                 data_provider=self.data_provider,
                 n_batches_for_norm_estimate=self.cfg.n_batches_for_norm_estimate,
@@ -187,12 +201,24 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
             self.n_training_steps += 1
             self._update_pbar(step_output, pbar)
 
-        # fold the estimated norm scaling factor into the sae weights
+        # the last sparsity window is not reset, so it has not been logged yet
+        sparsity_log = self.full_sparsity_window_log()
+        if sparsity_log and self.cfg.logger.log_to_wandb:
+            wandb.log(sparsity_log, step=self.n_training_steps)
+
+        # fold the estimated activation normalization into the sae weights
         if self.activation_scaler.scaling_factor is not None:
             self.sae.fold_activation_norm_scaling_factor(
                 self.activation_scaler.scaling_factor
             )
             self.activation_scaler.scaling_factor = None
+        if self.activation_scaler.whitening is not None:
+            self.sae.fold_activation_whitening(
+                mean=self.activation_scaler.whitening.mean,
+                whitening_matrix=self.activation_scaler.whitening.matrix,
+                unwhitening_matrix=self.activation_scaler.whitening.inverse_matrix,
+            )
+            self.activation_scaler.whitening = None
 
         self.set_final_sae_metadata()
 
@@ -256,7 +282,11 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
                     )
 
         if self.save_checkpoint_fn is not None:
-            self.save_checkpoint_fn(checkpoint_path=checkpoint_path)
+            # Without a base path, the checkpoint above only went to a temp dir
+            # for the wandb upload, and that dir has been deleted.
+            self.save_checkpoint_fn(
+                checkpoint_path=checkpoint_path if base is not None else None
+            )
 
     def step(self, batch: torch.Tensor) -> TrainStepOutput:
         """
@@ -282,10 +312,28 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
         `MultiSAETrainer`). Caller is responsible for emitting the returned
         dict to wandb if logging is enabled.
         """
-        if (self.n_training_steps + 1) % self.cfg.feature_sampling_window == 0:
-            log_dict = self._build_sparsity_log_dict()
+        log_dict = self.full_sparsity_window_log()
+        if log_dict:
             self._reset_running_sparsity_stats()
-            return log_dict
+        return log_dict
+
+    def full_sparsity_window_log(self) -> dict[str, Any]:
+        """
+        Return the sparsity log dict if the running sparsity stats cover a full
+        `feature_sampling_window` of steps; otherwise return {}. Unlike
+        `maybe_reset_sparsity`, this leaves the stats alone.
+
+        Public seam used by `fit()` and external coordinators (e.g.
+        `MultiSAETrainer`) to log the last window once training is done. That
+        window is never reset, since its stats are saved with the final SAE.
+        """
+        # `n_training_steps` is the number of completed steps, so each window
+        # spans exactly `feature_sampling_window` steps.
+        if (
+            self.n_training_steps > 0
+            and self.n_training_steps % self.cfg.feature_sampling_window == 0
+        ):
+            return self._build_sparsity_log_dict()
         return {}
 
     def save_trainer_state(self, checkpoint_path: Path) -> None:
@@ -401,7 +449,11 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
         output: TrainStepOutput,
         n_training_samples: int,
     ) -> dict[str, Any]:
-        sae_in = output.sae_in
+        # Promote before squaring or reducing: low-precision sums can overflow,
+        # and low-precision results are too coarse to track explained variance.
+        sae_in = output.sae_in.to(
+            torch.promote_types(output.sae_in.dtype, torch.float32)
+        )
         sae_out = output.sae_out
         feature_acts = output.feature_acts
         loss = output.loss.item()

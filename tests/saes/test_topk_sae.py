@@ -9,11 +9,13 @@ from sparsify import SparseCoder, SparseCoderConfig
 from sae_lens.registry import get_sae_class, get_sae_training_class
 from sae_lens.saes.sae import SAE, TrainStepInput
 from sae_lens.saes.topk_sae import TopK, TopKSAE, TopKTrainingSAE
+from sae_lens.training.activation_scaler import ActivationScaler
 from tests.helpers import (
     assert_close,
     assert_not_close,
     build_topk_sae_cfg,
     build_topk_sae_training_cfg,
+    correlated_activations,
     random_params,
     run_training_forward_pass_with_cache,
 )
@@ -522,3 +524,32 @@ def test_TopKSAE_forward_hooks():
     assert cache["hook_sae_acts_post"].equal(sae.encode(x))
     assert cache["hook_sae_recons"].equal(out)
     assert cache["hook_sae_output"].equal(out)
+
+
+def test_TopKSAE_fold_activation_whitening_folds_W_dec_norm_first_when_rescale_acts_by_decoder_norm():
+    cfg = build_topk_sae_cfg(rescale_acts_by_decoder_norm=True, dtype="float64")
+    sae = TopKSAE(cfg)
+    random_params(sae)
+    provider = correlated_activations(cfg.d_in, batch_size=256)
+    scaler = ActivationScaler()
+    scaler.estimate_whitening(
+        d_in=cfg.d_in, data_provider=provider, n_batches_for_norm_estimate=4
+    )
+    assert scaler.whitening is not None
+    inputs = next(provider).to(torch.float64)
+
+    whitened_features = sae.encode(scaler.scale(inputs))
+    whitened_outputs = scaler.unscale(sae(scaler.scale(inputs)))
+
+    sae.fold_activation_whitening(
+        mean=scaler.whitening.mean,
+        whitening_matrix=scaler.whitening.matrix,
+        unwhitening_matrix=scaler.whitening.inverse_matrix,
+    )
+
+    # The whitened decoder rows are no longer unit norm, so the topk selection must
+    # no longer depend on them.
+    assert sae.cfg.rescale_acts_by_decoder_norm is False
+    assert sae.W_dec.norm(dim=-1).max().item() != pytest.approx(1.0, abs=1e-6)
+    assert_close(sae.encode(inputs), whitened_features)
+    assert_close(sae(inputs), whitened_outputs)

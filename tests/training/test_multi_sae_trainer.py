@@ -224,6 +224,108 @@ def test_multi_sae_trainer_runs_with_normalize_activations(
     assert multi_trainer.trainers["a"].activation_scaler.scaling_factor is None
 
 
+def test_multi_sae_trainer_folds_covariance_whitening_into_the_sae(
+    ts_model: HookedTransformer, dataset: Dataset
+):
+    hook = "blocks.0.hook_mlp_out"
+    d_in = ts_model.cfg.d_model
+    common = _common_store_kwargs(dataset)
+
+    sae = StandardTrainingSAE(
+        StandardTrainingSAEConfig(
+            d_in=d_in,
+            d_sae=32,
+            l1_coefficient=1e-3,
+            decoder_init_norm=0.1,
+            normalize_activations="covariance_whitening",
+            dtype="float32",
+            device="cpu",
+        )
+    )
+    multi_store = ActivationsStore.from_config_multi_hook(
+        model=ts_model,
+        hook_names=[hook],
+        hook_d_ins={hook: d_in},
+        **common,
+    )
+    multi_trainer = MultiSAETrainer(
+        cfg=_trainer_cfg(total_samples=4 * 4),
+        saes={"a": sae},
+        hook_names={"a": hook},
+        data_provider=multi_store.get_multi_hook_data_loader(),
+    )
+    multi_trainer.fit()
+
+    assert multi_trainer.trainers["a"].activation_scaler.whitening is None
+    assert sae.cfg.normalize_activations == "none"
+
+
+def test_multi_sae_trainer_fit_keeps_whitening_loaded_from_checkpoint(
+    ts_model: HookedTransformer, dataset: Dataset, tmp_path: Path
+):
+    hook = "blocks.0.hook_mlp_out"
+    d_in = ts_model.cfg.d_model
+    common = _common_store_kwargs(dataset)
+    multi_store = ActivationsStore.from_config_multi_hook(
+        model=ts_model,
+        hook_names=[hook],
+        hook_d_ins={hook: d_in},
+        **common,
+    )
+    cfg = _trainer_cfg(total_samples=4 * 4)
+    cfg.checkpoint_path = str(tmp_path / "ckpt")
+
+    def make_sae() -> StandardTrainingSAE:
+        return StandardTrainingSAE(
+            StandardTrainingSAEConfig(
+                d_in=d_in,
+                d_sae=32,
+                l1_coefficient=1e-3,
+                decoder_init_norm=0.1,
+                normalize_activations="covariance_whitening",
+                device="cpu",
+            )
+        )
+
+    def make_trainer(sae: StandardTrainingSAE) -> MultiSAETrainer:
+        return MultiSAETrainer(
+            cfg=cfg,
+            saes={"a": sae},
+            hook_names={"a": hook},
+            data_provider=multi_store.get_multi_hook_data_loader(),
+        )
+
+    trainer = make_trainer(make_sae())
+    scaler = trainer.trainers["a"].activation_scaler
+    scaler.estimate_whitening(
+        d_in=d_in,
+        data_provider=(
+            batch[hook] for batch in multi_store.get_multi_hook_data_loader()
+        ),
+        n_batches_for_norm_estimate=2,
+    )
+    assert scaler.whitening is not None
+    # pretend training already finished, so the resumed fit only folds the whitening
+    trainer.trainers["a"].n_training_samples = cfg.total_training_samples
+    trainer.save_checkpoint(checkpoint_name="ckpt0")
+
+    fresh_sae = make_sae()
+    fresh_trainer = make_trainer(fresh_sae)
+    fresh_trainer.load_checkpoint(tmp_path / "ckpt" / "ckpt0")
+    expected = copy.deepcopy(fresh_sae)
+    expected.fold_activation_whitening(
+        mean=scaler.whitening.mean,
+        whitening_matrix=scaler.whitening.matrix,
+        unwhitening_matrix=scaler.whitening.inverse_matrix,
+    )
+
+    fresh_trainer.fit()
+
+    assert fresh_sae.cfg.normalize_activations == "none"
+    assert_close(fresh_sae.W_enc, expected.W_enc)
+    assert_close(fresh_sae.b_dec, expected.b_dec)
+
+
 def test_multi_sae_trainer_save_and_load_round_trip(
     ts_model: HookedTransformer, dataset: Dataset, tmp_path: Path
 ):
@@ -450,6 +552,39 @@ def test_multi_sae_trainer_skips_checkpoints_when_path_none_and_no_wandb(
     # save_checkpoint should have been invoked but each call passes path=None
     assert all(p is None for p in received_paths)
     assert len(received_paths) >= 1  # at least the final-checkpoint call
+
+
+def test_multi_sae_trainer_logs_every_full_sparsity_window_to_wandb_once(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    d_in = 4
+    batch_size = 4
+    window = 5
+    n_windows = 3
+    cfg = _trainer_cfg(total_samples=batch_size * window * n_windows)
+    cfg.feature_sampling_window = window
+    cfg.logger = LoggingConfig(log_to_wandb=True)
+    trainer = MultiSAETrainer(
+        cfg=cfg,
+        saes={"a": _make_sae(d_in), "b": _make_sae(d_in)},
+        hook_names={"a": "hook", "b": "hook"},
+        data_provider=iter(lambda: {"hook": torch.randn(batch_size, d_in)}, None),
+    )
+    sparsity_log_steps: list[int] = []
+
+    def record_sparsity_log(log_dict: dict[str, Any], step: int) -> None:
+        if "a/plots/feature_density_line_chart" in log_dict:
+            assert "b/plots/feature_density_line_chart" in log_dict
+            sparsity_log_steps.append(step)
+
+    monkeypatch.setattr("wandb.log", record_sparsity_log)
+    trainer.fit()
+
+    # training ends on a full window, which must still be logged
+    assert sparsity_log_steps == [window, 2 * window, 3 * window]
+    # logging the last window must not reset the stats saved with the final SAEs
+    for sae_trainer in trainer.trainers.values():
+        assert sae_trainer.n_frac_active_samples == batch_size * window
 
 
 def test_multi_sae_trainer_advances_counters_in_lockstep(

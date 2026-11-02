@@ -352,8 +352,8 @@ class MultiSAEEvaluator:
             compute_variance_metrics=True,
         )
 
-        # Pause the prefetcher (if any) for the whole eval cycle; both built-in
-        # and user evaluators may pull from the underlying generator state.
+        # Pause the prefetcher (if any) during the built-in evals, since they pull
+        # tokens from the same activations store as the prefetch thread.
         pause_ctx: AbstractContextManager[None] = (
             data_provider.paused()
             if isinstance(data_provider, PrefetchingIterator)
@@ -388,15 +388,17 @@ class MultiSAEEvaluator:
                 for k, v in metrics.items():
                     out[f"{name}/{k}"] = v
 
-                if self.user_evaluator is not None:
-                    user_view = _SingleHookDataProviderView(
-                        data_provider, hook_names[name]
-                    )
-                    user_metrics = self.user_evaluator(
-                        sae, user_view, activation_scalers[name]
-                    )
-                    for k, v in user_metrics.items():
-                        out[f"{name}/{k}"] = v
+        # User evaluators pull batches from the data provider itself, so they
+        # must run after the prefetcher is unpaused. A paused prefetcher can't
+        # refill its queue, so pulling more batches than it holds deadlocks.
+        if self.user_evaluator is not None:
+            for name, sae in saes.items():
+                user_view = _SingleHookDataProviderView(data_provider, hook_names[name])
+                user_metrics = self.user_evaluator(
+                    sae, user_view, activation_scalers[name]
+                )
+                for k, v in user_metrics.items():
+                    out[f"{name}/{k}"] = v
         return out
 
 
@@ -551,29 +553,37 @@ class MultiSAETrainingRunner:
             )
             data_provider = PrefetchingIterator(data_provider, prefetch=prefetch_size)
 
-        trainer = MultiSAETrainer(
-            cfg=self.cfg.to_sae_trainer_config(),
-            saes=self.saes,
-            hook_names=self.cfg.hook_names_per_sae,
-            data_provider=data_provider,
-            evaluator=self.evaluator,
-            save_checkpoint_fn=self._save_runner_checkpoint_files,
-        )
+        try:
+            trainer = MultiSAETrainer(
+                cfg=self.cfg.to_sae_trainer_config(),
+                saes=self.saes,
+                hook_names=self.cfg.hook_names_per_sae,
+                data_provider=data_provider,
+                evaluator=self.evaluator,
+                save_checkpoint_fn=self._save_runner_checkpoint_files,
+            )
 
-        if self.cfg.resume_from_checkpoint is not None:
-            logger.info(f"Resuming from checkpoint: {self.cfg.resume_from_checkpoint}")
-            trainer.load_checkpoint(self.cfg.resume_from_checkpoint)
-            self.activations_store.load_from_checkpoint(self.cfg.resume_from_checkpoint)
+            if self.cfg.resume_from_checkpoint is not None:
+                logger.info(
+                    f"Resuming from checkpoint: {self.cfg.resume_from_checkpoint}"
+                )
+                trainer.load_checkpoint(self.cfg.resume_from_checkpoint)
+                self.activations_store.load_from_checkpoint(
+                    self.cfg.resume_from_checkpoint
+                )
 
-        saes = self._run_with_interruption_handling(trainer)
+            saes = self._run_with_interruption_handling(trainer)
 
-        if self.cfg.output_path is not None:
-            self._save_final_outputs(saes, trainer)
+            if self.cfg.output_path is not None:
+                self._save_final_outputs(saes, trainer)
 
-        if self.cfg.logger.log_to_wandb:
-            wandb.finish()
+            if self.cfg.logger.log_to_wandb:
+                wandb.finish()
 
-        return saes
+            return saes
+        finally:
+            if isinstance(data_provider, PrefetchingIterator):
+                data_provider.close()
 
     def _run_with_interruption_handling(
         self, trainer: MultiSAETrainer

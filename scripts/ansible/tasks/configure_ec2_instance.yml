@@ -72,18 +72,12 @@
         dest: /home/ubuntu/SAELens
         version: "{{ saelens_version_or_branch }}"
 
-    - name: Install poetry
+    - name: Install uv
       ansible.builtin.command:
-        cmd: "pip install poetry"
+        cmd: "pip install uv"
 
-    - name: Poetry lock
-      ansible.builtin.shell:
-        cmd: poetry config --local virtualenvs.in-project true && poetry lock
-        chdir: /home/ubuntu/SAELens
-      changed_when: true
-
-    - name: Poetry install (this will take a few minutes)
+    - name: Install dependencies (this will take a few minutes)
       ansible.builtin.command:
-        cmd: poetry install --without dev
+        cmd: uv sync --no-dev
         chdir: /home/ubuntu/SAELens
       changed_when: true

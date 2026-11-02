@@ -20,8 +20,10 @@ from sae_lens.evals import (
     all_loadable_saes,
     get_downstream_reconstruction_metrics,
     get_eval_everything_config,
+    get_recons_loss,
     get_saes_from_regex,
     get_sparsity_and_variance_metrics,
+    multiple_evals,
     process_args,
     process_results,
     run_evals,
@@ -34,10 +36,15 @@ from sae_lens.saes.batchtopk_sae import (
     BatchTopKTrainingSAE,
 )
 from sae_lens.saes.sae import SAE, SAEMetadata, TrainingSAE
-from sae_lens.saes.standard_sae import StandardSAE, StandardTrainingSAE
+from sae_lens.saes.standard_sae import (
+    StandardSAE,
+    StandardSAEConfig,
+    StandardTrainingSAE,
+)
 from sae_lens.saes.topk_sae import TopKTrainingSAE
-from sae_lens.training.activation_scaler import ActivationScaler
+from sae_lens.training.activation_scaler import ActivationScaler, ActivationWhitening
 from sae_lens.training.activations_store import ActivationsStore
+from sae_lens.util import str_to_dtype
 from tests.helpers import (
     NEEL_NANDA_C4_10K_DATASET,
     TINYSTORIES_MODEL,
@@ -52,7 +59,7 @@ from tests.helpers import (
 )
 
 if TYPE_CHECKING or has_hooked_transformer():
-    from transformer_lens import HookedTransformer
+    from transformer_lens import HookedTransformer, HookedTransformerConfig
 
 TRAINER_EVAL_CONFIG = EvalConfig(
     n_eval_reconstruction_batches=10,
@@ -169,6 +176,169 @@ all_featurewise_keys_expected = [
 ]
 
 
+@pytest.fixture(
+    params=[
+        ("blocks.0.hook_resid_pre", "none"),
+        ("blocks.0.attn.hook_z", "hook_z"),
+    ],
+    ids=["resid_pre", "hook_z"],
+)
+def feature_density_eval_inputs(request: pytest.FixtureRequest):
+    hook_name, reshape_activations = request.param
+    model = HookedTransformer(
+        HookedTransformerConfig(
+            n_layers=1,
+            d_model=8,
+            n_ctx=4,
+            d_head=4,
+            n_heads=2,
+            d_mlp=16,
+            d_vocab=20,
+            act_fn="relu",
+            device="cpu",
+        )
+    )
+    sae = StandardSAE(
+        StandardSAEConfig(
+            d_in=8,
+            d_sae=4,
+            reshape_activations=reshape_activations,
+            metadata=SAEMetadata(
+                hook_name=hook_name,
+                context_size=4,
+                prepend_bos=False,
+            ),
+        )
+    )
+    with torch.no_grad():
+        sae.W_enc.zero_()
+        sae.b_enc.copy_(torch.tensor([1.0, -1.0, 1.0, -1.0]))
+    store = ActivationsStore.from_sae(
+        model,
+        sae,
+        Dataset.from_dict({"tokens": [[0, 2, 3, 4], [0, 5, 6, 7]]}),
+        store_batch_size_prompts=2,
+        total_tokens=2,
+        disable_concat_sequences=True,
+        sequence_separator_token=None,
+    )
+    return model, sae, store
+
+
+@requires_hooked_transformer
+@pytest.mark.parametrize("exclude_special_tokens", [False, [0]])
+def test_run_evals_feature_density_only(
+    feature_density_eval_inputs: tuple[
+        HookedTransformer, StandardSAE, ActivationsStore
+    ],
+    exclude_special_tokens: bool | list[int],
+):
+    model, sae, store = feature_density_eval_inputs
+    original_hook_z_reshaping_mode = sae.hook_z_reshaping_mode
+    metrics, feature_metrics = run_evals(
+        sae,
+        store,
+        model,
+        ActivationScaler(),
+        eval_config=EvalConfig(compute_featurewise_density_statistics=True),
+        exclude_special_tokens=exclude_special_tokens,
+    )
+
+    assert sae.hook_z_reshaping_mode is original_hook_z_reshaping_mode
+    assert set(metrics) == {"token_stats"}
+    assert feature_metrics["feature_density"] == [1.0, 0.0, 1.0, 0.0]
+    expected_per_prompt = 3.0 if exclude_special_tokens else 4.0
+    assert feature_metrics["consistent_activation_heuristic"][::2] == [
+        expected_per_prompt,
+        expected_per_prompt,
+    ]
+
+
+@requires_hooked_transformer
+@pytest.mark.parametrize("n_batches", [0, -1])
+def test_run_evals_feature_density_requires_positive_batches(
+    feature_density_eval_inputs: tuple[
+        HookedTransformer, StandardSAE, ActivationsStore
+    ],
+    n_batches: int,
+):
+    model, sae, store = feature_density_eval_inputs
+    original_hook_z_reshaping_mode = sae.hook_z_reshaping_mode
+    with pytest.raises(
+        ValueError, match="n_eval_sparsity_variance_batches must be > 0"
+    ):
+        run_evals(
+            sae,
+            store,
+            model,
+            ActivationScaler(),
+            eval_config=EvalConfig(
+                compute_featurewise_density_statistics=True,
+                n_eval_sparsity_variance_batches=n_batches,
+            ),
+            exclude_special_tokens=False,
+        )
+    assert sae.hook_z_reshaping_mode is original_hook_z_reshaping_mode
+
+
+@requires_hooked_transformer
+@pytest.mark.parametrize("use_attention_mask", [False, True])
+def test_run_evals_reconstruction_uses_model_kwargs(
+    feature_density_eval_inputs: tuple[
+        HookedTransformer, StandardSAE, ActivationsStore
+    ],
+    use_attention_mask: bool,
+):
+    model, sae, store = feature_density_eval_inputs
+    random_params(sae)
+    original_hook_z_reshaping_mode = sae.hook_z_reshaping_mode
+    sae.turn_off_forward_pass_hook_z_reshaping()
+    tokens = store.get_batch_tokens(2)
+    store.reset_input_dataset()
+    attention_mask = torch.tensor([[1, 0, 1, 1], [1, 1, 0, 1]])
+    model_kwargs = {"attention_mask": attention_mask} if use_attention_mask else {}
+    scaler = ActivationScaler()
+    expected = get_recons_loss(
+        sae,
+        model,
+        scaler,
+        tokens,
+        compute_kl=True,
+        compute_ce_loss=True,
+        model_kwargs=model_kwargs,
+    )
+    if use_attention_mask:
+        unmasked = get_recons_loss(
+            sae, model, scaler, tokens, compute_kl=True, compute_ce_loss=True
+        )
+        assert expected["ce_loss_without_sae"].mean().item() != pytest.approx(
+            unmasked["ce_loss_without_sae"].mean().item()
+        )
+    if original_hook_z_reshaping_mode:
+        sae.turn_on_forward_pass_hook_z_reshaping()
+
+    metrics, _ = run_evals(
+        sae,
+        store,
+        model,
+        scaler,
+        eval_config=EvalConfig(
+            n_eval_reconstruction_batches=1, compute_kl=True, compute_ce_loss=True
+        ),
+        model_kwargs=model_kwargs,
+        exclude_special_tokens=False,
+    )
+
+    actual = {
+        **metrics["model_behavior_preservation"],
+        **metrics["model_performance_preservation"],
+    }
+    for name, values in expected.items():
+        assert actual[name] == pytest.approx(values.mean().item())
+    assert sae.hook_z_reshaping_mode is original_hook_z_reshaping_mode
+    assert torch.equal(attention_mask, torch.tensor([[1, 0, 1, 1], [1, 1, 0, 1]]))
+
+
 def test_run_evals_base_sae(
     base_sae: SAE[Any],
     activation_store: ActivationsStore,
@@ -252,6 +422,215 @@ def test_run_evals_training_sae_ignore_bos(
 
     assert set(eval_metrics.keys()).issubset(set(all_possible_keys))
     assert len(eval_metrics) > 0
+
+
+@pytest.mark.parametrize(
+    "hook_name,head_index",
+    [
+        ("blocks.0.hook_resid_pre", None),
+        ("blocks.0.attn.hook_z", None),
+        ("blocks.0.attn.hook_v", 1),
+    ],
+)
+@pytest.mark.parametrize("normalization", ["none", "scaling", "whitening"])
+def test_reconstruction_preserves_excluded_tokens_and_other_heads(
+    hook_name: str, head_index: int | None, normalization: str
+):
+    tokens = torch.tensor([[0, 2, 9], [4, 0, 5]])
+    activations = torch.arange(1, 25, dtype=torch.float32).reshape(2, 3, 4)
+    if "attn" in hook_name:
+        activations = activations.reshape(2, 3, 2, 2)
+    d_in = 2 if head_index is not None else 4
+    scaler = ActivationScaler()
+    replacement = torch.full((d_in,), 6.0)
+    if normalization == "scaling":
+        scaler.scaling_factor = 3.0
+        replacement = torch.full((d_in,), 2.0)
+    elif normalization == "whitening":
+        mean = torch.arange(d_in, dtype=torch.float32)
+        scaler.whitening = ActivationWhitening(
+            mean=mean,
+            matrix=2 * torch.eye(d_in),
+            inverse_matrix=0.5 * torch.eye(d_in),
+        )
+        replacement = 3 + mean
+
+    sae_inputs: list[torch.Tensor] = []
+
+    def encode(x: torch.Tensor) -> torch.Tensor:
+        sae_inputs.append(x.clone())
+        return torch.zeros_like(x)
+
+    sae = MagicMock()
+    sae.cfg.metadata.hook_name = hook_name
+    sae.cfg.metadata.hook_head_index = head_index
+    sae.device = torch.device("cpu")
+    sae.encode.side_effect = encode
+    sae.decode.side_effect = lambda x: torch.full_like(x, 6.0)
+
+    hook_outputs: list[torch.Tensor] = []
+
+    def run_with_hooks(*_args: Any, fwd_hooks: Any, **_kwargs: Any):
+        hook_outputs.append(fwd_hooks[0][1](activations.clone(), None))
+        return torch.zeros(2, 3, 4), torch.zeros(2, 2)
+
+    model = MagicMock(return_value=(torch.zeros(2, 3, 4), torch.zeros(2, 2)))
+    model.run_with_hooks.side_effect = run_with_hooks
+    get_recons_loss(
+        sae,
+        model,
+        scaler,
+        tokens,
+        compute_kl=False,
+        compute_ce_loss=True,
+        ignore_tokens=[0, 9],
+    )
+
+    expected = activations.clone()
+    included = (tokens != 0) & (tokens != 9)
+    if head_index is not None:
+        expected[:, :, head_index][included] = replacement
+    else:
+        expected[included] = replacement.reshape(expected.shape[2:])
+    assert torch.equal(hook_outputs[0], expected)
+
+    sae_input = (
+        activations.flatten(2) if head_index is None else activations[:, :, head_index]
+    )
+    assert torch.equal(sae_inputs[0], scaler.scale(sae_input))
+
+
+@pytest.mark.parametrize(
+    "hook_name,head_index",
+    [
+        ("blocks.0.hook_resid_pre", None),
+        ("blocks.0.attn.hook_z", None),
+        ("blocks.0.attn.hook_v", 1),
+    ],
+)
+def test_zero_ablation_preserves_excluded_tokens_and_other_heads(
+    hook_name: str, head_index: int | None
+):
+    tokens = torch.tensor([[0, 2, 9], [4, 0, 5]])
+    activations = torch.arange(1, 25, dtype=torch.float32).reshape(2, 3, 4)
+    if "attn" in hook_name:
+        activations = activations.reshape(2, 3, 2, 2)
+
+    sae = MagicMock()
+    sae.cfg.metadata.hook_name = hook_name
+    sae.cfg.metadata.hook_head_index = head_index
+    sae.device = torch.device("cpu")
+    sae.encode.side_effect = torch.zeros_like
+    sae.decode.side_effect = torch.zeros_like
+
+    hook_outputs: list[torch.Tensor] = []
+
+    def run_with_hooks(*_args: Any, fwd_hooks: Any, **_kwargs: Any):
+        hook_outputs.append(fwd_hooks[0][1](activations.clone(), None))
+        return torch.zeros(2, 3, 4), torch.zeros(2, 2)
+
+    model = MagicMock(return_value=(torch.zeros(2, 3, 4), torch.zeros(2, 2)))
+    model.run_with_hooks.side_effect = run_with_hooks
+    get_recons_loss(
+        sae,
+        model,
+        ActivationScaler(),
+        tokens,
+        compute_kl=False,
+        compute_ce_loss=True,
+        ignore_tokens=[0, 9],
+    )
+
+    expected = activations.clone()
+    included = (tokens != 0) & (tokens != 9)
+    if head_index is not None:
+        expected[:, :, head_index][included] = 0
+    else:
+        expected[included] = 0
+    # The second run is the zero-ablation baseline; it must change exactly the
+    # positions the SAE replacement changes.
+    assert torch.equal(hook_outputs[1], expected)
+    assert torch.equal(hook_outputs[0], hook_outputs[1])
+
+
+def test_run_evals_reconstructs_and_scores_only_non_excluded_tokens(
+    model: HookedTransformer,
+):
+    hook_name = "blocks.0.hook_resid_pre"
+    tokens = torch.tensor([[0, 2, 3, 4], [0, 5, 0, 6]])
+    included = tokens != 0
+
+    sae = MagicMock()
+    sae.cfg.metadata.hook_name = hook_name
+    sae.cfg.metadata.hook_head_index = None
+    sae.device = torch.device("cpu")
+    sae.encode.side_effect = lambda x: x
+    sae.decode.side_effect = torch.zeros_like
+    activation_store = MagicMock()
+    activation_store.get_batch_tokens.return_value = tokens
+
+    def zero_included_tokens(activations: torch.Tensor, hook: Any):  # noqa: ARG001
+        return torch.where(included[..., None], 0, activations)
+
+    expected_ce_loss = model.run_with_hooks(
+        tokens,
+        return_type="loss",
+        loss_per_token=True,
+        fwd_hooks=[(hook_name, zero_included_tokens)],
+    )[included[:, :-1]].mean()
+
+    metrics, _ = run_evals(
+        sae=sae,
+        activation_store=activation_store,
+        model=model,
+        activation_scaler=ActivationScaler(),
+        eval_config=EvalConfig(
+            batch_size_prompts=2,
+            n_eval_reconstruction_batches=1,
+            compute_ce_loss=True,
+        ),
+        exclude_special_tokens=[0],
+    )
+    assert metrics["model_performance_preservation"][
+        "ce_loss_with_sae"
+    ] == pytest.approx(expected_ce_loss.item())
+
+
+@requires_hooked_transformer
+def test_identity_reconstruction_preserves_predictions_with_excluded_tokens():
+    model = HookedTransformer(
+        HookedTransformerConfig(
+            n_layers=2,
+            d_model=8,
+            n_ctx=8,
+            d_head=4,
+            n_heads=2,
+            d_mlp=16,
+            d_vocab=20,
+            act_fn="relu",
+            device="cpu",
+        )
+    )
+    sae = MagicMock()
+    sae.cfg.metadata.hook_name = "blocks.0.hook_resid_pre"
+    sae.cfg.metadata.hook_head_index = None
+    sae.device = torch.device("cpu")
+    sae.encode.side_effect = lambda x: x
+    sae.decode.side_effect = lambda x: x
+
+    metrics = get_recons_loss(
+        sae,
+        model,
+        ActivationScaler(3.0),
+        torch.tensor([[0, 2, 3, 4]]),
+        compute_kl=True,
+        compute_ce_loss=True,
+        ignore_tokens=[0],
+    )
+    assert metrics["ce_loss_with_sae"].numpy() == pytest.approx(
+        metrics["ce_loss_without_sae"].numpy()
+    )
+    assert metrics["kl_div_with_sae"].numpy() == pytest.approx(0, abs=1e-6)
 
 
 def test_training_eval_config(
@@ -378,6 +757,37 @@ def test_run_evaluations(
         dataset_trust_remote_code=mock_args.dataset_trust_remote_code,
     )
     assert result == [{"test": "result"}]
+
+
+@patch("sae_lens.evals.run_evals")
+@patch("sae_lens.evals.ActivationsStore")
+@patch("sae_lens.evals.load_model", MagicMock())
+@patch("sae_lens.evals.SAE")
+@patch("sae_lens.evals.get_saes_from_regex")
+def test_multiple_evals_default_datasets_match_cli_default(
+    mock_get_saes_from_regex: MagicMock,
+    mock_sae: MagicMock,
+    mock_activations_store: MagicMock,
+    mock_run_evals: MagicMock,
+    tmp_path: Path,
+):
+    mock_get_saes_from_regex.return_value = [("release1", "sae1", 0.8, 10)]
+    mock_sae.from_pretrained.return_value.cfg.metadata.model_from_pretrained_kwargs = {}
+    mock_run_evals.return_value = ({}, {})
+
+    multiple_evals(
+        sae_regex_pattern="release1",
+        sae_block_pattern="sae1",
+        n_eval_reconstruction_batches=1,
+        n_eval_sparsity_variance_batches=1,
+        output_dir=str(tmp_path),
+    )
+
+    evaluated_datasets = [
+        call.kwargs["dataset"]
+        for call in mock_activations_store.from_sae.call_args_list
+    ]
+    assert evaluated_datasets == process_args(["release1", "sae1"]).datasets
 
 
 def test_process_results(tmp_path: Path):
@@ -648,6 +1058,71 @@ def test_run_evals_with_transformer_bridge_scores_identity_and_zero_saes(
     assert behavior["kl_div_score"] == pytest.approx(expected_score, abs=1e-5)
 
 
+@pytest.mark.parametrize("compute_density", [False, True])
+def test_density_mask_is_only_allocated_when_requested(compute_density: bool):
+    hook_name = "blocks.0.hook_resid_pre"
+    tokens = torch.tensor([[0, 1, 2], [1, 2, 0]])
+    inputs = torch.tensor(
+        [[[1.0, 2.0], [2.0, 1.0], [3.0, 4.0]], [[4.0, 3.0], [1.0, 4.0], [2.0, 5.0]]]
+    )
+    features = torch.tensor(
+        [
+            [[9.0, 9.0, 9.0, 9.0], [1.0, -2.0, 0.0, 0.0], [0.0, 3.0, 4.0, 0.0]],
+            [[-1.0, 0.0, 0.0, 0.0], [2.0, -3.0, 0.0, 0.0], [9.0, 9.0, 9.0, 9.0]],
+        ]
+    )
+    sae = MagicMock()
+    sae.cfg.d_sae = features.shape[-1]
+    sae.cfg.metadata.hook_name = hook_name
+    sae.cfg.metadata.hook_head_index = None
+    sae.device = torch.device("cpu")
+    sae.encode.return_value = features
+    sae.decode.return_value = inputs * 0.5
+    model = MagicMock()
+    model.run_with_cache.return_value = (None, {hook_name: inputs})
+    store = MagicMock()
+    store.get_batch_tokens.return_value = tokens
+
+    with torch.profiler.profile(
+        activities=[torch.profiler.ProfilerActivity.CPU],
+        profile_memory=True,
+        record_shapes=True,
+    ) as profile:
+        metrics, feature_metrics = get_sparsity_and_variance_metrics(
+            sae=sae,
+            model=model,
+            activation_store=store,
+            activation_scaler=ActivationScaler(),
+            n_batches=1,
+            compute_l2_norms=True,
+            compute_sparsity_metrics=True,
+            compute_variance_metrics=True,
+            compute_featurewise_density_statistics=compute_density,
+            eval_batch_size_prompts=2,
+            model_kwargs={},
+            ignore_tokens=[0],
+        )
+
+    assert metrics["l0"] == pytest.approx(1.75)
+    assert metrics["l1"] == pytest.approx(4.0)
+    assert metrics["l2_ratio"] == pytest.approx(0.5)
+    assert metrics["mse"] == pytest.approx(4.5)
+    if compute_density:
+        assert feature_metrics["feature_density"] == pytest.approx(
+            [0.75, 0.75, 0.25, 0]
+        )
+        assert feature_metrics["consistent_activation_heuristic"] == pytest.approx(
+            [1.5, 1.5, 1.0, float("nan")], nan_ok=True
+        )
+    else:
+        assert not any(
+            event.key == "aten::mul"
+            and event.input_shapes[0] == list(features.shape)
+            and event.cpu_memory_usage > 0
+            for event in profile.key_averages(group_by_input_shape=True)
+        )
+
+
 @pytest.mark.parametrize("scaling_factor", [None, 3.0])
 def test_get_sparsity_and_variance_metrics_identity_sae_perfect_reconstruction(
     model: HookedTransformer,
@@ -806,6 +1281,89 @@ def test_get_sparsity_and_variance_metrics_mse_is_invariant_to_batch_size(
     )
 
 
+@requires_hooked_transformer
+@pytest.mark.parametrize("dtype", ["float16", "bfloat16"])
+def test_get_sparsity_and_variance_metrics_low_precision_large_norm_activations(
+    dtype: str,
+):
+    d_in = 8
+    tokens = [[1, 2, 3, 4], [5, 6, 7, 8]]
+    model = HookedTransformer(
+        HookedTransformerConfig(
+            n_layers=1,
+            d_model=d_in,
+            n_ctx=4,
+            d_head=4,
+            n_heads=2,
+            d_mlp=16,
+            d_vocab=20,
+            act_fn="relu",
+            device="cpu",
+            dtype=str_to_dtype(dtype),
+        )
+    )
+    sae = StandardSAE(
+        StandardSAEConfig(
+            d_in=d_in,
+            d_sae=2 * d_in,
+            dtype=dtype,
+            metadata=SAEMetadata(
+                hook_name="blocks.0.hook_resid_pre",
+                context_size=4,
+                prepend_bos=False,
+            ),
+        )
+    )
+    with torch.no_grad():
+        # Activation norms of roughly 100 to 700, as in real residual streams.
+        # Their squares exceed the float16 maximum of 65504.
+        model.W_pos.zero_()
+        model.W_E.copy_(torch.arange(1, 20 * d_in + 1).reshape(20, d_in) * 3.7)
+        # The SAE reconstructs exactly 0.5 * x, so every metric has a closed form.
+        eye = torch.eye(d_in)
+        sae.W_enc.copy_(torch.cat([eye, -eye], dim=1))
+        sae.W_dec.copy_(0.5 * torch.cat([eye, -eye], dim=0))
+        sae.b_enc.zero_()
+        sae.b_dec.zero_()
+    store = ActivationsStore.from_sae(
+        model,
+        sae,
+        Dataset.from_dict({"tokens": tokens}),
+        store_batch_size_prompts=2,
+        total_tokens=2,
+        disable_concat_sequences=True,
+        sequence_separator_token=None,
+    )
+
+    metrics, _ = get_sparsity_and_variance_metrics(
+        sae=sae,
+        model=model,
+        activation_store=store,
+        activation_scaler=ActivationScaler(),
+        n_batches=1,
+        compute_l2_norms=True,
+        compute_sparsity_metrics=False,
+        compute_variance_metrics=True,
+        compute_featurewise_density_statistics=False,
+        eval_batch_size_prompts=2,
+        model_kwargs={},
+    )
+
+    x = model.W_E.detach().double()[torch.tensor(tokens).flatten()]
+    squared_norms = x.pow(2).sum(dim=-1)
+    centered_squared_norms = (x - x.mean(dim=0)).pow(2).sum(dim=-1)
+    assert metrics["mse"] == pytest.approx(
+        (0.25 * squared_norms).mean().item(), rel=1e-6
+    )
+    assert metrics["l2_norm_in"] == pytest.approx(
+        squared_norms.sqrt().mean().item(), rel=1e-6
+    )
+    assert metrics["relative_reconstruction_bias"] == pytest.approx(0.5, rel=1e-6)
+    assert metrics["explained_variance_legacy"] == pytest.approx(
+        (1 - 0.25 * squared_norms / centered_squared_norms).mean().item(), rel=1e-6
+    )
+
+
 def test_explained_variance_invariant_to_activation_shift(
     model: HookedTransformer,
     example_dataset: Dataset,
@@ -927,6 +1485,40 @@ def test_explained_variance_batched_matches_unbatched_with_unequal_batch_sizes()
     ev_batched = _explained_variance(list(x.split(sizes)), list(x_hat.split(sizes)))
 
     assert ev_batched == pytest.approx(ev_single, rel=1e-12)
+
+
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
+)
+def test_explained_variance_low_precision_reductions_are_batch_invariant(
+    dtype: torch.dtype,
+):
+    # Each coordinate has variance 1 and squared reconstruction error 0.25.
+    # The full squared-norm sum exceeds float16's range even though every
+    # activation is only +/-1. Casting after the reduction is too late.
+    x = torch.tensor([-1, 1], dtype=dtype).repeat(128)[:, None].repeat(1, 768)
+    x_hat = x + 0.5
+
+    for batch_size in [16, 64, 128, 256]:
+        assert _explained_variance(
+            list(x.split(batch_size)), list(x_hat.split(batch_size))
+        ) == pytest.approx(0.75)
+
+
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
+)
+def test_explained_variance_low_precision_with_nonzero_mean(dtype: torch.dtype):
+    # These inputs and errors are exactly representable even in bfloat16.
+    # Squaring them in bfloat16 loses the unit variance around the mean;
+    # float16 sums overflow for larger batches.
+    x = torch.tensor([[99, 101], [101, 99]], dtype=dtype).repeat(512, 1)
+    x_hat = x + torch.tensor([0.5, -0.5], dtype=dtype)
+
+    for batch_size in [1, 16, 128, 1024]:
+        assert _explained_variance(
+            list(x.split(batch_size)), list(x_hat.split(batch_size))
+        ) == pytest.approx(0.75)
 
 
 def test_explained_variance_invariant_to_input_bias():

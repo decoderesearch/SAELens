@@ -27,8 +27,9 @@ def get_pretrained_saes_directory() -> dict[str, PretrainedSAELookup]:
     directory: dict[str, PretrainedSAELookup] = {}
     yaml_file = files(package).joinpath("pretrained_saes.yaml")
     with yaml_file.open("r") as file:
-        # Load the YAML file content
-        data = yaml.safe_load(file)
+        # The C loader parses this large file ~5x faster, but PyYAML can be
+        # built without libyaml
+        data = yaml.load(file, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
         for release, value in data.items():
             saes_map: dict[str, str] = {}
             var_explained_map: dict[str, float] = {}
@@ -40,7 +41,8 @@ def get_pretrained_saes_directory() -> dict[str, PretrainedSAELookup]:
                 raise KeyError(f"Missing 'saes' key in {release}")
             for hook_info in value["saes"]:
                 sae_id = hook_info["id"]
-                saes_map[sae_id] = hook_info["path"]
+                path = hook_info["path"]
+                saes_map[sae_id] = str(path) if isinstance(path, int) else path
                 var_explained_map[sae_id] = hook_info.get("variance_explained", 1.00)
                 l0_map[sae_id] = hook_info.get("l0", 0.00)
                 neuronpedia_id_map[sae_id] = hook_info.get("neuronpedia")
