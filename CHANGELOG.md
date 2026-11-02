@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v6.54.13 (2026-11-02)
+
+### Fix
+
+* fix: densify sparse tensors in eval_sae_on_synthetic_data (#774) ([`679a0d2`](https://github.com/decoderesearch/SAELens/commit/679a0d2f4bfede6803e09a4bd3dbb66895fdc94e))
+
+* fix: promote low-precision activations before computing eval metrics (#775) ([`32549ce`](https://github.com/decoderesearch/SAELens/commit/32549ceb9d1534d5ac791f8ecfb8b6e00c0c6ff5))
+
+* fix: draw fresh firing probabilities when no seed is given (#776) ([`dcd9c3e`](https://github.com/decoderesearch/SAELens/commit/dcd9c3e1d38b61a14a587b43a73ea1762d7ae290))
+
 ## v6.54.12 (2026-10-20)
 
 ### Ci
