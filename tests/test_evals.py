@@ -808,6 +808,72 @@ def test_process_results(tmp_path: Path):
     assert csv_path.exists()
 
 
+def test_run_evals_gives_same_results_with_transformer_bridge_and_hooked_transformer():
+    d_in = 64
+    dataset = Dataset.from_list(
+        [
+            {"text": "Once upon a time there was a little dog named Max."},
+            {"text": "The cat sat on the mat and looked around the room."},
+            {"text": "Lily went to the park with her mom to play."},
+            {"text": "Tom had a big red ball that he loved very much."},
+        ]
+        * 25
+    )
+    sae = StandardSAE(
+        StandardSAEConfig(
+            d_in=d_in,
+            d_sae=2 * d_in,
+            metadata=SAEMetadata(
+                model_name=TINYSTORIES_MODEL,
+                hook_name="blocks.1.hook_resid_pre",
+                prepend_bos=True,
+            ),
+        )
+    )
+    with torch.no_grad():
+        # encodes x as [relu(x), relu(-x)] and decodes it back with some noise, so
+        # features fire and the reconstruction is good but not perfect
+        eye = torch.eye(d_in)
+        sae.W_enc.copy_(torch.cat([eye, -eye], dim=1))
+        sae.W_dec.copy_(
+            torch.cat([eye, -eye], dim=0) + 0.1 * torch.randn(2 * d_in, d_in)
+        )
+        sae.b_enc.zero_()
+        sae.b_dec.zero_()
+    eval_config = EvalConfig(
+        n_eval_reconstruction_batches=2,
+        n_eval_sparsity_variance_batches=2,
+        compute_kl=True,
+        compute_ce_loss=True,
+        compute_l2_norms=True,
+        compute_sparsity_metrics=True,
+        compute_variance_metrics=True,
+        batch_size_prompts=4,
+    )
+
+    all_metrics = []
+    for model_class_name in ["HookedTransformer", "TransformerBridge"]:
+        model = load_model(model_class_name, TINYSTORIES_MODEL, device="cpu")
+        store = ActivationsStore.from_sae(
+            model, sae, dataset=dataset, context_size=16, store_batch_size_prompts=4
+        )
+        metrics, _ = run_evals(
+            sae=sae,
+            activation_store=store,
+            model=model,
+            activation_scaler=ActivationScaler(),
+            eval_config=eval_config,
+        )
+        all_metrics.append(metrics)
+    hooked_metrics, bridge_metrics = all_metrics
+
+    assert 0 < hooked_metrics["sparsity"]["l0"] < 2 * d_in
+    assert 0 < hooked_metrics["model_performance_preservation"]["ce_loss_score"] < 1
+    assert bridge_metrics.keys() == hooked_metrics.keys()
+    for section, section_metrics in hooked_metrics.items():
+        assert bridge_metrics[section] == pytest.approx(section_metrics, rel=1e-5)
+
+
 def test_get_downstream_reconstruction_metrics_with_hf_model_gives_same_results_as_tlens_model(
     gpt2_res_jb_l4_sae: SAE[Any], example_dataset: Dataset
 ):
