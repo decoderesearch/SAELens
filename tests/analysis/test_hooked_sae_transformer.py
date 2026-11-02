@@ -586,6 +586,26 @@ def test_add_sae_respects_sae_use_error_term_setting(
     hooked_sae._use_error_term = False  # Reset to original
 
 
+def test_error_term_is_not_double_counted_when_sae_has_use_error_term_set(
+    model: HookedSAETransformer,
+):
+    act_name = "blocks.0.hook_resid_pre"
+    sae = get_hooked_sae(model, act_name)
+    random_params(sae)
+    sae._use_error_term = True  # legacy setting, set directly to avoid warning
+    _, clean_cache = model.run_with_cache(prompt)
+    clean_act = clean_cache[act_name]
+
+    _, cache = model.run_with_cache_with_saes(prompt, saes=[sae])
+
+    assert_close(
+        cache[act_name + ".hook_sae_error"],
+        clean_act - sae.decode(sae.encode(clean_act)),
+    )
+    assert_close(cache[act_name + ".hook_sae_output"], clean_act)
+    assert sae._use_error_term is True
+
+
 def test_saes_context_manager_with_use_error_term(
     model: HookedSAETransformer, hooked_sae: SAE
 ):

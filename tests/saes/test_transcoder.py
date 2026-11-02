@@ -635,12 +635,12 @@ class TestSkipTranscoderVariants:
         # Re-add skip for comparison
         assert_close(output, output_no_skip + skip_contribution, atol=1e-5)
 
-    def test_reconstruct_matches_forward_with_bfloat16_input(
+    def test_forward_with_bfloat16_input_matches_float32_input(
         self, skip_transcoder: SkipTranscoder | JumpReLUSkipTranscoder
     ) -> None:
         random_params(skip_transcoder)
         x = torch.randn(10, 32, dtype=torch.bfloat16)
-        assert_close(skip_transcoder.reconstruct(x), skip_transcoder(x.float()))
+        assert_close(skip_transcoder(x), skip_transcoder(x.float()))
 
     def test_forward_output_shape(
         self, skip_transcoder: SkipTranscoder | JumpReLUSkipTranscoder

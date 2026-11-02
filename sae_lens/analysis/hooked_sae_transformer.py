@@ -92,16 +92,23 @@ class _SAEWrapper(nn.Module):
             for _ in range(original_output.dim() - mask.dim()):
                 mask = mask.unsqueeze(-1)
 
+        # The wrapper computes the error term itself, so turn off the SAE's
+        # (deprecated) built-in one while calling forward(). Use _use_error_term
+        # directly to avoid triggering the deprecation warning.
+        sae_use_error_term = self.sae._use_error_term
+        self.sae._use_error_term = False
         try:
-            # Call reconstruct, not forward, so we can control hook_sae_output
-            sae_out = self.sae.reconstruct(sae_input)
+            # Use forward() rather than decode(encode()) so architectures that add
+            # terms in forward() (e.g. the skip connection in skip transcoders) are
+            # applied. The SAE's own hook_sae_output isn't exposed on the wrapper.
+            sae_out = self.sae(sae_input)
 
             if self.use_error_term:
                 with torch.no_grad():
                     # Recompute without hooks to get true error term
                     # This ensures interventions on features don't get masked by error
                     with _disable_hooks(self.sae):
-                        sae_out_clean = self.sae.reconstruct(sae_input)
+                        sae_out_clean = self.sae(sae_input)
                     sae_error = original_output - sae_out_clean
                     # Excluded positions bypass the SAE entirely, so their error is 0
                     if mask is not None:
@@ -118,6 +125,7 @@ class _SAEWrapper(nn.Module):
 
             return self.hook_sae_output(sae_out)
         finally:
+            self.sae._use_error_term = sae_use_error_term
             self._captured_input = None
 
 
