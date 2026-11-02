@@ -2,6 +2,7 @@ import pytest
 import torch
 
 from sae_lens.saes.standard_sae import StandardTrainingSAE, StandardTrainingSAEConfig
+from sae_lens.saes.topk_sae import TopKTrainingSAE
 from sae_lens.synthetic import (
     ActivationGenerator,
     ClassificationMetrics,
@@ -14,7 +15,7 @@ from sae_lens.synthetic import (
 )
 from sae_lens.synthetic.evals import DeadLatentsCalculator, L0Calculator
 from sae_lens.training.activation_scaler import ActivationScaler
-from tests.helpers import random_params
+from tests.helpers import build_topk_sae_training_cfg, random_params
 
 
 class TestSignedLatentFiring:
@@ -505,6 +506,77 @@ class TestEvalSaeOnSyntheticDataWithActivationScaling:
         assert result_with_scaling.classification.recall == pytest.approx(
             result_folded.classification.recall, rel=0.02
         )
+
+
+class TestEvalSaeOnSyntheticDataWithSparseTensors:
+    @pytest.mark.parametrize(
+        ("use_sparse_tensors", "use_sparse_activations"),
+        [(True, False), (False, True), (True, True)],
+    )
+    def test_sparse_eval_matches_dense_eval(
+        self, use_sparse_tensors: bool, use_sparse_activations: bool
+    ) -> None:
+        hidden_dim = 6
+        num_features = 8
+        firing_probability = 0.25
+
+        feature_dict = FeatureDictionary(
+            num_features=num_features,
+            hidden_dim=hidden_dim,
+        )
+        dense_sae = TopKTrainingSAE(
+            build_topk_sae_training_cfg(d_in=hidden_dim, d_sae=num_features, k=2)
+        )
+        random_params(dense_sae)
+        sparse_sae = TopKTrainingSAE(
+            build_topk_sae_training_cfg(
+                d_in=hidden_dim,
+                d_sae=num_features,
+                k=2,
+                use_sparse_activations=use_sparse_activations,
+            )
+        )
+        sparse_sae.load_state_dict(dense_sae.state_dict())
+
+        result_dense = eval_sae_on_synthetic_data(
+            sae=dense_sae,
+            feature_dict=feature_dict,
+            activations_generator=ActivationGenerator(
+                num_features=num_features,
+                firing_probabilities=firing_probability,
+            ),
+            num_samples=1_000_000,
+            batch_size=10000,
+        )
+        result_sparse = eval_sae_on_synthetic_data(
+            sae=sparse_sae,
+            feature_dict=feature_dict,
+            activations_generator=ActivationGenerator(
+                num_features=num_features,
+                firing_probabilities=firing_probability,
+                use_sparse_tensors=use_sparse_tensors,
+            ),
+            num_samples=1_000_000,
+            batch_size=10000,
+        )
+
+        # Expected true L0 = 8 features * 0.25 probability = 2.0
+        assert result_sparse.true_l0 == pytest.approx(2.0, abs=0.01)
+        assert result_sparse.sae_l0 == pytest.approx(result_dense.sae_l0, rel=0.01)
+        assert result_sparse.shrinkage == pytest.approx(
+            result_dense.shrinkage, rel=0.01
+        )
+        assert result_sparse.explained_variance == pytest.approx(
+            result_dense.explained_variance, rel=0.01
+        )
+        assert result_sparse.classification.precision == pytest.approx(
+            result_dense.classification.precision, rel=0.02
+        )
+        assert result_sparse.classification.recall == pytest.approx(
+            result_dense.classification.recall, rel=0.02
+        )
+        assert result_sparse.mcc == result_dense.mcc
+        assert result_sparse.uniqueness == result_dense.uniqueness
 
 
 class TestFeatureUniqueness:

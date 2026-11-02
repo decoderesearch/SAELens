@@ -412,8 +412,12 @@ def eval_sae_on_synthetic_data(
 
         # Generate samples for this batch
         feature_acts = activations_generator.sample(current_batch_size)
-        true_l0_calc.add_batch(feature_acts)
         hidden_acts = feature_dict(feature_acts)
+        # The metric calculators need dense tensors, but the generator returns
+        # sparse COO tensors when use_sparse_tensors=True
+        if feature_acts.is_sparse:
+            feature_acts = feature_acts.to_dense()
+        true_l0_calc.add_batch(feature_acts)
 
         # Scale activations before encoding (if scaler is configured)
         hidden_acts_scaled = activation_scaler.scale(hidden_acts)
@@ -421,6 +425,9 @@ def eval_sae_on_synthetic_data(
         # Get SAE reconstructions
         sae_latents = sae.encode(hidden_acts_scaled)
         sae_output_scaled = sae.decode(sae_latents)
+        # TopK SAEs with use_sparse_activations=True also return sparse latents
+        if sae_latents.is_sparse:
+            sae_latents = sae_latents.to_dense()
 
         # Unscale SAE output
         sae_output = activation_scaler.unscale(sae_output_scaled)
