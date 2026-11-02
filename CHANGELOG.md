@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.54.14 (2026-11-02)
+
+### Fix
+
+* fix: skip excluded tokens in the zero-ablation baseline (#773) ([`b86b53a`](https://github.com/decoderesearch/SAELens/commit/b86b53aa7ef219562733977349cd638560c1c7ee))
+
 ## v6.54.13 (2026-11-02)
 
 ### Fix
