@@ -136,6 +136,11 @@ class TestRandomFiringProbabilities:
         probs2 = random_firing_probabilities(50, seed=123)
         assert not torch.allclose(probs1, probs2)
 
+    def test_calls_without_a_seed_draw_different_probabilities(self) -> None:
+        probs1 = random_firing_probabilities(1000)
+        probs2 = random_firing_probabilities(1000)
+        assert not torch.equal(probs1, probs2)
+
     def test_values_are_uniformly_distributed(self) -> None:
         # With enough samples, mean should be close to midpoint
         probs = random_firing_probabilities(10000, max_prob=0.8, min_prob=0.2, seed=42)
