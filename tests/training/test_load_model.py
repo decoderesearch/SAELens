@@ -8,13 +8,13 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.load_model import (
     HookedProxyLM,
+    TransformerBridge,
     _extract_logits_from_output,
     load_model,
 )
 from tests.helpers import (
     assert_close,
     requires_hooked_transformer,
-    requires_transformer_bridge,
 )
 
 if TYPE_CHECKING or has_hooked_transformer():
@@ -41,29 +41,6 @@ def test_load_model_works_with_mamba():
     assert isinstance(model, HookedMamba)
 
 
-@requires_hooked_transformer
-def test_load_model_works_without_model_kwargs():
-    model = load_model(
-        model_class_name="HookedTransformer",
-        model_name="tiny-stories-1M",
-        device="cpu",
-    )
-    assert isinstance(model, HookedTransformer)
-
-
-@requires_hooked_transformer
-def test_load_model_works_with_model_kwargs():
-    model = load_model(
-        model_class_name="HookedTransformer",
-        model_name="tiny-stories-1M",
-        device="cpu",
-        model_from_pretrained_kwargs={"dtype": "float16"},
-    )
-    assert isinstance(model, HookedTransformer)
-    assert model.cfg.dtype == torch.float16
-
-
-@requires_transformer_bridge
 def test_load_model_with_transformer_bridge_matches_unprocessed_hf_model():
     model = load_model(
         model_class_name="TransformerBridge",
@@ -85,6 +62,79 @@ def test_load_model_with_transformer_bridge_matches_unprocessed_hf_model():
             hf_output.hidden_states[i + 1],
             atol=1e-5,
         )
+
+
+@requires_hooked_transformer
+def test_load_model_with_transformer_bridge_matches_hooked_transformer():
+    hooked_model = load_model(
+        model_class_name="HookedTransformer",
+        model_name="tiny-stories-1M",
+        device="cpu",
+    )
+    bridge_model = load_model(
+        model_class_name="TransformerBridge",
+        model_name="tiny-stories-1M",
+        device="cpu",
+    )
+    assert isinstance(hooked_model, HookedTransformer)
+    assert TransformerBridge is not None
+    assert isinstance(bridge_model, TransformerBridge)
+    prompts = [
+        "Once upon a time there was a little dog.",
+        "The cat sat on the mat and looked around.",
+    ]
+    tokens = hooked_model.to_tokens(prompts)
+    assert torch.equal(bridge_model.to_tokens(prompts), tokens)
+
+    hooked_logits, hooked_cache = hooked_model.run_with_cache(tokens)
+    bridge_logits, bridge_cache = bridge_model.run_with_cache(tokens)
+
+    assert isinstance(hooked_logits, torch.Tensor)
+    assert_close(bridge_logits, hooked_logits, atol=1e-4)
+    for hook_name in [
+        "blocks.1.hook_resid_pre",
+        "blocks.1.hook_resid_post",
+        "blocks.0.hook_mlp_out",
+        "blocks.0.mlp.hook_post",
+        "blocks.0.attn.hook_z",
+        "blocks.1.hook_attn_out",
+    ]:
+        assert_close(bridge_cache[hook_name], hooked_cache[hook_name], atol=1e-6)
+
+
+def test_load_model_raises_helpful_error_for_TransformerBridge_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # TransformerBridge was added in transformer-lens 3.0
+    monkeypatch.setattr("sae_lens.load_model.TransformerBridge", None)
+    with pytest.raises(ValueError, match="requires transformer-lens>=3.0"):
+        load_model(
+            model_class_name="TransformerBridge",
+            model_name="tiny-stories-1M",
+            device="cpu",
+        )
+
+
+@requires_hooked_transformer
+def test_load_model_works_without_model_kwargs():
+    model = load_model(
+        model_class_name="HookedTransformer",
+        model_name="tiny-stories-1M",
+        device="cpu",
+    )
+    assert isinstance(model, HookedTransformer)
+
+
+@requires_hooked_transformer
+def test_load_model_works_with_model_kwargs():
+    model = load_model(
+        model_class_name="HookedTransformer",
+        model_name="tiny-stories-1M",
+        device="cpu",
+        model_from_pretrained_kwargs={"dtype": "float16"},
+    )
+    assert isinstance(model, HookedTransformer)
+    assert model.cfg.dtype == torch.float16
 
 
 def test_load_model_raises_helpful_error_for_HookedTransformer_when_unavailable(

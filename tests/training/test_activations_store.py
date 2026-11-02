@@ -264,6 +264,34 @@ def test_activations_store__get_activations__gives_same_results_with_hf_model_an
     assert_close(activations_hf, activations_tlens, atol=1e-3)
 
 
+@requires_hooked_transformer
+def test_activations_store__get_activations__gives_same_results_with_transformer_bridge_and_hooked_transformer():
+    hooked_model = load_model("HookedTransformer", "tiny-stories-1M", device="cpu")
+    bridge_model = load_model("TransformerBridge", "tiny-stories-1M", device="cpu")
+    dataset = Dataset.from_list(
+        [
+            {"text": "Once upon a time there was a little dog named Max."},
+            {"text": "The cat sat on the mat and looked around the room."},
+        ]
+        * 50
+    )
+    cfg = build_runner_cfg(hook_name="blocks.1.hook_resid_post", d_in=64)
+    store_hooked = ActivationsStore.from_config(
+        hooked_model, cfg, override_dataset=dataset
+    )
+    store_bridge = ActivationsStore.from_config(
+        bridge_model, cfg, override_dataset=dataset
+    )
+
+    batch_tokens = store_hooked.get_batch_tokens()
+    assert torch.equal(store_bridge.get_batch_tokens(), batch_tokens)
+    assert_close(
+        store_bridge.get_activations(batch_tokens),
+        store_hooked.get_activations(batch_tokens),
+        atol=1e-6,
+    )
+
+
 # 12 is divisible by the length of "hello world", 11 and 13 are not
 @pytest.mark.parametrize("context_size", [11, 12, 13])
 def test_activations_store__get_batch_tokens__fills_the_context_separated_by_bos(
