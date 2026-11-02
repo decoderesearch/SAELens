@@ -13,6 +13,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenize
 
 from sae_lens import logger
 
+try:
+    from transformer_lens.model_bridge import TransformerBridge
+except ImportError:  # added in transformer-lens 3.0
+    TransformerBridge = None
+
 
 def load_model(
     model_class_name: str,
@@ -30,9 +35,9 @@ def load_model(
     hundreds of fragments. Pass the hook names you actually need (typically
     the SAE's `hook_name`) to keep compile fragments large.
 
-    The param is a no-op for `HookedTransformer` and `HookedMamba`, whose
-    hook points are part of the architecture rather than `register_forward_hook`
-    calls.
+    The param is a no-op for `HookedTransformer`, `TransformerBridge` and
+    `HookedMamba`, whose hook points are part of the architecture rather than
+    `register_forward_hook` calls.
     """
     model_from_pretrained_kwargs = model_from_pretrained_kwargs or {}
 
@@ -48,6 +53,19 @@ def load_model(
     if model_class_name == "HookedTransformer":
         return HookedTransformer.from_pretrained_no_processing(
             model_name=model_name, device=device, **model_from_pretrained_kwargs
+        )
+    if model_class_name == "TransformerBridge":
+        if TransformerBridge is None:
+            raise ValueError(
+                "model_class_name='TransformerBridge' requires transformer-lens>=3.0."
+            )
+        # TransformerBridge isn't a HookedRootModule subclass, but provides the same
+        # hook API (hook_dict, run_with_cache, run_with_hooks, ...)
+        return cast(
+            HookedRootModule,
+            TransformerBridge.boot_transformers(
+                model_name, device=device, **model_from_pretrained_kwargs
+            ),
         )
     if model_class_name == "HookedMamba":
         try:

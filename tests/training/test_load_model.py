@@ -8,6 +8,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from sae_lens.load_model import (
     HookedProxyLM,
+    TransformerBridge,
     _extract_logits_from_output,
     load_model,
 )
@@ -30,6 +31,79 @@ def test_load_model_works_with_mamba():
         device="cpu",
     )
     assert isinstance(model, HookedMamba)
+
+
+def test_load_model_with_transformer_bridge_matches_unprocessed_hf_model():
+    model = load_model(
+        model_class_name="TransformerBridge",
+        model_name="tiny-stories-1M",
+        device="cpu",
+    )
+    hf_model = AutoModelForCausalLM.from_pretrained("roneneldan/TinyStories-1M")
+    tokenizer = AutoTokenizer.from_pretrained("roneneldan/TinyStories-1M")
+    input_ids = tokenizer.encode("Hello there, how are you?", return_tensors="pt")
+
+    logits, cache = model.run_with_cache(input_ids)
+    hf_output = hf_model(input_ids, output_hidden_states=True)
+
+    assert_close(logits, hf_output.logits, atol=1e-4)
+    # the final hidden state has the final layer norm applied, so skip it
+    for i in range(len(hf_output.hidden_states) - 2):
+        assert_close(
+            cache[f"blocks.{i}.hook_resid_post"],
+            hf_output.hidden_states[i + 1],
+            atol=1e-5,
+        )
+
+
+def test_load_model_with_transformer_bridge_matches_hooked_transformer():
+    hooked_model = load_model(
+        model_class_name="HookedTransformer",
+        model_name="tiny-stories-1M",
+        device="cpu",
+    )
+    bridge_model = load_model(
+        model_class_name="TransformerBridge",
+        model_name="tiny-stories-1M",
+        device="cpu",
+    )
+    assert isinstance(hooked_model, HookedTransformer)
+    assert TransformerBridge is not None
+    assert isinstance(bridge_model, TransformerBridge)
+    prompts = [
+        "Once upon a time there was a little dog.",
+        "The cat sat on the mat and looked around.",
+    ]
+    tokens = hooked_model.to_tokens(prompts)
+    assert torch.equal(bridge_model.to_tokens(prompts), tokens)
+
+    hooked_logits, hooked_cache = hooked_model.run_with_cache(tokens)
+    bridge_logits, bridge_cache = bridge_model.run_with_cache(tokens)
+
+    assert isinstance(hooked_logits, torch.Tensor)
+    assert_close(bridge_logits, hooked_logits, atol=1e-4)
+    for hook_name in [
+        "blocks.1.hook_resid_pre",
+        "blocks.1.hook_resid_post",
+        "blocks.0.hook_mlp_out",
+        "blocks.0.mlp.hook_post",
+        "blocks.0.attn.hook_z",
+        "blocks.1.hook_attn_out",
+    ]:
+        assert_close(bridge_cache[hook_name], hooked_cache[hook_name], atol=1e-6)
+
+
+def test_load_model_raises_helpful_error_for_TransformerBridge_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # TransformerBridge was added in transformer-lens 3.0
+    monkeypatch.setattr("sae_lens.load_model.TransformerBridge", None)
+    with pytest.raises(ValueError, match="requires transformer-lens>=3.0"):
+        load_model(
+            model_class_name="TransformerBridge",
+            model_name="tiny-stories-1M",
+            device="cpu",
+        )
 
 
 def test_load_model_works_without_model_kwargs():
