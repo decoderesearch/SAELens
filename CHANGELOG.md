@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v6.55.0 (2026-11-02)
+
+### Feature
+
+* feat: add model_class_name=&#34;TransformerBridge&#34; for loading models (#777) ([`1f750f1`](https://github.com/decoderesearch/SAELens/commit/1f750f143c33ecf4c344b144cc8f3163024f9b57))
+
+### Fix
+
+* fix: apply the skip connection when HookedSAETransformer splices in a skip transcoder (#768) ([`ab7ab69`](https://github.com/decoderesearch/SAELens/commit/ab7ab69aa6b1f4ca449ac32e377eb60ab8aca14e))
+
 ## v6.54.14 (2026-11-02)
 
 ### Fix
