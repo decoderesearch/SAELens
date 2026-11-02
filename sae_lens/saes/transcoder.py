@@ -254,7 +254,7 @@ class SkipTranscoder(Transcoder):
 
         # Add skip connection: W_skip @ x
         # x has shape [batch, d_in], W_skip has shape [d_out, d_in]
-        skip_out = x @ self.W_skip.T.to(x.device)
+        skip_out = x.to(self.dtype) @ self.W_skip.T.to(x.device)
         return sae_out + skip_out
 
     @override
@@ -278,7 +278,7 @@ class SkipTranscoder(Transcoder):
 
         # Add skip connection: W_skip @ x
         # x has shape [batch, d_in], W_skip has shape [d_out, d_in]
-        skip_out = x @ self.W_skip.T.to(x.device)
+        skip_out = x.to(self.dtype) @ self.W_skip.T.to(x.device)
         sae_out = sae_out + skip_out
 
         return sae_out, feature_acts
