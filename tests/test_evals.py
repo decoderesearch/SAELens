@@ -489,6 +489,59 @@ def test_reconstruction_preserves_excluded_tokens_and_other_heads(
     assert torch.equal(sae_inputs[0], scaler.scale(sae_input))
 
 
+@pytest.mark.parametrize(
+    "hook_name,head_index",
+    [
+        ("blocks.0.hook_resid_pre", None),
+        ("blocks.0.attn.hook_z", None),
+        ("blocks.0.attn.hook_v", 1),
+    ],
+)
+def test_zero_ablation_preserves_excluded_tokens_and_other_heads(
+    hook_name: str, head_index: int | None
+):
+    tokens = torch.tensor([[0, 2, 9], [4, 0, 5]])
+    activations = torch.arange(1, 25, dtype=torch.float32).reshape(2, 3, 4)
+    if "attn" in hook_name:
+        activations = activations.reshape(2, 3, 2, 2)
+
+    sae = MagicMock()
+    sae.cfg.metadata.hook_name = hook_name
+    sae.cfg.metadata.hook_head_index = head_index
+    sae.device = torch.device("cpu")
+    sae.encode.side_effect = torch.zeros_like
+    sae.decode.side_effect = torch.zeros_like
+
+    hook_outputs: list[torch.Tensor] = []
+
+    def run_with_hooks(*_args: Any, fwd_hooks: Any, **_kwargs: Any):
+        hook_outputs.append(fwd_hooks[0][1](activations.clone(), None))
+        return torch.zeros(2, 3, 4), torch.zeros(2, 2)
+
+    model = MagicMock(return_value=(torch.zeros(2, 3, 4), torch.zeros(2, 2)))
+    model.run_with_hooks.side_effect = run_with_hooks
+    get_recons_loss(
+        sae,
+        model,
+        ActivationScaler(),
+        tokens,
+        compute_kl=False,
+        compute_ce_loss=True,
+        ignore_tokens=[0, 9],
+    )
+
+    expected = activations.clone()
+    included = (tokens != 0) & (tokens != 9)
+    if head_index is not None:
+        expected[:, :, head_index][included] = 0
+    else:
+        expected[included] = 0
+    # The second run is the zero-ablation baseline; it must change exactly the
+    # positions the SAE replacement changes.
+    assert torch.equal(hook_outputs[1], expected)
+    assert torch.equal(hook_outputs[0], hook_outputs[1])
+
+
 def test_run_evals_reconstructs_and_scores_only_non_excluded_tokens(
     model: HookedTransformer,
 ):

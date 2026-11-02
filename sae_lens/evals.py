@@ -737,17 +737,20 @@ def get_recons_loss(
         )
         return activations
 
+    # The ablation baseline zeroes the same positions the SAE replaces, so excluded
+    # tokens (e.g. BOS) keep their original activations in both runs.
     def standard_zero_ablate_hook(activations: torch.Tensor, hook: Any):  # noqa: ARG001
         original_device = activations.device
         activations = activations.to(sae.device)
-        activations = torch.zeros_like(activations)
-        return activations.to(original_device)
+        token_mask = mask.reshape(mask.shape + (1,) * (activations.ndim - mask.ndim))
+        return activations.masked_fill(token_mask, 0).to(original_device)
 
     def single_head_zero_ablate_hook(activations: torch.Tensor, hook: Any):  # noqa: ARG001
-        original_device = activations.device
-        activations = activations.to(sae.device)
-        activations[:, :, head_index] = torch.zeros_like(activations[:, :, head_index])
-        return activations.to(original_device)
+        activations = activations.clone()
+        activations[:, :, head_index] = standard_zero_ablate_hook(
+            activations[:, :, head_index], hook
+        )
+        return activations
 
     # we would include hook z, except that we now have base SAE's
     # which will do their own reshaping for hook z.
