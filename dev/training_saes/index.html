@@ -566,6 +566,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#training-with-transformerbridge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Training with TransformerBridge
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#training-on-huggingface-models" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1084,6 +1095,17 @@
     <span class="md-ellipsis">
       
         Optimizers and Schedulers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#training-with-transformerbridge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Training with TransformerBridge
       
     </span>
   </a>
@@ -1679,6 +1701,8 @@ weights. To continue an existing run exactly where it left off, use
 <p>The SAE training runner uses the Adam optimizer with a constant learning rate by default. The optimizer betas can be controlled with the settings <code>adam_beta1</code> and <code>adam_beta2</code>.</p>
 <p>The learning rate scheduler can be controlled with the <code>lr_scheduler_name</code> parameter. The available schedulers are: <code>constant</code> (default), <code>consineannealing</code>, and <code>cosineannealingwarmrestarts</code>. All schedulers can be used with linear warmup and linear decay, set via <code>lr_warm_up_steps</code> and <code>lr_decay_steps</code>.</p>
 <p>To avoid dead features, it's often helpful to slowly increase the L1 penalty. This can be done by setting <code>l1_warm_up_steps</code> to a value larger than 0. This will linearly increase the L1 penalty over the first <code>l1_warm_up_steps</code> training steps.</p>
+<h2 id="training-with-transformerbridge">Training with TransformerBridge</h2>
+<p>Set <code>model_class_name = 'TransformerBridge'</code> to load the model as a TransformerLens <code>TransformerBridge</code> instead of a <code>HookedTransformer</code>. This requires transformer-lens 3.0 or later. <code>TransformerBridge</code> runs the Hugging Face model directly rather than reimplementing it, so it supports models that <code>HookedTransformer</code> doesn't. TransformerLens hook names such as <code>hook_name = 'blocks.1.hook_resid_post'</code> work as before. Like <code>HookedTransformer.from_pretrained_no_processing</code>, the bridge uses the unprocessed weights, and <code>model_from_pretrained_kwargs</code> are passed to <code>TransformerBridge.boot_transformers</code>.</p>
 <h2 id="training-on-huggingface-models">Training on Huggingface Models</h2>
 <p>While TransformerLens is the recommended way to use SAELens, it is also possible to use any Huggingface AutoModelForCausalLM as the model. This is useful if you want to use a model that is not supported by TransformerLens, or if you cannot use TransformerLens due to memory or performance reasons. To use a Huggingface AutoModelForCausalLM, you can specify <code>model_class_name = 'AutoModelForCausalLM'</code> in the SAE config. Your hook points will then need to correspond to the named parameters of the Huggingface model rather than the typical TransformerLens hook points. For instance, if you were using GPT2 from Huggingface, you would use <code>hook_name = 'transformer.h.1'</code> rather than <code>hook_name = 'blocks.1.hook_resid_post'</code>. Otherwise everything should work the same as with TransformerLens models.</p>
 <h2 id="datasets-streaming-and-context-size">Datasets, streaming, and context size</h2>
