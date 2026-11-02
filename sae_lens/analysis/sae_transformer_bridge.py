@@ -21,11 +21,9 @@ Loss = SingleLoss | LossPerToken
 class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-call]
     """A TransformerBridge subclass that supports attaching SAEs.
 
-    .. warning::
-        This class is in **beta**. The API may change in future versions.
-
     This class provides the same SAE attachment functionality as HookedSAETransformer,
-    but for transformer-lens v3's TransformerBridge instead of HookedTransformer.
+    but for TransformerLens's TransformerBridge instead of HookedTransformer, which
+    TransformerLens 4.0 removed.
 
     TransformerBridge is a lightweight wrapper around HuggingFace models that provides
     hook points without the overhead of HookedTransformer's weight processing. This is

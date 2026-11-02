@@ -67,6 +67,10 @@ jobs:
             sae-config-cache-v1-
       - name: Install dependencies
         run: uv pip install -e . --group dev
+      # HookedSAETransformer needs HookedTransformer, which transformer-lens 4.0 removed,
+      # so build the docs with 3.x to include it in the API reference
+      - name: Install TransformerLens 3.x
+        run: uv pip install "transformer-lens>=3.0.0,<4.0.0"
       - name: Set Python Path
         run: echo "PYTHONPATH=$PYTHONPATH:$PWD" >> $GITHUB_ENV
       # PRs don't deploy, so without this a broken docs build only shows up on

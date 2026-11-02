@@ -133,7 +133,7 @@ HookedSAETransformer extends TransformerLens's HookedTransformer to seamlessly i
 
 <!-- prettier-ignore-start -->
 !!! note
-    TransformerLens 4.0 removed `HookedTransformer`, so `HookedSAETransformer` requires `transformer-lens<4.0`, which you can install with `pip install "transformer-lens<4"`. With TransformerLens 4.0 or later, use [SAETransformerBridge](#using-saetransformerbridge-beta) instead.
+    TransformerLens 4.0 removed `HookedTransformer`, so `HookedSAETransformer` requires `transformer-lens<4.0`, which you can install with `pip install "transformer-lens<4"`. With TransformerLens 4.0 or later, use [SAETransformerBridge](#using-saetransformerbridge) instead.
 <!-- prettier-ignore-end -->
 
 <!-- prettier-ignore-start -->
@@ -242,14 +242,9 @@ logits = model.run_with_hooks(
 )
 ```
 
-## Using SAETransformerBridge (Beta)
+## Using SAETransformerBridge
 
-For models not natively supported by HookedTransformer (such as Gemma 3), or when using TransformerLens 4.0 or later, use `SAETransformerBridge`. This wraps TransformerLens's `TransformerBridge`, which provides hook points for HuggingFace models without the overhead of weight processing.
-
-<!-- prettier-ignore-start -->
-!!! warning "Beta Feature"
-    The API may change in future versions.
-<!-- prettier-ignore-end -->
+`SAETransformerBridge` wraps TransformerLens's `TransformerBridge`, which provides TransformerLens hook points for Hugging Face models without the overhead of weight processing. It works with TransformerLens 3.0 or later, and it's the way to run SAEs inside a model with TransformerLens 4.0 or later, which removed `HookedTransformer`. It also supports models that `HookedTransformer` doesn't, such as Gemma 3.
 
 ### Setup
 
@@ -293,9 +288,7 @@ logits, cache = model.run_with_cache_with_saes("Hello, world!", saes=[sae])
 `SAETransformerBridge` supports any model that TransformerBridge supports, including:
 
 - Gemma 3 (all sizes)
-- Other HuggingFace models not natively supported by HookedTransformer
-
-For models supported by both HookedTransformer and TransformerBridge (like GPT-2, Gemma 2), prefer `HookedSAETransformer` as it has more mature support.
+- Other Hugging Face models not natively supported by HookedTransformer
 
 ## Using SAEs Without TransformerLens
 
