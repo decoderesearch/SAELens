@@ -42,6 +42,7 @@ from sae_lens.saes.standard_sae import (
 from sae_lens.saes.topk_sae import TopKTrainingSAE
 from sae_lens.training.activation_scaler import ActivationScaler, ActivationWhitening
 from sae_lens.training.activations_store import ActivationsStore
+from sae_lens.util import str_to_dtype
 from tests.helpers import (
     NEEL_NANDA_C4_10K_DATASET,
     TINYSTORIES_MODEL,
@@ -1157,6 +1158,88 @@ def test_get_sparsity_and_variance_metrics_mse_is_invariant_to_batch_size(
     )
     assert metrics_two_batches["explained_variance"] == pytest.approx(
         metrics_one_batch["explained_variance"], rel=1e-4
+    )
+
+
+@pytest.mark.parametrize("dtype", ["float16", "bfloat16"])
+def test_get_sparsity_and_variance_metrics_low_precision_large_norm_activations(
+    dtype: str,
+):
+    d_in = 8
+    tokens = [[1, 2, 3, 4], [5, 6, 7, 8]]
+    model = HookedTransformer(
+        HookedTransformerConfig(
+            n_layers=1,
+            d_model=d_in,
+            n_ctx=4,
+            d_head=4,
+            n_heads=2,
+            d_mlp=16,
+            d_vocab=20,
+            act_fn="relu",
+            device="cpu",
+            dtype=str_to_dtype(dtype),
+        )
+    )
+    sae = StandardSAE(
+        StandardSAEConfig(
+            d_in=d_in,
+            d_sae=2 * d_in,
+            dtype=dtype,
+            metadata=SAEMetadata(
+                hook_name="blocks.0.hook_resid_pre",
+                context_size=4,
+                prepend_bos=False,
+            ),
+        )
+    )
+    with torch.no_grad():
+        # Activation norms of roughly 100 to 700, as in real residual streams.
+        # Their squares exceed the float16 maximum of 65504.
+        model.W_pos.zero_()
+        model.W_E.copy_(torch.arange(1, 20 * d_in + 1).reshape(20, d_in) * 3.7)
+        # The SAE reconstructs exactly 0.5 * x, so every metric has a closed form.
+        eye = torch.eye(d_in)
+        sae.W_enc.copy_(torch.cat([eye, -eye], dim=1))
+        sae.W_dec.copy_(0.5 * torch.cat([eye, -eye], dim=0))
+        sae.b_enc.zero_()
+        sae.b_dec.zero_()
+    store = ActivationsStore.from_sae(
+        model,
+        sae,
+        Dataset.from_dict({"tokens": tokens}),
+        store_batch_size_prompts=2,
+        total_tokens=2,
+        disable_concat_sequences=True,
+        sequence_separator_token=None,
+    )
+
+    metrics, _ = get_sparsity_and_variance_metrics(
+        sae=sae,
+        model=model,
+        activation_store=store,
+        activation_scaler=ActivationScaler(),
+        n_batches=1,
+        compute_l2_norms=True,
+        compute_sparsity_metrics=False,
+        compute_variance_metrics=True,
+        compute_featurewise_density_statistics=False,
+        eval_batch_size_prompts=2,
+        model_kwargs={},
+    )
+
+    x = model.W_E.detach().double()[torch.tensor(tokens).flatten()]
+    squared_norms = x.pow(2).sum(dim=-1)
+    centered_squared_norms = (x - x.mean(dim=0)).pow(2).sum(dim=-1)
+    assert metrics["mse"] == pytest.approx(
+        (0.25 * squared_norms).mean().item(), rel=1e-6
+    )
+    assert metrics["l2_norm_in"] == pytest.approx(
+        squared_norms.sqrt().mean().item(), rel=1e-6
+    )
+    assert metrics["relative_reconstruction_bias"] == pytest.approx(0.5, rel=1e-6)
+    assert metrics["explained_variance_legacy"] == pytest.approx(
+        (1 - 0.25 * squared_norms / centered_squared_norms).mean().item(), rel=1e-6
     )
 
 
