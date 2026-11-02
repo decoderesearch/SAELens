@@ -2,6 +2,7 @@ from typing import Any, Callable, Literal, NamedTuple, cast
 
 import torch
 from transformer_lens.hook_points import HookPoint
+from transformer_lens.model_bridge import TransformerBridge
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerBase
 
 from sae_lens import logger
@@ -16,11 +17,6 @@ try:
     from transformer_lens import HookedTransformer
 except ImportError:  # removed in transformer-lens 4.0
     HookedTransformer = None
-
-try:
-    from transformer_lens.model_bridge import TransformerBridge
-except ImportError:  # added in transformer-lens 3.0
-    TransformerBridge = None
 
 
 class Output(NamedTuple):
@@ -72,10 +68,6 @@ def load_model(
             model_name=model_name, device=device, **model_from_pretrained_kwargs
         )
     if model_class_name == "TransformerBridge":
-        if TransformerBridge is None:
-            raise ValueError(
-                "model_class_name='TransformerBridge' requires transformer-lens>=3.0."
-            )
         # TransformerBridge isn't a HookedRootModule subclass, but provides the same
         # hook API (hook_dict, run_with_cache, run_with_hooks, ...)
         return cast(
@@ -85,6 +77,11 @@ def load_model(
             ),
         )
     if model_class_name == "HookedMamba":
+        if HookedTransformer is None:
+            raise ValueError(
+                "model_class_name='HookedMamba' requires transformer-lens<4.0, since "
+                "mamba-lens is built on HookedTransformer, which transformer-lens 4.0 removed."
+            )
         try:
             from mamba_lens import HookedMamba
         except ImportError:  # pragma: no cover

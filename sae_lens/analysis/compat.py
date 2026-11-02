@@ -25,3 +25,8 @@ def has_transformer_bridge() -> bool:
 def has_hooked_transformer() -> bool:
     """Check if HookedTransformer is available (removed in v4)."""
     return importlib.util.find_spec("transformer_lens.HookedTransformer") is not None
+
+
+def default_model_class_name() -> str:
+    """Default `model_class_name`: TransformerBridge if HookedTransformer is unavailable."""
+    return "HookedTransformer" if has_hooked_transformer() else "TransformerBridge"

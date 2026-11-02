@@ -133,7 +133,7 @@ HookedSAETransformer extends TransformerLens's HookedTransformer to seamlessly i
 
 <!-- prettier-ignore-start -->
 !!! note
-    TransformerLens 4.0 removed `HookedTransformer`, so `HookedSAETransformer` requires `transformer-lens<4.0`. With TransformerLens 4.0 or later, use [SAETransformerBridge](#using-saetransformerbridge-beta) instead.
+    TransformerLens 4.0 removed `HookedTransformer`, so `HookedSAETransformer` requires `transformer-lens<4.0`, which you can install with `pip install "transformer-lens<4"`. With TransformerLens 4.0 or later, use [SAETransformerBridge](#using-saetransformerbridge-beta) instead.
 <!-- prettier-ignore-end -->
 
 <!-- prettier-ignore-start -->
@@ -248,14 +248,13 @@ For models not natively supported by HookedTransformer (such as Gemma 3), or whe
 
 <!-- prettier-ignore-start -->
 !!! warning "Beta Feature"
-    `SAETransformerBridge` requires TransformerLens v3 or later. The API may change in future versions.
+    The API may change in future versions.
 <!-- prettier-ignore-end -->
 
 ### Setup
 
 ```python
-from sae_lens import SAE
-from sae_lens.analysis.sae_transformer_bridge import SAETransformerBridge
+from sae_lens import SAE, SAETransformerBridge
 
 # Load model using TransformerBridge
 model = SAETransformerBridge.boot_transformers("google/gemma-3-4b-it", device="cuda")

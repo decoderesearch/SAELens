@@ -55,7 +55,6 @@ from tests.helpers import (
     load_model_cached,
     random_params,
     requires_hooked_transformer,
-    requires_transformer_bridge,
 )
 
 if TYPE_CHECKING or has_hooked_transformer():
@@ -1072,7 +1071,6 @@ def test_get_saes_from_regex_multiple_matches(mock_all_loadable_saes: MagicMock)
     assert result == expected
 
 
-@requires_transformer_bridge
 @pytest.mark.parametrize(("identity", "expected_score"), [(True, 1.0), (False, 0.0)])
 def test_run_evals_with_transformer_bridge_scores_identity_and_zero_saes(
     example_dataset: Dataset, identity: bool, expected_score: float

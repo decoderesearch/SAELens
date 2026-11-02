@@ -77,7 +77,6 @@ def test_load_model_with_transformer_bridge_matches_hooked_transformer():
         device="cpu",
     )
     assert isinstance(hooked_model, HookedTransformer)
-    assert TransformerBridge is not None
     assert isinstance(bridge_model, TransformerBridge)
     prompts = [
         "Once upon a time there was a little dog.",
@@ -102,19 +101,6 @@ def test_load_model_with_transformer_bridge_matches_hooked_transformer():
         assert_close(bridge_cache[hook_name], hooked_cache[hook_name], atol=1e-6)
 
 
-def test_load_model_raises_helpful_error_for_TransformerBridge_when_unavailable(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    # TransformerBridge was added in transformer-lens 3.0
-    monkeypatch.setattr("sae_lens.load_model.TransformerBridge", None)
-    with pytest.raises(ValueError, match="requires transformer-lens>=3.0"):
-        load_model(
-            model_class_name="TransformerBridge",
-            model_name="tiny-stories-1M",
-            device="cpu",
-        )
-
-
 @requires_hooked_transformer
 def test_load_model_works_without_model_kwargs():
     model = load_model(
@@ -137,14 +123,21 @@ def test_load_model_works_with_model_kwargs():
     assert model.cfg.dtype == torch.float16
 
 
-def test_load_model_raises_helpful_error_for_HookedTransformer_when_unavailable(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("model_class_name", "expected_message"),
+    [
+        ("HookedTransformer", "model_class_name='TransformerBridge'"),
+        ("HookedMamba", "mamba-lens is built on HookedTransformer"),
+    ],
+)
+def test_load_model_raises_helpful_error_when_HookedTransformer_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch, model_class_name: str, expected_message: str
 ):
     # transformer-lens >= 4.0 removed HookedTransformer
     monkeypatch.setattr("sae_lens.load_model.HookedTransformer", None)
-    with pytest.raises(ValueError, match="model_class_name='TransformerBridge'"):
+    with pytest.raises(ValueError, match=expected_message):
         load_model(
-            model_class_name="HookedTransformer",
+            model_class_name=model_class_name,
             model_name="tiny-stories-1M",
             device="cpu",
         )

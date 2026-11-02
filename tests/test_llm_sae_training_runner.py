@@ -38,7 +38,6 @@ from tests.helpers import (
     assert_close,
     build_runner_cfg_for_arch,
     requires_hooked_transformer,
-    requires_transformer_bridge,
 )
 
 if TYPE_CHECKING or has_hooked_transformer():
@@ -133,7 +132,6 @@ def test_LanguageModelSAETrainingRunner_runs_and_saves_all_architectures(
     assert runner_cfg == json.loads(json.dumps(cfg.to_dict()))
 
 
-@requires_transformer_bridge
 def test_LanguageModelSAETrainingRunner_trains_on_unprocessed_transformer_bridge_activations(
     tmp_path: Path,
 ):

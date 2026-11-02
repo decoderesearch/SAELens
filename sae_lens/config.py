@@ -18,6 +18,7 @@ from datasets import (
 )
 
 from sae_lens import __version__, logger
+from sae_lens.analysis.compat import default_model_class_name
 
 # keeping this unused import since some SAELens deps import DTYPE_MAP from config
 from sae_lens.constants import (
@@ -133,7 +134,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     Args:
         sae (T_TRAINING_SAE_CONFIG): The configuration for the SAE itself (e.g. StandardSAEConfig, GatedSAEConfig).
         model_name (str): The name of the model to use. This should be the name of the model in the Hugging Face model hub.
-        model_class_name (str): The name of the class of the model to use. This should be one of `HookedTransformer`, `TransformerBridge`, `HookedMamba` or `AutoModelForCausalLM`. `HookedTransformer` requires transformer-lens<4.0.
+        model_class_name (str): The name of the class of the model to use. This should be one of `HookedTransformer`, `TransformerBridge`, `HookedMamba` or `AutoModelForCausalLM`. Defaults to `HookedTransformer`, or to `TransformerBridge` with transformer-lens 4.0+, which removed `HookedTransformer`.
         hook_name (str): The name of the hook to use. This should be a valid TransformerLens hook.
         hook_eval (str): DEPRECATED: Will be removed in v7.0.0. NOT CURRENTLY IN USE. The name of the hook to use for evaluation.
         hook_head_index (int, optional): When the hook is for an activation with a head index, we can specify a specific head to use here.
@@ -199,7 +200,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
 
     # Data Generating Function (Model + Training Distibuion)
     model_name: str = "gelu-2l"
-    model_class_name: str = "HookedTransformer"
+    model_class_name: str = field(default_factory=default_model_class_name)
     hook_name: str = "blocks.0.hook_mlp_out"
     hook_eval: str = "NOT_IN_USE"
     hook_head_index: int | None = None
@@ -516,7 +517,7 @@ class CacheActivationsRunnerConfig:
         d_in (int): Dimension of the model.
         training_tokens (int): Total number of tokens to process.
         context_size (int): Context size to process. Can be left as -1 if the dataset is tokenized.
-        model_class_name (str): The name of the class of the model to use. This should be one of `HookedTransformer`, `TransformerBridge`, `HookedMamba` or `AutoModelForCausalLM`. `HookedTransformer` requires transformer-lens<4.0.
+        model_class_name (str): The name of the class of the model to use. This should be one of `HookedTransformer`, `TransformerBridge`, `HookedMamba` or `AutoModelForCausalLM`. Defaults to `HookedTransformer`, or to `TransformerBridge` with transformer-lens 4.0+, which removed `HookedTransformer`.
         new_cached_activations_path (str, optional): The path to save the activations.
         shuffle (bool): Whether to shuffle the dataset.
         seed (int): The seed to use for shuffling.
@@ -546,7 +547,7 @@ class CacheActivationsRunnerConfig:
     training_tokens: int
 
     context_size: int = -1  # Required if dataset is not tokenized
-    model_class_name: str = "HookedTransformer"
+    model_class_name: str = field(default_factory=default_model_class_name)
     # defaults to "activations/{dataset}/{model}/{hook_name}
     new_cached_activations_path: str | None = None
     shuffle: bool = True

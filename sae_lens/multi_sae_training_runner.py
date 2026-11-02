@@ -35,6 +35,7 @@ import wandb
 from safetensors.torch import save_file
 
 from sae_lens import __version__, logger
+from sae_lens.analysis.compat import default_model_class_name
 from sae_lens.config import HfDataset, LoggingConfig, SAETrainerConfig
 from sae_lens.constants import RUNNER_CFG_FILENAME, SPARSITY_FILENAME
 from sae_lens.evals import EvalConfig, run_evals
@@ -78,7 +79,7 @@ class MultiSAETrainingRunnerConfig:
 
     # Data Generating Function
     model_name: str = "gelu-2l"
-    model_class_name: str = "HookedTransformer"
+    model_class_name: str = field(default_factory=default_model_class_name)
     dataset_path: str = ""
     dataset_trust_remote_code: bool = True
     streaming: bool = True

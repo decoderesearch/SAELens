@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
 import pytest
 import torch
 
-from sae_lens.analysis.compat import has_hooked_transformer, has_transformer_bridge
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.config import LanguageModelSAERunnerConfig, LoggingConfig
 from sae_lens.registry import SAE_TRAINING_CLASS_REGISTRY
 from sae_lens.saes.abstopk_sae import (
@@ -38,10 +38,6 @@ if TYPE_CHECKING or has_hooked_transformer():
 requires_hooked_transformer = pytest.mark.skipif(
     not has_hooked_transformer(),
     reason="HookedTransformer was removed in transformer-lens 4.0",
-)
-requires_transformer_bridge = pytest.mark.skipif(
-    not has_transformer_bridge(),
-    reason="TransformerBridge requires transformer-lens v3+",
 )
 
 TINYSTORIES_MODEL = "tiny-stories-1M"
