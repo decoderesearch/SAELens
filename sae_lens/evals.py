@@ -734,10 +734,7 @@ def get_recons_loss(
         original_device = activations.device
         activations = activations.to(sae.device)
         token_mask = mask.reshape(mask.shape + (1,) * (activations.ndim - mask.ndim))
-        activations = torch.where(
-            token_mask, torch.zeros_like(activations), activations
-        )
-        return activations.to(original_device)
+        return activations.masked_fill(token_mask, 0).to(original_device)
 
     def single_head_zero_ablate_hook(activations: torch.Tensor, hook: Any):  # noqa: ARG001
         activations = activations.clone()
