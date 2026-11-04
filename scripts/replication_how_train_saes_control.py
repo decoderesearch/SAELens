@@ -79,7 +79,7 @@ for l1_coefficient in [2, 5, 10]:
         adam_beta1=0.9,
         adam_beta2=0.999,
         # Buffer details won't matter in we cache / shuffle our activations ahead of time.
-        n_batches_in_buffer=64,
+        n_sequences_in_buffer=64,
         store_batch_size_prompts=16,
         # Feature Store
         feature_sampling_window=1000,

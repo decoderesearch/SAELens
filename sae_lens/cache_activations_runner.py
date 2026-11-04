@@ -36,7 +36,7 @@ def _mk_activations_store(
         hook_head_index=None,
         context_size=cfg.context_size,
         d_in=cfg.d_in,
-        n_batches_in_buffer=cfg.n_batches_in_buffer,
+        n_sequences_in_buffer=cfg.n_seq_in_buffer,
         total_training_tokens=cfg.training_tokens,
         store_batch_size_prompts=cfg.model_batch_size,
         train_batch_size_tokens=-1,

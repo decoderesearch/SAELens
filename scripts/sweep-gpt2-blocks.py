@@ -66,7 +66,7 @@ for l1_coefficient in [3, 4, 5, 6, 7]:
             adam_beta1=0.9,
             adam_beta2=0.999,
             # Unsure if this is enough
-            n_batches_in_buffer=64,
+            n_sequences_in_buffer=64,
             store_batch_size_prompts=32,
             # Feature Store
             feature_sampling_window=1000,

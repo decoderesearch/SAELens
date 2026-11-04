@@ -78,7 +78,8 @@ class LanguageModelSAERunnerConfigDict(TypedDict, total=False):
     use_cached_activations: bool
     cached_activations_path: str | None
     from_pretrained_path: str | None
-    n_batches_in_buffer: int
+    n_sequences_in_buffer: int
+    n_batches_in_buffer: int | None
     training_tokens: int
     store_batch_size_prompts: int
     normalize_activations: str
@@ -187,7 +188,7 @@ def _get_default_runner_config() -> LanguageModelSAERunnerConfigDict:
         "use_cached_activations": False,
         "cached_activations_path": None,
         "from_pretrained_path": None,
-        "n_batches_in_buffer": 2,
+        "n_sequences_in_buffer": 2,
         "training_tokens": 1_000_000,
         "store_batch_size_prompts": 4,
         "seqpos_slice": (None,),
