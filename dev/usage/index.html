@@ -540,15 +540,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#using-saetransformerbridge-beta" class="md-nav__link">
+  <a href="#using-saetransformerbridge" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Using SAETransformerBridge (Beta)
+        Using SAETransformerBridge
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Using SAETransformerBridge (Beta)">
+    <nav class="md-nav" aria-label="Using SAETransformerBridge">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1149,15 +1149,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#using-saetransformerbridge-beta" class="md-nav__link">
+  <a href="#using-saetransformerbridge" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Using SAETransformerBridge (Beta)
+        Using SAETransformerBridge
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Using SAETransformerBridge (Beta)">
+    <nav class="md-nav" aria-label="Using SAETransformerBridge">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1395,6 +1395,12 @@ where rescaling activations could change which features are selected.</p>
 <h2 id="using-hookedsaetransformer">Using HookedSAETransformer</h2>
 <p>HookedSAETransformer extends TransformerLens's HookedTransformer to seamlessly integrate SAEs into the model's forward pass.</p>
 <!-- prettier-ignore-start -->
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>TransformerLens 4.0 removed <code>HookedTransformer</code>, so <code>HookedSAETransformer</code> requires <code>transformer-lens&lt;4.0</code>, which you can install with <code>pip install "transformer-lens&lt;4"</code>. With TransformerLens 4.0 or later, use <a href="#using-saetransformerbridge">SAETransformerBridge</a> instead.</p>
+</div>
+<!-- prettier-ignore-end -->
+<!-- prettier-ignore-start -->
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>When using <code>HookedSAETransformer</code> or <code>HookedTransformer</code>, you should probably use <code>from_pretrained_no_processing</code> to load the model, not <code>from_pretrained</code>. Most SAEs are trained on raw LLM activations, and the default processing in <code>from_pretrained</code> will apply post-processing to the activations, and may break your SAE.</p>
@@ -1478,27 +1484,20 @@ where rescaling activations could change which features are selected.</p>
 </span><span id="__span-11-13"><a href="#__codelineno-11-13" id="__codelineno-11-13" name="__codelineno-11-13"></a>    <span class="p">]</span>
 </span><span id="__span-11-14"><a href="#__codelineno-11-14" id="__codelineno-11-14" name="__codelineno-11-14"></a><span class="p">)</span>
 </span></code></pre></div>
-<h2 id="using-saetransformerbridge-beta">Using SAETransformerBridge (Beta)</h2>
-<p>For models not natively supported by HookedTransformer (such as Gemma 3), use <code>SAETransformerBridge</code>. This wraps TransformerLens v3's <code>TransformerBridge</code>, which provides hook points for HuggingFace models without the overhead of weight processing.</p>
-<!-- prettier-ignore-start -->
-<div class="admonition warning">
-<p class="admonition-title">Beta Feature</p>
-<p><code>SAETransformerBridge</code> requires TransformerLens v3, which is currently in beta. Install it with <code>pip install transformer-lens&gt;=3.0.0b0</code>. The API may change in future versions.</p>
-</div>
-<!-- prettier-ignore-end -->
+<h2 id="using-saetransformerbridge">Using SAETransformerBridge</h2>
+<p><code>SAETransformerBridge</code> wraps TransformerLens's <code>TransformerBridge</code>, which provides TransformerLens hook points for Hugging Face models without the overhead of weight processing. It works with TransformerLens 3.0 or later, and it's the way to run SAEs inside a model with TransformerLens 4.0 or later, which removed <code>HookedTransformer</code>. It also supports models that <code>HookedTransformer</code> doesn't, such as Gemma 3.</p>
 <h3 id="setup_1">Setup</h3>
-<div class="highlight"><pre><span></span><code><span id="__span-12-1"><a href="#__codelineno-12-1" id="__codelineno-12-1" name="__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="n">SAE</span>
-</span><span id="__span-12-2"><a href="#__codelineno-12-2" id="__codelineno-12-2" name="__codelineno-12-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens.analysis.sae_transformer_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">SAETransformerBridge</span>
-</span><span id="__span-12-3"><a href="#__codelineno-12-3" id="__codelineno-12-3" name="__codelineno-12-3"></a>
-</span><span id="__span-12-4"><a href="#__codelineno-12-4" id="__codelineno-12-4" name="__codelineno-12-4"></a><span class="c1"># Load model using TransformerBridge</span>
-</span><span id="__span-12-5"><a href="#__codelineno-12-5" id="__codelineno-12-5" name="__codelineno-12-5"></a><span class="n">model</span> <span class="o">=</span> <span class="n">SAETransformerBridge</span><span class="o">.</span><span class="n">boot_transformers</span><span class="p">(</span><span class="s2">"google/gemma-3-4b-it"</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
-</span><span id="__span-12-6"><a href="#__codelineno-12-6" id="__codelineno-12-6" name="__codelineno-12-6"></a>
-</span><span id="__span-12-7"><a href="#__codelineno-12-7" id="__codelineno-12-7" name="__codelineno-12-7"></a><span class="c1"># Load SAE (Gemma Scope 2 SAEs work with Gemma 3 models)</span>
-</span><span id="__span-12-8"><a href="#__codelineno-12-8" id="__codelineno-12-8" name="__codelineno-12-8"></a><span class="n">sae</span> <span class="o">=</span> <span class="n">SAE</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
-</span><span id="__span-12-9"><a href="#__codelineno-12-9" id="__codelineno-12-9" name="__codelineno-12-9"></a>    <span class="n">release</span><span class="o">=</span><span class="s2">"gemma-scope-2-4b-it-res"</span><span class="p">,</span>
-</span><span id="__span-12-10"><a href="#__codelineno-12-10" id="__codelineno-12-10" name="__codelineno-12-10"></a>    <span class="n">sae_id</span><span class="o">=</span><span class="s2">"layer_17_width_16k_l0_medium"</span><span class="p">,</span>
-</span><span id="__span-12-11"><a href="#__codelineno-12-11" id="__codelineno-12-11" name="__codelineno-12-11"></a>    <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span>
-</span><span id="__span-12-12"><a href="#__codelineno-12-12" id="__codelineno-12-12" name="__codelineno-12-12"></a><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span id="__span-12-1"><a href="#__codelineno-12-1" id="__codelineno-12-1" name="__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sae_lens</span><span class="w"> </span><span class="kn">import</span> <span class="n">SAE</span><span class="p">,</span> <span class="n">SAETransformerBridge</span>
+</span><span id="__span-12-2"><a href="#__codelineno-12-2" id="__codelineno-12-2" name="__codelineno-12-2"></a>
+</span><span id="__span-12-3"><a href="#__codelineno-12-3" id="__codelineno-12-3" name="__codelineno-12-3"></a><span class="c1"># Load model using TransformerBridge</span>
+</span><span id="__span-12-4"><a href="#__codelineno-12-4" id="__codelineno-12-4" name="__codelineno-12-4"></a><span class="n">model</span> <span class="o">=</span> <span class="n">SAETransformerBridge</span><span class="o">.</span><span class="n">boot_transformers</span><span class="p">(</span><span class="s2">"google/gemma-3-4b-it"</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
+</span><span id="__span-12-5"><a href="#__codelineno-12-5" id="__codelineno-12-5" name="__codelineno-12-5"></a>
+</span><span id="__span-12-6"><a href="#__codelineno-12-6" id="__codelineno-12-6" name="__codelineno-12-6"></a><span class="c1"># Load SAE (Gemma Scope 2 SAEs work with Gemma 3 models)</span>
+</span><span id="__span-12-7"><a href="#__codelineno-12-7" id="__codelineno-12-7" name="__codelineno-12-7"></a><span class="n">sae</span> <span class="o">=</span> <span class="n">SAE</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
+</span><span id="__span-12-8"><a href="#__codelineno-12-8" id="__codelineno-12-8" name="__codelineno-12-8"></a>    <span class="n">release</span><span class="o">=</span><span class="s2">"gemma-scope-2-4b-it-res"</span><span class="p">,</span>
+</span><span id="__span-12-9"><a href="#__codelineno-12-9" id="__codelineno-12-9" name="__codelineno-12-9"></a>    <span class="n">sae_id</span><span class="o">=</span><span class="s2">"layer_17_width_16k_l0_medium"</span><span class="p">,</span>
+</span><span id="__span-12-10"><a href="#__codelineno-12-10" id="__codelineno-12-10" name="__codelineno-12-10"></a>    <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span>
+</span><span id="__span-12-11"><a href="#__codelineno-12-11" id="__codelineno-12-11" name="__codelineno-12-11"></a><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="run-with-saes">Run with SAEs</h3>
 <p>The API mirrors <code>HookedSAETransformer</code>:</p>
@@ -1521,9 +1520,8 @@ where rescaling activations could change which features are selected.</p>
 <p><code>SAETransformerBridge</code> supports any model that TransformerBridge supports, including:</p>
 <ul>
 <li>Gemma 3 (all sizes)</li>
-<li>Other HuggingFace models not natively supported by HookedTransformer</li>
+<li>Other Hugging Face models not natively supported by HookedTransformer</li>
 </ul>
-<p>For models supported by both HookedTransformer and TransformerBridge (like GPT-2, Gemma 2), prefer <code>HookedSAETransformer</code> as it has more mature support.</p>
 <h2 id="using-saes-without-transformerlens">Using SAEs Without TransformerLens</h2>
 <p>SAEs from SAELens are standard PyTorch modules and can be used with any model or framework. The key is extracting activations from your model and passing them to the SAE's <code>encode()</code>, <code>decode()</code>, or <code>forward()</code> methods. Also note that the names of hook points will be different between TransformerLens and Hugging Face / NNsight.</p>
 <h3 id="pure-pytorch-with-hugging-face-transformers">Pure PyTorch with Hugging Face Transformers</h3>
