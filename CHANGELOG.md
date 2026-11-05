@@ -1,8 +1,10 @@
 # CHANGELOG
 
-## v6.55.0 (2026-11-02)
+## v6.55.0 (2026-11-05)
 
 ### Feature
+
+* feat: support transformer-lens 4.x (requires transformer-lens 3.0+) (#739) ([`3f96e17`](https://github.com/decoderesearch/SAELens/commit/3f96e17037f27d10a528eb85c7447d54c3adbddc))
 
 * feat: add model_class_name=&#34;TransformerBridge&#34; for loading models (#777) ([`1f750f1`](https://github.com/decoderesearch/SAELens/commit/1f750f143c33ecf4c344b144cc8f3163024f9b57))
 
