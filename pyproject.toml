@@ -23,7 +23,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "transformer-lens>=2.16.1,<4.0.0",
+    "transformer-lens>=3.0.0,<5.0.0",
     "transformers>=4.38.1,<6.0.0",
     "plotly>=5.19.0",
     "plotly-express>=0.4.1",
@@ -82,8 +82,6 @@ dev = [
     "kaleido>=1.2.0,<2.0.0",
     "ipykernel>=7.1.0,<8.0.0",
     "transformers>=5.0.0,<6.0.0",
-    # wait until transformer-lens 3.0.0b2 is released to work with transformers v5.0.0
-    # "transformer-lens==3.0.0b1",
 ]
 
 [tool.uv.build-backend]

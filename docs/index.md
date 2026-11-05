@@ -27,6 +27,12 @@ The SAELens training codebase exists to help researchers:
 pip install sae-lens
 ```
 
+This installs TransformerLens 4, which removed `HookedTransformer`, so use `SAETransformerBridge` to run SAEs inside a model. To use `HookedSAETransformer` instead, install TransformerLens 3:
+
+```
+pip install sae-lens "transformer-lens<4"
+```
+
 ### Loading Sparse Autoencoders from Huggingface
 
 To load a pretrained sparse autoencoder, you can use `SAE.from_pretrained()` as below:
@@ -63,7 +69,7 @@ You can import an SAE created with another library by writing a custom `Pretrain
 
 ## Model Compatibility
 
-SAELens SAEs are standard PyTorch modules and work with any framework or model architecture, not just TransformerLens. While SAELens provides deep integration with TransformerLens through `HookedSAETransformer`, you can use SAEs with:
+SAELens SAEs are standard PyTorch modules and work with any framework or model architecture, not just TransformerLens. While SAELens provides deep integration with TransformerLens through `SAETransformerBridge` and `HookedSAETransformer`, you can use SAEs with:
 
 - **Hugging Face Transformers**: Extract activations using PyTorch hooks and pass them to `sae.encode()` / `sae.decode()`
 - **nnsight**: Use nnsight's tracing API for clean intervention patterns with SAE features

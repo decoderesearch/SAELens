@@ -6,16 +6,24 @@ tests/_comparison/sae_lens_old to ensure backwards compatibility.
 """
 
 import pytest
+
+from sae_lens.analysis.compat import has_hooked_transformer
+from sae_lens.saes.sae import SAEMetadata
+from sae_lens.saes.standard_sae import StandardSAE, StandardSAEConfig
+from tests.helpers import TINYSTORIES_MODEL, assert_close, random_params
+
+if not has_hooked_transformer():
+    pytest.skip(
+        "HookedTransformer was removed in transformer-lens 4.0", allow_module_level=True
+    )
+
 from transformer_lens import HookedTransformer
 
 from sae_lens.analysis.hooked_sae_transformer import HookedSAETransformer
-from sae_lens.saes.sae import SAEMetadata
-from sae_lens.saes.standard_sae import StandardSAE, StandardSAEConfig
 from tests._comparison.sae_lens_old.analysis.hooked_sae_transformer import (
     HookedSAETransformer as OldHookedSAETransformer,
 )
 from tests._comparison.sae_lens_old.sae import SAE as OldSAE
-from tests.helpers import TINYSTORIES_MODEL, assert_close, random_params
 
 MODEL = TINYSTORIES_MODEL
 PROMPT = "Hello World!"

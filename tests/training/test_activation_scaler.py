@@ -1,15 +1,20 @@
+from __future__ import annotations
+
 import json
 from pathlib import Path
-from typing import Generator
+from typing import TYPE_CHECKING, Generator
 
 import numpy as np
 import pytest
 import torch
-from transformer_lens import HookedTransformer
 
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
 from tests.helpers import assert_close, build_runner_cfg, correlated_activations
+
+if TYPE_CHECKING or has_hooked_transformer():
+    from transformer_lens import HookedTransformer
 
 
 def test_ActivationScaler_scale_without_scaling_factor():

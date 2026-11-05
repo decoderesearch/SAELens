@@ -44,6 +44,29 @@ def test_LanguageModelSAERunnerConfig_hook_eval_deprecated_usage():
         )
 
 
+@pytest.mark.parametrize(
+    ("hooked_transformer_available", "expected_class", "expected_kwargs"),
+    [
+        (True, "HookedTransformer", {"center_writing_weights": False}),
+        (False, "TransformerBridge", {}),
+    ],
+)
+def test_LanguageModelSAERunnerConfig_default_model_class_depends_on_HookedTransformer(
+    monkeypatch: pytest.MonkeyPatch,
+    hooked_transformer_available: bool,
+    expected_class: str,
+    expected_kwargs: dict[str, bool],
+):
+    # transformer-lens >= 4.0 removed HookedTransformer
+    monkeypatch.setattr(
+        "sae_lens.analysis.compat.has_hooked_transformer",
+        lambda: hooked_transformer_available,
+    )
+    cfg = LanguageModelSAERunnerConfig(sae=StandardTrainingSAEConfig(d_in=10, d_sae=10))
+    assert cfg.model_class_name == expected_class
+    assert cfg.model_from_pretrained_kwargs == expected_kwargs
+
+
 @pytest.mark.parametrize("seqpos_slice, expected_error", test_cases_for_seqpos)
 def test_cache_activations_runner_config_seqpos(
     seqpos_slice: tuple[int, int],

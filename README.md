@@ -14,7 +14,7 @@ SAELens exists to help researchers:
 - Analyse sparse autoencoders / research mechanistic interpretability.
 - Generate insights which make it easier to create safe and aligned AI systems.
 
-SAELens inference works with any PyTorch-based model, not just TransformerLens. While we provide deep integration with TransformerLens via `HookedSAETransformer`, SAEs can be used with Hugging Face Transformers, NNsight, or any other framework by extracting activations and passing them to the SAE's `encode()` and `decode()` methods.
+SAELens inference works with any PyTorch-based model, not just TransformerLens. While we provide deep integration with TransformerLens via `SAETransformerBridge` and `HookedSAETransformer`, SAEs can be used with Hugging Face Transformers, NNsight, or any other framework by extracting activations and passing them to the SAE's `encode()` and `decode()` methods.
 
 Please refer to the [documentation](https://decoderesearch.github.io/SAELens/) for information on how to:
 

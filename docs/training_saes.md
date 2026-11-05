@@ -581,7 +581,7 @@ To avoid dead features, it's often helpful to slowly increase the L1 penalty. Th
 
 ## Training with TransformerBridge
 
-Set `model_class_name = 'TransformerBridge'` to load the model as a TransformerLens `TransformerBridge` instead of a `HookedTransformer`. This requires transformer-lens 3.0 or later. `TransformerBridge` runs the Hugging Face model directly rather than reimplementing it, so it supports models that `HookedTransformer` doesn't. TransformerLens hook names such as `hook_name = 'blocks.1.hook_resid_post'` work as before. Like `HookedTransformer.from_pretrained_no_processing`, the bridge uses the unprocessed weights, and `model_from_pretrained_kwargs` are passed to `TransformerBridge.boot_transformers`.
+Set `model_class_name = 'TransformerBridge'` to load the model as a TransformerLens `TransformerBridge` instead of a `HookedTransformer`. With TransformerLens 4.0 or later, this is the default. `TransformerBridge` runs the Hugging Face model directly rather than reimplementing it, so it supports models that `HookedTransformer` doesn't, and it replaces `HookedTransformer`, which TransformerLens 4.0 removed. TransformerLens hook names such as `hook_name = 'blocks.1.hook_resid_post'` work as before. Like `HookedTransformer.from_pretrained_no_processing`, the bridge uses the unprocessed weights, and `model_from_pretrained_kwargs` are passed to `TransformerBridge.boot_transformers`.
 
 ## Training on Huggingface Models
 

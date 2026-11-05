@@ -132,6 +132,11 @@ reconstructed = sae(activations)
 HookedSAETransformer extends TransformerLens's HookedTransformer to seamlessly integrate SAEs into the model's forward pass.
 
 <!-- prettier-ignore-start -->
+!!! note
+    TransformerLens 4.0 removed `HookedTransformer`, so `HookedSAETransformer` requires `transformer-lens<4.0`, which you can install with `pip install "transformer-lens<4"`. With TransformerLens 4.0 or later, use [SAETransformerBridge](#using-saetransformerbridge) instead.
+<!-- prettier-ignore-end -->
+
+<!-- prettier-ignore-start -->
 !!! warning
     When using `HookedSAETransformer` or `HookedTransformer`, you should probably use `from_pretrained_no_processing` to load the model, not `from_pretrained`. Most SAEs are trained on raw LLM activations, and the default processing in `from_pretrained` will apply post-processing to the activations, and may break your SAE.
 <!-- prettier-ignore-end -->
@@ -237,20 +242,14 @@ logits = model.run_with_hooks(
 )
 ```
 
-## Using SAETransformerBridge (Beta)
+## Using SAETransformerBridge
 
-For models not natively supported by HookedTransformer (such as Gemma 3), use `SAETransformerBridge`. This wraps TransformerLens v3's `TransformerBridge`, which provides hook points for HuggingFace models without the overhead of weight processing.
-
-<!-- prettier-ignore-start -->
-!!! warning "Beta Feature"
-    `SAETransformerBridge` requires TransformerLens v3, which is currently in beta. Install it with `pip install transformer-lens>=3.0.0b0`. The API may change in future versions.
-<!-- prettier-ignore-end -->
+`SAETransformerBridge` wraps TransformerLens's `TransformerBridge`, which provides TransformerLens hook points for Hugging Face models without the overhead of weight processing. It works with TransformerLens 3.0 or later, and it's the way to run SAEs inside a model with TransformerLens 4.0 or later, which removed `HookedTransformer`. It also supports models that `HookedTransformer` doesn't, such as Gemma 3.
 
 ### Setup
 
 ```python
-from sae_lens import SAE
-from sae_lens.analysis.sae_transformer_bridge import SAETransformerBridge
+from sae_lens import SAE, SAETransformerBridge
 
 # Load model using TransformerBridge
 model = SAETransformerBridge.boot_transformers("google/gemma-3-4b-it", device="cuda")
@@ -289,9 +288,7 @@ logits, cache = model.run_with_cache_with_saes("Hello, world!", saes=[sae])
 `SAETransformerBridge` supports any model that TransformerBridge supports, including:
 
 - Gemma 3 (all sizes)
-- Other HuggingFace models not natively supported by HookedTransformer
-
-For models supported by both HookedTransformer and TransformerBridge (like GPT-2, Gemma 2), prefer `HookedSAETransformer` as it has more mature support.
+- Other Hugging Face models not natively supported by HookedTransformer
 
 ## Using SAEs Without TransformerLens
 

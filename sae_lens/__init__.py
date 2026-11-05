@@ -2,6 +2,7 @@
 __version__ = "6.55.0"
 
 import logging
+from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,8 @@ from sae_lens.saes import (
     TranscoderConfig,
 )
 
-from .analysis.hooked_sae_transformer import HookedSAETransformer
+from .analysis.compat import has_hooked_transformer
+from .analysis.sae_transformer_bridge import SAETransformerBridge
 from .cache_activations_runner import CacheActivationsRunner
 from .config import (
     CacheActivationsRunnerConfig,
@@ -80,7 +82,6 @@ __all__ = [
     "SAEConfig",
     "TrainingSAE",
     "TrainingSAEConfig",
-    "HookedSAETransformer",
     "ActivationsStore",
     "LanguageModelSAERunnerConfig",
     "LanguageModelSAETrainingRunner",
@@ -139,20 +140,28 @@ __all__ = [
     "MultiSAEEvaluator",
     "MultiSAETrainingRunner",
     "MultiSAETrainingRunnerConfig",
+    "SAETransformerBridge",
 ]
 
-# Conditional export for SAETransformerBridge (requires transformer-lens v3+)
-try:
-    from sae_lens.analysis.compat import has_transformer_bridge
+# Conditional export for HookedSAETransformer (HookedTransformer was removed in transformer-lens v4)
+if has_hooked_transformer():
+    from .analysis.hooked_sae_transformer import HookedSAETransformer  # noqa: F401
 
-    if has_transformer_bridge():
-        from sae_lens.analysis.sae_transformer_bridge import (  # noqa: F401
-            SAETransformerBridge,
-        )
+    __all__.append("HookedSAETransformer")
 
-        __all__.append("SAETransformerBridge")
-except ImportError:
-    pass
+# Hidden from type checkers, which would otherwise accept any attribute of sae_lens
+if not TYPE_CHECKING:
+
+    def __getattr__(name: str):
+        if name == "HookedSAETransformer":
+            # ImportError rather than AttributeError, since `from sae_lens import X`
+            # replaces an AttributeError's message with a generic one
+            raise ImportError(
+                "HookedSAETransformer requires transformer-lens<4.0, which removed "
+                "HookedTransformer. Use SAETransformerBridge instead, or install "
+                "transformer-lens<4.0."
+            )
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 register_sae_class("standard", StandardSAE, StandardSAEConfig)

@@ -1,18 +1,25 @@
 import sys
+from typing import TYPE_CHECKING
 
 import pytest
 import torch
-from mamba_lens import HookedMamba
-from transformer_lens import HookedTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.load_model import (
     HookedProxyLM,
     TransformerBridge,
     _extract_logits_from_output,
     load_model,
 )
-from tests.helpers import assert_close
+from tests.helpers import (
+    assert_close,
+    requires_hooked_transformer,
+)
+
+if TYPE_CHECKING or has_hooked_transformer():
+    from mamba_lens import HookedMamba
+    from transformer_lens import HookedTransformer
 
 
 @pytest.fixture
@@ -24,6 +31,7 @@ def gpt2_proxy_model():
     )
 
 
+@requires_hooked_transformer
 def test_load_model_works_with_mamba():
     model = load_model(
         model_class_name="HookedMamba",
@@ -56,6 +64,7 @@ def test_load_model_with_transformer_bridge_matches_unprocessed_hf_model():
         )
 
 
+@requires_hooked_transformer
 def test_load_model_with_transformer_bridge_matches_hooked_transformer():
     hooked_model = load_model(
         model_class_name="HookedTransformer",
@@ -68,7 +77,6 @@ def test_load_model_with_transformer_bridge_matches_hooked_transformer():
         device="cpu",
     )
     assert isinstance(hooked_model, HookedTransformer)
-    assert TransformerBridge is not None
     assert isinstance(bridge_model, TransformerBridge)
     prompts = [
         "Once upon a time there was a little dog.",
@@ -93,19 +101,7 @@ def test_load_model_with_transformer_bridge_matches_hooked_transformer():
         assert_close(bridge_cache[hook_name], hooked_cache[hook_name], atol=1e-6)
 
 
-def test_load_model_raises_helpful_error_for_TransformerBridge_when_unavailable(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    # TransformerBridge was added in transformer-lens 3.0
-    monkeypatch.setattr("sae_lens.load_model.TransformerBridge", None)
-    with pytest.raises(ValueError, match="requires transformer-lens>=3.0"):
-        load_model(
-            model_class_name="TransformerBridge",
-            model_name="tiny-stories-1M",
-            device="cpu",
-        )
-
-
+@requires_hooked_transformer
 def test_load_model_works_without_model_kwargs():
     model = load_model(
         model_class_name="HookedTransformer",
@@ -115,6 +111,7 @@ def test_load_model_works_without_model_kwargs():
     assert isinstance(model, HookedTransformer)
 
 
+@requires_hooked_transformer
 def test_load_model_works_with_model_kwargs():
     model = load_model(
         model_class_name="HookedTransformer",
@@ -124,6 +121,26 @@ def test_load_model_works_with_model_kwargs():
     )
     assert isinstance(model, HookedTransformer)
     assert model.cfg.dtype == torch.float16
+
+
+@pytest.mark.parametrize(
+    ("model_class_name", "expected_message"),
+    [
+        ("HookedTransformer", "model_class_name='TransformerBridge'"),
+        ("HookedMamba", "mamba-lens is built on HookedTransformer"),
+    ],
+)
+def test_load_model_raises_helpful_error_when_HookedTransformer_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch, model_class_name: str, expected_message: str
+):
+    # transformer-lens >= 4.0 removed HookedTransformer
+    monkeypatch.setattr("sae_lens.load_model.HookedTransformer", None)
+    with pytest.raises(ValueError, match=expected_message):
+        load_model(
+            model_class_name=model_class_name,
+            model_name="tiny-stories-1M",
+            device="cpu",
+        )
 
 
 def test_load_model_with_generic_huggingface_lm():
@@ -217,6 +234,7 @@ def test_HookedProxyLM_gives_same_cached_states_as_original_implementation():
         assert_close(cache[f"transformer.h.{i}"], hf_output.hidden_states[i + 1])
 
 
+@requires_hooked_transformer
 def test_HookedProxyLM_gives_same_cached_states_as_tlens_implementation(
     gpt2_proxy_model: HookedProxyLM,
 ):
@@ -233,6 +251,7 @@ def test_HookedProxyLM_gives_same_cached_states_as_tlens_implementation(
         )
 
 
+@requires_hooked_transformer
 def test_HookedProxyLM_forward_gives_same_output_as_tlens(
     gpt2_proxy_model: HookedProxyLM,
 ):
@@ -264,6 +283,7 @@ def test_extract_logits_from_output_works_with_multiple_return_types():
     assert_close(logits_dict, logits_tuple)
 
 
+@requires_hooked_transformer
 def test_HookedProxyLM_to_tokens_gives_same_output_as_tlens(
     gpt2_proxy_model: HookedProxyLM,
 ):

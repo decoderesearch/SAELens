@@ -1,14 +1,16 @@
+from __future__ import annotations
+
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import torch
 from safetensors.torch import load_file
-from transformer_lens import HookedTransformer
 from transformers import AutoModelForCausalLM
 
 from sae_lens import __version__
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.config import LanguageModelSAERunnerConfig
 from sae_lens.constants import (
     ACTIVATIONS_STORE_STATE_FILENAME,
@@ -35,7 +37,11 @@ from tests.helpers import (
     TINYSTORIES_MODEL,
     assert_close,
     build_runner_cfg_for_arch,
+    requires_hooked_transformer,
 )
+
+if TYPE_CHECKING or has_hooked_transformer():
+    from transformer_lens import HookedTransformer
 
 
 @pytest.mark.parametrize("architecture", ALL_TRAINING_ARCHITECTURES)
@@ -860,6 +866,7 @@ def test_LanguageModelSAETrainingRunner_skips_save_final_sae_when_output_path_no
     assert not Path("output").exists()
 
 
+@requires_hooked_transformer
 class TestResumeFromCheckpoint:
     """Tests for the resume_from_checkpoint functionality."""
 

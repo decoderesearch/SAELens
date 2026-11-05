@@ -1,15 +1,17 @@
+from __future__ import annotations
+
 import argparse
 import json
 import math
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
 from datasets import Dataset
-from transformer_lens import HookedTransformer, HookedTransformerConfig
 
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.config import LanguageModelSAERunnerConfig
 from sae_lens.evals import (
     EvalConfig,
@@ -48,10 +50,15 @@ from tests.helpers import (
     TINYSTORIES_MODEL,
     build_batchtopk_runner_cfg,
     build_runner_cfg,
+    build_sae_cfg,
     build_topk_runner_cfg,
     load_model_cached,
     random_params,
+    requires_hooked_transformer,
 )
+
+if TYPE_CHECKING or has_hooked_transformer():
+    from transformer_lens import HookedTransformer, HookedTransformerConfig
 
 TRAINER_EVAL_CONFIG = EvalConfig(
     n_eval_reconstruction_batches=10,
@@ -217,6 +224,7 @@ def feature_density_eval_inputs(request: pytest.FixtureRequest):
     return model, sae, store
 
 
+@requires_hooked_transformer
 @pytest.mark.parametrize("exclude_special_tokens", [False, [0]])
 def test_run_evals_feature_density_only(
     feature_density_eval_inputs: tuple[
@@ -245,6 +253,7 @@ def test_run_evals_feature_density_only(
     ]
 
 
+@requires_hooked_transformer
 @pytest.mark.parametrize("n_batches", [0, -1])
 def test_run_evals_feature_density_requires_positive_batches(
     feature_density_eval_inputs: tuple[
@@ -271,6 +280,7 @@ def test_run_evals_feature_density_requires_positive_batches(
     assert sae.hook_z_reshaping_mode is original_hook_z_reshaping_mode
 
 
+@requires_hooked_transformer
 @pytest.mark.parametrize("use_attention_mask", [False, True])
 def test_run_evals_reconstruction_uses_model_kwargs(
     feature_density_eval_inputs: tuple[
@@ -585,6 +595,7 @@ def test_run_evals_reconstructs_and_scores_only_non_excluded_tokens(
     ] == pytest.approx(expected_ce_loss.item())
 
 
+@requires_hooked_transformer
 def test_identity_reconstruction_preserves_predictions_with_excluded_tokens():
     model = HookedTransformer(
         HookedTransformerConfig(
@@ -749,7 +760,7 @@ def test_run_evaluations(
 
 @patch("sae_lens.evals.run_evals")
 @patch("sae_lens.evals.ActivationsStore")
-@patch("sae_lens.evals.HookedTransformer", MagicMock())
+@patch("sae_lens.evals.load_model", MagicMock())
 @patch("sae_lens.evals.SAE")
 @patch("sae_lens.evals.get_saes_from_regex")
 def test_multiple_evals_default_datasets_match_cli_default(
@@ -808,6 +819,7 @@ def test_process_results(tmp_path: Path):
     assert csv_path.exists()
 
 
+@requires_hooked_transformer
 def test_run_evals_gives_same_results_with_transformer_bridge_and_hooked_transformer():
     d_in = 64
     dataset = Dataset.from_list(
@@ -874,6 +886,7 @@ def test_run_evals_gives_same_results_with_transformer_bridge_and_hooked_transfo
         assert bridge_metrics[section] == pytest.approx(section_metrics, rel=1e-5)
 
 
+@requires_hooked_transformer
 def test_get_downstream_reconstruction_metrics_with_hf_model_gives_same_results_as_tlens_model(
     gpt2_res_jb_l4_sae: SAE[Any], example_dataset: Dataset
 ):
@@ -920,6 +933,7 @@ def test_get_downstream_reconstruction_metrics_with_hf_model_gives_same_results_
         assert hf_metrics[key] == pytest.approx(tlens_metrics[key], abs=1e-3)
 
 
+@requires_hooked_transformer
 def test_get_sparsity_and_variance_metrics_with_hf_model_gives_same_results_as_tlens_model(
     gpt2_res_jb_l4_sae: StandardSAE,
     example_dataset: Dataset,
@@ -1055,6 +1069,58 @@ def test_get_saes_from_regex_multiple_matches(mock_all_loadable_saes: MagicMock)
         ("release2", "sae3", 0.8, 0.2),
     ]
     assert result == expected
+
+
+@pytest.mark.parametrize(("identity", "expected_score"), [(True, 1.0), (False, 0.0)])
+def test_run_evals_with_transformer_bridge_scores_identity_and_zero_saes(
+    example_dataset: Dataset, identity: bool, expected_score: float
+):
+    d_in = 64
+    model = load_model("TransformerBridge", TINYSTORIES_MODEL, device="cpu")
+    sae = StandardSAE(
+        build_sae_cfg(
+            d_in=d_in,
+            d_sae=2 * d_in,
+            metadata=SAEMetadata(
+                model_name=TINYSTORIES_MODEL,
+                hook_name="blocks.1.hook_resid_pre",
+                prepend_bos=True,
+            ),
+        )
+    )
+    with torch.no_grad():
+        # the identity SAE encodes x as [relu(x), relu(-x)] and decodes it back to x
+        sae.W_dec.data = torch.cat([torch.eye(d_in), -1 * torch.eye(d_in)])
+        sae.W_enc.data = sae.W_dec.T.clone()
+        if not identity:
+            sae.W_dec.data = torch.zeros_like(sae.W_dec)
+        sae.b_enc.data = torch.zeros_like(sae.b_enc)
+        sae.b_dec.data = torch.zeros_like(sae.b_dec)
+    activation_store = ActivationsStore.from_sae(
+        model, sae, dataset=example_dataset, context_size=8, store_batch_size_prompts=4
+    )
+
+    metrics, _ = run_evals(
+        sae=sae,
+        activation_store=activation_store,
+        model=model,
+        activation_scaler=ActivationScaler(),
+        eval_config=EvalConfig(
+            n_eval_reconstruction_batches=2,
+            compute_kl=True,
+            compute_ce_loss=True,
+            batch_size_prompts=4,
+        ),
+        # special tokens keep their original activations, but the ablation zeros them
+        exclude_special_tokens=False,
+    )
+
+    # A zero SAE output is identical to the zero-ablation run, and an identity SAE
+    # is identical to not replacing the activations at all
+    performance = metrics["model_performance_preservation"]
+    behavior = metrics["model_behavior_preservation"]
+    assert performance["ce_loss_score"] == pytest.approx(expected_score, abs=1e-5)
+    assert behavior["kl_div_score"] == pytest.approx(expected_score, abs=1e-5)
 
 
 @pytest.mark.parametrize("compute_density", [False, True])
@@ -1280,6 +1346,7 @@ def test_get_sparsity_and_variance_metrics_mse_is_invariant_to_batch_size(
     )
 
 
+@requires_hooked_transformer
 @pytest.mark.parametrize("dtype", ["float16", "bfloat16"])
 def test_get_sparsity_and_variance_metrics_low_precision_large_norm_activations(
     dtype: str,
@@ -1584,6 +1651,7 @@ def test_process_args():
     assert opts.verbose is True
 
 
+@requires_hooked_transformer
 def test_run_evals_cli(tmp_path: Path):
     args = [
         "gpt2-small-res-jb",

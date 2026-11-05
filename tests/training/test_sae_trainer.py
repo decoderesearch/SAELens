@@ -1,16 +1,18 @@
+from __future__ import annotations
+
 import copy
 import json
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 from unittest.mock import patch
 
 import pytest
 import torch
 from datasets import Dataset
-from transformer_lens import HookedTransformer
 from typing_extensions import override
 
 from sae_lens import __version__
+from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.config import (
     LanguageModelSAERunnerConfig,
     LoggingConfig,
@@ -40,6 +42,9 @@ from tests.helpers import (
     load_model_cached,
     random_params,
 )
+
+if TYPE_CHECKING or has_hooked_transformer():
+    from transformer_lens import HookedTransformer
 
 
 @pytest.fixture

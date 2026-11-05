@@ -4,7 +4,6 @@ from typing import Any, cast
 
 import pytest
 import torch
-from transformer_lens.HookedTransformer import HookedRootModule
 
 from sae_lens.evals import get_sparsity_and_variance_metrics
 from sae_lens.registry import get_sae_class, get_sae_training_class
@@ -19,6 +18,7 @@ from sae_lens.saes.abstopk_sae import (
 from sae_lens.saes.sae import SAE, SAEMetadata, TrainStepInput
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
+from sae_lens.transformer_lens_compat import HookedRootModule
 from tests.helpers import (
     assert_close,
     build_abstopk_sae_cfg,
