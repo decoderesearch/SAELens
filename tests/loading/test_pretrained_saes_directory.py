@@ -1,5 +1,9 @@
+from collections import Counter
+from importlib.resources import files
+
 import pandas as pd
 import pytest
+import yaml
 
 from sae_lens.loading.pretrained_saes_directory import (
     PretrainedSAELookup,
@@ -141,6 +145,34 @@ def test_get_pretrained_saes_directory_saes_map_paths_are_all_str():
         if not isinstance(path, str)
     ]
     assert non_str_paths == []
+
+
+def test_pretrained_saes_yaml_sae_entries_have_known_keys_and_unique_ids():
+    known_sae_keys = {
+        "id",
+        "path",
+        "l0",
+        "neuronpedia",
+        "norm_scaling_factor",
+        "variance_explained",
+    }
+    with files("sae_lens").joinpath("pretrained_saes.yaml").open("r") as file:
+        data = yaml.load(file, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+    unknown_keys = [
+        (release, sae["id"], sorted(set(sae) - known_sae_keys))
+        for release, value in data.items()
+        for sae in value["saes"]
+        if set(sae) - known_sae_keys
+    ]
+    duplicate_ids = [
+        (release, sae_id)
+        for release, value in data.items()
+        for sae_id, count in Counter(sae["id"] for sae in value["saes"]).items()
+        if count > 1
+    ]
+    assert unknown_keys == []
+    assert duplicate_ids == []
 
 
 def test_get_repo_id_and_folder_name_release_not_found():
