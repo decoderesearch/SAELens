@@ -36211,25 +36211,9 @@ gpt2-small-res_scefr-ajt:
   - id: blocks.6.hook_resid_pre
     neuronpedia: gpt2-small/6-res_scefr-ajt
     path: 6-res_scefr-ajt
-  - conversion_func: null
-    id: blocks.10.hook_resid_pre
-    links:
-      dashboards: https://www.neuronpedia.org/gpt2-small/res_scefr-ajt
-      model: https://huggingface.co/gpt2
-    model: gpt2-small
+  - id: blocks.10.hook_resid_pre
     neuronpedia: gpt2-small/10-res_scefr-ajt
     path: 10-res_scefr-ajt
-    repo_id: neuronpedia/gpt2-small__res_scefr-ajt
-    saes:
-    - id: blocks.2.hook_resid_pre
-      neuronpedia: gpt2-small/2-res_scefr-ajt
-      path: 2-res_scefr-ajt
-    - id: blocks.6.hook_resid_pre
-      neuronpedia: gpt2-small/6-res_scefr-ajt
-      path: 6-res_scefr-ajt
-    - id: blocks.10.hook_resid_pre
-      neuronpedia: gpt2-small/10-res_scefr-ajt
-      path: 10-res_scefr-ajt
 gpt2-small-res_scl-ajt:
   conversion_func: null
   links:
