@@ -461,7 +461,6 @@ def get_sparsity_and_variance_metrics(
     hook_head_index = sae.cfg.metadata.hook_head_index
 
     metric_dict = {}
-    feature_metric_dict = {}
 
     if compute_l2_norms:
         metric_dict["l2_norm_in"] = []
@@ -479,9 +478,6 @@ def get_sparsity_and_variance_metrics(
         metric_dict["explained_variance_legacy"] = []
         metric_dict["mse"] = []
         metric_dict["cossim"] = []
-    if compute_featurewise_density_statistics:
-        feature_metric_dict["feature_density"] = []
-        feature_metric_dict["consistent_activation_heuristic"] = []
 
     total_feature_acts = torch.zeros(sae.cfg.d_sae, device=sae.device)
     total_feature_prompts = torch.zeros(sae.cfg.d_sae, device=sae.device)
@@ -658,11 +654,16 @@ def get_sparsity_and_variance_metrics(
         metrics["explained_variance"] = explained_variance_calc.compute()
 
     # Aggregate feature-wise metrics
+    # These counts are only accumulated when density statistics are requested.
+    # Otherwise they stay at zero and dividing them would give all-NaN metrics.
     feature_metrics: dict[str, list[float]] = {}
-    feature_metrics["feature_density"] = (total_feature_acts / total_tokens).tolist()
-    feature_metrics["consistent_activation_heuristic"] = (
-        total_feature_acts / total_feature_prompts
-    ).tolist()
+    if compute_featurewise_density_statistics:
+        feature_metrics["feature_density"] = (
+            total_feature_acts / total_tokens
+        ).tolist()
+        feature_metrics["consistent_activation_heuristic"] = (
+            total_feature_acts / total_feature_prompts
+        ).tolist()
 
     return metrics, feature_metrics
 
