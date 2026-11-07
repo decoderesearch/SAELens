@@ -1423,9 +1423,10 @@ def get_sparsify_config_from_disk(
         layer = int(match.group(1))
         hook_name = f"blocks.{layer}.hook_resid_post"
 
-    d_sae = old_cfg_dict.get("num_latents")
-    if d_sae is None:
-        d_sae = old_cfg_dict["d_in"] * old_cfg_dict["expansion_factor"]
+    # sparsify uses num_latents=0 to mean "use d_in * expansion_factor"
+    d_sae = old_cfg_dict.get("num_latents") or (
+        old_cfg_dict["d_in"] * old_cfg_dict["expansion_factor"]
+    )
 
     cfg_dict: dict[str, Any] = {
         "architecture": "standard",
@@ -1498,8 +1499,9 @@ def sparsify_disk_loader(
         else state_dict_loaded["encoder.weight"].T
     )
 
+    # sparsify already stores W_dec as (num_latents, d_in), matching SAELens
     if "W_dec" in state_dict_loaded:
-        W_dec = state_dict_loaded["W_dec"].T
+        W_dec = state_dict_loaded["W_dec"]
     else:
         W_dec = state_dict_loaded["decoder.weight"].T
 
