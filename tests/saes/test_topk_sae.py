@@ -8,7 +8,7 @@ from sparsify import SparseCoder, SparseCoderConfig
 
 from sae_lens.registry import get_sae_class, get_sae_training_class
 from sae_lens.saes.sae import SAE, TrainStepInput
-from sae_lens.saes.topk_sae import TopK, TopKSAE, TopKTrainingSAE
+from sae_lens.saes.topk_sae import TopK, TopKSAE, TopKTrainingSAE, act_times_W_dec
 from sae_lens.training.activation_scaler import ActivationScaler
 from tests.helpers import (
     assert_close,
@@ -553,3 +553,13 @@ def test_TopKSAE_fold_activation_whitening_folds_W_dec_norm_first_when_rescale_a
     assert sae.W_dec.norm(dim=-1).max().item() != pytest.approx(1.0, abs=1e-6)
     assert_close(sae.encode(inputs), whitened_features)
     assert_close(sae(inputs), whitened_outputs)
+
+
+@pytest.mark.parametrize("sparse", [False, True])
+def test_decode_with_zero_norm_decoder_row(sparse: bool):
+    weights = torch.tensor([[0.0, 0.0], [3.0, 4.0]])
+    activations = torch.tensor([[0.0, 2.0], [0.0, 0.0]])
+    if sparse:
+        activations = activations.to_sparse()
+    result = act_times_W_dec(activations, weights, True)
+    torch.testing.assert_close(result, torch.tensor([[1.2, 1.6], [0.0, 0.0]]))
