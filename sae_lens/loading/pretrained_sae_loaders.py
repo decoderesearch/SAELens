@@ -919,18 +919,22 @@ def llama_scope_sae_huggingface_loader(
         sae_path, device=device, dtype=cfg_dict.get("dtype")
     )
 
+    W_dec = state_dict_loaded["decoder.weight"].T
+
+    # Llama Scope SAEs were trained with sparsity_include_decoder_norm=True, so the
+    # JumpReLU gate is applied to hidden_pre * ||W_dec[i]||. The released decoder rows
+    # are not unit-norm, so we divide the threshold by each row's norm to gate on
+    # hidden_pre directly.
+    W_dec_norm = W_dec.float().norm(dim=-1)
+    threshold = (cfg_dict["jump_relu_threshold"] / W_dec_norm).to(W_dec.dtype)
+
     # Convert and organize the weights
     state_dict = {
         "W_enc": state_dict_loaded["encoder.weight"].T,
-        "W_dec": state_dict_loaded["decoder.weight"].T,
+        "W_dec": W_dec,
         "b_enc": state_dict_loaded["encoder.bias"],
         "b_dec": state_dict_loaded["decoder.bias"],
-        "threshold": torch.ones(
-            cfg_dict["d_sae"],
-            dtype=str_to_dtype(cfg_dict["dtype"]),
-            device=cfg_dict["device"],
-        )
-        * cfg_dict["jump_relu_threshold"],
+        "threshold": threshold,
     }
 
     # No sparsity tensor for Llama Scope SAEs
