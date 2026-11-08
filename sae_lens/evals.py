@@ -378,7 +378,10 @@ def get_downstream_reconstruction_metrics(
 
     metrics: dict[str, float] = {}
     for metric_name, metric_values in metrics_dict.items():
-        metrics[f"{metric_name}"] = torch.cat(metric_values).mean().item()
+        # Average in float64 on CPU (MPS has no float64): a bfloat16 or float16
+        # mean is rounded to that dtype (about 3 significant digits for bfloat16).
+        metric_values_64 = torch.cat(metric_values).to("cpu", torch.float64)
+        metrics[f"{metric_name}"] = metric_values_64.mean().item()
 
     if compute_kl:
         metrics["kl_div_score"] = (
@@ -597,7 +600,12 @@ def get_sparsity_and_variance_metrics(
             # abs() before summing so the L1 metric aggregates activation
             # magnitudes; without it, signed activations (e.g. AbsTopK) can
             # cancel or yield a negative "L1". No-op for ReLU-based SAEs (>= 0).
-            l1 = flattened_sae_feature_acts.abs().sum(dim=-1)
+            l1 = flattened_sae_feature_acts.abs().sum(
+                dim=-1,
+                dtype=torch.promote_types(
+                    flattened_sae_feature_acts.dtype, torch.float32
+                ),
+            )
             metric_dict["l0"].append(l0)
             metric_dict["l1"].append(l1)
 
@@ -651,7 +659,10 @@ def get_sparsity_and_variance_metrics(
     # Aggregate scalar metrics
     metrics: dict[str, float] = {}
     for metric_name, metric_values in metric_dict.items():
-        metrics[f"{metric_name}"] = torch.cat(metric_values).mean().item()
+        # Average in float64 on CPU (MPS has no float64): a bfloat16 or float16
+        # mean is rounded to that dtype (about 3 significant digits for bfloat16).
+        metric_values_64 = torch.cat(metric_values).to("cpu", torch.float64)
+        metrics[f"{metric_name}"] = metric_values_64.mean().item()
 
     # calculate explained variance
     if compute_variance_metrics:
