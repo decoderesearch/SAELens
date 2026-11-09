@@ -789,6 +789,61 @@ def test_multiple_evals_default_datasets_match_cli_default(
     assert evaluated_datasets == process_args(["release1", "sae1"]).datasets
 
 
+@pytest.mark.parametrize(
+    ("hooked_transformer_available", "expected_class", "expected_kwargs"),
+    [
+        (
+            True,
+            "HookedTransformer",
+            {"center_writing_weights": False, "fold_ln": False, "n_ctx": 64},
+        ),
+        (False, "TransformerBridge", {"n_ctx": 64}),
+    ],
+)
+@patch("sae_lens.evals.run_evals")
+@patch("sae_lens.evals.ActivationsStore", MagicMock())
+@patch("sae_lens.evals.load_model")
+@patch("sae_lens.evals.SAE")
+@patch("sae_lens.evals.get_saes_from_regex")
+def test_multiple_evals_loads_the_model_class_available_in_transformer_lens(
+    mock_get_saes_from_regex: MagicMock,
+    mock_sae: MagicMock,
+    mock_load_model: MagicMock,
+    mock_run_evals: MagicMock,
+    hooked_transformer_available: bool,
+    expected_class: str,
+    expected_kwargs: dict[str, Any],
+    tmp_path: Path,
+):
+    mock_get_saes_from_regex.return_value = [("release1", "sae1", 0.8, 10)]
+    metadata = mock_sae.from_pretrained.return_value.cfg.metadata
+    metadata.model_name = "gpt2"
+    metadata.model_from_pretrained_kwargs = {
+        "center_writing_weights": False,
+        "fold_ln": False,
+        "n_ctx": 64,
+    }
+    mock_run_evals.return_value = ({}, {})
+
+    with patch(
+        "sae_lens.analysis.compat.has_hooked_transformer",
+        return_value=hooked_transformer_available,
+    ):
+        multiple_evals(
+            sae_regex_pattern="release1",
+            sae_block_pattern="sae1",
+            n_eval_reconstruction_batches=1,
+            n_eval_sparsity_variance_batches=1,
+            datasets=["dataset1"],
+            output_dir=str(tmp_path),
+        )
+
+    mock_load_model.assert_called_once()
+    args, kwargs = mock_load_model.call_args
+    assert args == (expected_class, "gpt2")
+    assert kwargs["model_from_pretrained_kwargs"] == expected_kwargs
+
+
 def test_process_results(tmp_path: Path):
     eval_results = [
         {
@@ -1651,7 +1706,6 @@ def test_process_args():
     assert opts.verbose is True
 
 
-@requires_hooked_transformer
 def test_run_evals_cli(tmp_path: Path):
     args = [
         "gpt2-small-res-jb",
