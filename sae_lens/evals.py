@@ -18,6 +18,7 @@ import pandas as pd
 import torch
 from tqdm.auto import tqdm
 
+from sae_lens.analysis.compat import default_model_class_name
 from sae_lens.load_model import load_model
 from sae_lens.loading.pretrained_saes_directory import get_pretrained_saes_directory
 from sae_lens.saes.sae import SAE
@@ -884,7 +885,7 @@ def multiple_evals(
             del current_model  # potentially saves GPU memory
             current_model_str = sae.cfg.metadata.model_name
             current_model = load_model(
-                "HookedTransformer",
+                default_model_class_name(),
                 current_model_str,
                 device=device,
                 model_from_pretrained_kwargs=sae.cfg.metadata.model_from_pretrained_kwargs,
