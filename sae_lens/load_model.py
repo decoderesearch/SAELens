@@ -20,7 +20,8 @@ except ImportError:  # removed in transformer-lens 4.0
 
 
 # HookedTransformer's weight processing options. TransformerBridge.boot_transformers
-# doesn't take them, so load_model applies them with TransformerBridge.process_weights.
+# doesn't take them, so boot_transformer_bridge applies them with
+# TransformerBridge.process_weights.
 _WEIGHT_PROCESSING_KWARGS = (
     "fold_ln",
     "center_writing_weights",
@@ -28,6 +29,21 @@ _WEIGHT_PROCESSING_KWARGS = (
     "fold_value_biases",
     "refactor_factored_attn_matrices",
 )
+
+
+def boot_transformer_bridge(model_name: str, **kwargs: Any) -> TransformerBridge:
+    """
+    Boot a `TransformerBridge`, accepting HookedTransformer's weight processing kwargs.
+
+    Like `HookedTransformer.from_pretrained_no_processing`, the weights are only
+    processed in the ways requested (e.g. by pretrained SAE metadata). The remaining
+    kwargs are passed to `TransformerBridge.boot_transformers`.
+    """
+    processing = {key: kwargs.pop(key, False) for key in _WEIGHT_PROCESSING_KWARGS}
+    bridge = TransformerBridge.boot_transformers(model_name, **kwargs)
+    if any(processing.values()):
+        bridge.process_weights(**processing)
+    return bridge
 
 
 class Output(NamedTuple):
@@ -79,22 +95,9 @@ def load_model(
             model_name=model_name, device=device, **model_from_pretrained_kwargs
         )
     if model_class_name == "TransformerBridge":
-        # Like HookedTransformer.from_pretrained_no_processing, only process the
-        # weights in the ways requested (e.g. by pretrained SAE metadata)
-        processing = {
-            key: model_from_pretrained_kwargs.get(key, False)
-            for key in _WEIGHT_PROCESSING_KWARGS
-        }
-        boot_kwargs = {
-            key: value
-            for key, value in model_from_pretrained_kwargs.items()
-            if key not in _WEIGHT_PROCESSING_KWARGS
-        }
-        bridge = TransformerBridge.boot_transformers(
-            model_name, device=device, **boot_kwargs
+        bridge = boot_transformer_bridge(
+            model_name, device=device, **model_from_pretrained_kwargs
         )
-        if any(processing.values()):
-            bridge.process_weights(**processing)
         # TransformerBridge isn't a HookedRootModule subclass, but provides the same
         # hook API (hook_dict, run_with_cache, run_with_hooks, ...)
         return cast(HookedRootModule, bridge)

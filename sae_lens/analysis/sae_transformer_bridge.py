@@ -11,6 +11,7 @@ from transformer_lens.model_bridge import (  # type: ignore[import-not-found]
 
 from sae_lens import logger
 from sae_lens.analysis.sae_wrapper import _SAEWrapper, get_deep_attr, set_deep_attr
+from sae_lens.load_model import boot_transformer_bridge
 from sae_lens.saes.sae import SAE
 
 SingleLoss = torch.Tensor  # Type alias for a single element tensor
@@ -53,13 +54,17 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
 
         Args:
             model_name: The name of the model to load (e.g., "gpt2", "gemma-2-2b")
-            **kwargs: Additional arguments passed to TransformerBridge.boot_transformers
+            **kwargs: Additional arguments passed to TransformerBridge.boot_transformers.
+                HookedTransformer's weight processing kwargs (e.g. `fold_ln` and
+                `center_writing_weights`, as in an SAE's
+                `cfg.metadata.model_from_pretrained_kwargs`) are applied with
+                TransformerBridge.process_weights instead.
 
         Returns:
             SAETransformerBridge instance with the loaded model
         """
         # Boot parent TransformerBridge
-        bridge = TransformerBridge.boot_transformers(model_name, **kwargs)
+        bridge = boot_transformer_bridge(model_name, **kwargs)
         # Convert to our class
         # NOTE: this is super hacky and scary, but I don't know how else to achieve this given TLens' internal code
         bridge.__class__ = cls

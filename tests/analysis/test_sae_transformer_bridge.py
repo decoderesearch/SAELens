@@ -213,6 +213,27 @@ def test_boot_transformers_loads_model(bridge_model: SAETransformerBridge) -> No
     assert len(bridge_model._acts_to_saes) == 0
 
 
+@pytest.mark.parametrize("center_writing_weights", [False, True])
+def test_boot_transformers_applies_hooked_transformer_weight_processing_kwargs(
+    center_writing_weights: bool,
+) -> None:
+    model = SAETransformerBridge.boot_transformers(
+        MODEL,
+        device="cpu",
+        center_writing_weights=center_writing_weights,
+        fold_ln=False,
+    )
+    assert isinstance(model, SAETransformerBridge)
+    _, cache = model.run_with_cache(PROMPT)
+    # Centering the weights that write to the residual stream makes each residual
+    # vector have zero mean across d_model
+    resid_means = cache["blocks.1.hook_resid_post"].mean(dim=-1)
+    if center_writing_weights:
+        assert_close(resid_means, torch.zeros_like(resid_means), atol=1e-6)
+    else:
+        assert_not_close(resid_means, torch.zeros_like(resid_means), atol=1e-3)
+
+
 def test_add_sae_changes_output(bridge_model: SAETransformerBridge) -> None:
     original_logits = bridge_model(PROMPT)
 
