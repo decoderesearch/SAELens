@@ -254,6 +254,26 @@ def test_run_evals_feature_density_only(
 
 
 @requires_hooked_transformer
+def test_run_evals_omits_feature_density_when_not_requested(
+    feature_density_eval_inputs: tuple[
+        HookedTransformer, StandardSAE, ActivationsStore
+    ],
+):
+    model, sae, store = feature_density_eval_inputs
+    metrics, feature_metrics = run_evals(
+        sae,
+        store,
+        model,
+        ActivationScaler(),
+        eval_config=EvalConfig(compute_l2_norms=True),
+        exclude_special_tokens=False,
+    )
+
+    assert "shrinkage" in metrics
+    assert feature_metrics == {}
+
+
+@requires_hooked_transformer
 @pytest.mark.parametrize("n_batches", [0, -1])
 def test_run_evals_feature_density_requires_positive_batches(
     feature_density_eval_inputs: tuple[
