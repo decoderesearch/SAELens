@@ -1275,7 +1275,7 @@ def test_sparsify_huggingface_loader():
     # sparsify_sae.W_dec is Optional in the type stubs, so first assert it's present
     assert sparsify_sae.W_dec is not None
     torch.testing.assert_close(
-        state_dict["W_dec"], sparsify_sae.W_dec.detach().T, check_dtype=False
+        state_dict["W_dec"], sparsify_sae.W_dec.detach(), check_dtype=False
     )
     torch.testing.assert_close(
         state_dict["b_dec"], sparsify_sae.b_dec.data, check_dtype=False
@@ -1305,8 +1305,32 @@ def test_sparsify_disk_loader(tmp_path: Path):
     torch.testing.assert_close(state_dict["b_enc"], sparsify_sae.encoder.bias.data)
     # sparsify_sae.W_dec is Optional in the type stubs, so first assert it's present
     assert sparsify_sae.W_dec is not None
-    torch.testing.assert_close(state_dict["W_dec"], sparsify_sae.W_dec.detach().T)
+    torch.testing.assert_close(state_dict["W_dec"], sparsify_sae.W_dec.detach())
     torch.testing.assert_close(state_dict["b_dec"], sparsify_sae.b_dec.data)
+
+
+@pytest.mark.parametrize(
+    "sparsify_cfg",
+    [
+        SparseCoderConfig(num_latents=24, k=3),
+        # num_latents=0 means sparsify uses d_in * expansion_factor latents
+        SparseCoderConfig(expansion_factor=4, num_latents=0, k=3),
+    ],
+)
+def test_sparsify_disk_loader_sae_matches_sparsify_outputs(
+    tmp_path: Path, sparsify_cfg: SparseCoderConfig
+):
+    d_in = 6
+    sparsify_sae = SparseCoder(d_in, cfg=sparsify_cfg, dtype=torch.float32)
+    path = tmp_path / "layers.0"
+    sparsify_sae.save_to_disk(path)
+
+    sae = SAE.load_from_disk(path, converter=sparsify_disk_loader, dtype="float32")
+
+    assert sae.cfg.d_sae == sparsify_sae.num_latents == 24
+    x = torch.randn(10, d_in)
+    sparsify_out = sparsify_sae(x)
+    torch.testing.assert_close(sae.decode(sae.encode(x)), sparsify_out.sae_out)
 
 
 def test_get_dictionary_learning_config_1_from_hf_andy():
