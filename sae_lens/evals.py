@@ -1,6 +1,5 @@
 # ruff: noqa: T201
 import argparse
-import inspect
 import json
 import math
 import re
@@ -18,7 +17,6 @@ import einops
 import pandas as pd
 import torch
 from tqdm.auto import tqdm
-from transformer_lens.model_bridge import TransformerBridge
 
 from sae_lens.analysis.compat import default_model_class_name
 from sae_lens.load_model import load_model
@@ -30,10 +28,6 @@ from sae_lens.transformer_lens_compat import HookedRootModule
 from sae_lens.util import (
     extract_stop_at_layer_from_tlens_hook_name,
     get_special_token_ids,
-)
-
-BRIDGE_BOOT_PARAMS = frozenset(
-    inspect.signature(TransformerBridge.boot_transformers).parameters
 )
 
 
@@ -890,21 +884,11 @@ def multiple_evals(
         if current_model_str != sae.cfg.metadata.model_name:
             del current_model  # potentially saves GPU memory
             current_model_str = sae.cfg.metadata.model_name
-            model_class_name = default_model_class_name()
-            model_kwargs = sae.cfg.metadata.model_from_pretrained_kwargs or {}
-            if model_class_name == "TransformerBridge":
-                # SAE metadata records HookedTransformer loading flags (e.g.
-                # center_writing_weights), which boot_transformers rejects.
-                model_kwargs = {
-                    key: value
-                    for key, value in model_kwargs.items()
-                    if key in BRIDGE_BOOT_PARAMS
-                }
             current_model = load_model(
-                model_class_name,
+                default_model_class_name(),
                 current_model_str,
                 device=device,
-                model_from_pretrained_kwargs=model_kwargs,
+                model_from_pretrained_kwargs=sae.cfg.metadata.model_from_pretrained_kwargs,
             )
         assert current_model is not None
 

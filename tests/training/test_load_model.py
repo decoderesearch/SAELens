@@ -14,6 +14,7 @@ from sae_lens.load_model import (
 )
 from tests.helpers import (
     assert_close,
+    assert_not_close,
     requires_hooked_transformer,
 )
 
@@ -121,6 +122,81 @@ def test_load_model_works_with_model_kwargs():
     )
     assert isinstance(model, HookedTransformer)
     assert model.cfg.dtype == torch.float16
+
+
+@requires_hooked_transformer
+@pytest.mark.parametrize(
+    "processing_kwargs",
+    [
+        {"center_writing_weights": True},
+        {"fold_ln": True},
+        {"center_unembed": True},
+        {
+            "fold_ln": True,
+            "center_writing_weights": True,
+            "center_unembed": True,
+            "fold_value_biases": True,
+        },
+    ],
+)
+def test_load_model_with_transformer_bridge_applies_weight_processing_like_hooked_transformer(
+    processing_kwargs: dict[str, bool],
+):
+    hooked_model = load_model(
+        model_class_name="HookedTransformer",
+        model_name="tiny-stories-1M",
+        device="cpu",
+        model_from_pretrained_kwargs=processing_kwargs,
+    )
+    bridge_model = load_model(
+        model_class_name="TransformerBridge",
+        model_name="tiny-stories-1M",
+        device="cpu",
+        model_from_pretrained_kwargs=processing_kwargs,
+    )
+    assert isinstance(hooked_model, HookedTransformer)
+    tokens = hooked_model.to_tokens(
+        [
+            "Once upon a time there was a little dog.",
+            "The cat sat on the mat and looked around.",
+        ]
+    )
+
+    hooked_logits, hooked_cache = hooked_model.run_with_cache(tokens)
+    bridge_logits, bridge_cache = bridge_model.run_with_cache(tokens)
+
+    assert isinstance(hooked_logits, torch.Tensor)
+    assert_close(bridge_logits, hooked_logits, atol=1e-4)
+    for hook_name in [
+        "blocks.1.hook_resid_post",
+        "blocks.0.hook_mlp_out",
+        "blocks.0.mlp.hook_post",
+        "blocks.0.attn.hook_z",
+    ]:
+        assert_close(bridge_cache[hook_name], hooked_cache[hook_name], atol=1e-6)
+
+
+@pytest.mark.parametrize("center_writing_weights", [False, True])
+def test_load_model_with_transformer_bridge_centers_writing_weights_when_requested(
+    center_writing_weights: bool,
+):
+    model = load_model(
+        model_class_name="TransformerBridge",
+        model_name="tiny-stories-1M",
+        device="cpu",
+        model_from_pretrained_kwargs={
+            "center_writing_weights": center_writing_weights,
+            "fold_ln": False,
+        },
+    )
+    _, cache = model.run_with_cache("Once upon a time there was a little dog.")
+    # Centering the weights that write to the residual stream makes each residual
+    # vector have zero mean across d_model
+    resid_means = cache["blocks.1.hook_resid_post"].mean(dim=-1)
+    if center_writing_weights:
+        assert_close(resid_means, torch.zeros_like(resid_means), atol=1e-6)
+    else:
+        assert_not_close(resid_means, torch.zeros_like(resid_means), atol=1e-3)
 
 
 @pytest.mark.parametrize(

@@ -790,15 +790,8 @@ def test_multiple_evals_default_datasets_match_cli_default(
 
 
 @pytest.mark.parametrize(
-    ("hooked_transformer_available", "expected_class", "expected_kwargs"),
-    [
-        (
-            True,
-            "HookedTransformer",
-            {"center_writing_weights": False, "fold_ln": False, "n_ctx": 64},
-        ),
-        (False, "TransformerBridge", {"n_ctx": 64}),
-    ],
+    ("hooked_transformer_available", "expected_class"),
+    [(True, "HookedTransformer"), (False, "TransformerBridge")],
 )
 @patch("sae_lens.evals.run_evals")
 @patch("sae_lens.evals.ActivationsStore", MagicMock())
@@ -812,15 +805,15 @@ def test_multiple_evals_loads_the_model_class_available_in_transformer_lens(
     mock_run_evals: MagicMock,
     hooked_transformer_available: bool,
     expected_class: str,
-    expected_kwargs: dict[str, Any],
     tmp_path: Path,
 ):
     mock_get_saes_from_regex.return_value = [("release1", "sae1", 0.8, 10)]
     metadata = mock_sae.from_pretrained.return_value.cfg.metadata
     metadata.model_name = "gpt2"
+    # load_model applies HookedTransformer's processing options to TransformerBridge
+    # too, so they're passed through unchanged
     metadata.model_from_pretrained_kwargs = {
-        "center_writing_weights": False,
-        "fold_ln": False,
+        "center_writing_weights": True,
         "n_ctx": 64,
     }
     mock_run_evals.return_value = ({}, {})
@@ -841,7 +834,10 @@ def test_multiple_evals_loads_the_model_class_available_in_transformer_lens(
     mock_load_model.assert_called_once()
     args, kwargs = mock_load_model.call_args
     assert args == (expected_class, "gpt2")
-    assert kwargs["model_from_pretrained_kwargs"] == expected_kwargs
+    assert kwargs["model_from_pretrained_kwargs"] == {
+        "center_writing_weights": True,
+        "n_ctx": 64,
+    }
 
 
 def test_process_results(tmp_path: Path):
