@@ -23,7 +23,7 @@ from huggingface_hub.utils import EntryNotFoundError
 from safetensors.torch import save_file
 from sparsify import SparseCoder, SparseCoderConfig
 
-from sae_lens import StandardSAE, StandardSAEConfig
+from sae_lens import JumpReLUSAE, StandardSAE, StandardSAEConfig
 from sae_lens.loading.pretrained_sae_loaders import (
     _get_with_rate_limit_retry,
     _infer_gemma_3_raw_cfg_dict,
@@ -55,7 +55,7 @@ from sae_lens.loading.pretrained_sae_loaders import (
     temporal_sae_huggingface_loader,
 )
 from sae_lens.saes.sae import SAE
-from tests.helpers import assert_close, random_params
+from tests.helpers import assert_close, build_jumprelu_sae_cfg, random_params
 
 
 def test_load_sae_config_from_huggingface():
@@ -2312,6 +2312,76 @@ def test_llama_scope_sae_huggingface_loader_with_mocked_download(
     assert "threshold" in state_dict
     assert state_dict["W_enc"].shape == (d_in, d_sae)
     assert state_dict["W_dec"].shape == (d_sae, d_in)
+
+
+def test_llama_scope_sae_huggingface_loader_gates_on_decoder_norm_scaled_pre_activations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    d_in = 16
+    d_sae = 64
+    jump_relu_threshold = 0.3
+    average_activation_norm = 2.0
+    scaled_threshold = jump_relu_threshold * d_in**0.5 / average_activation_norm
+
+    config_dir = tmp_path / "Llama3_1-8B-Base-L15R-8x"
+    config_dir.mkdir()
+    hyperparams = {
+        "d_model": d_in,
+        "d_sae": d_sae,
+        "hook_point_in": "blocks.15.hook_resid_post",
+        "jump_relu_threshold": jump_relu_threshold,
+        "dataset_average_activation_norm": {"in": average_activation_norm},
+        "sparsity_include_decoder_norm": True,
+    }
+    with open(config_dir / "hyperparams.json", "w") as f:
+        json.dump(hyperparams, f)
+
+    # Released Llama Scope decoder rows are not unit-norm.
+    W_dec_norm = torch.linspace(0.5, 3.0, d_sae)
+    W_dec = torch.randn(d_sae, d_in)
+    W_dec = W_dec / W_dec.norm(dim=-1, keepdim=True) * W_dec_norm[:, None]
+    # With a zero encoder, the pre-activation of latent i is b_enc[i]. Even latents
+    # sit 50% above the training gate (hidden_pre * ||W_dec[i]|| > threshold), odd
+    # latents 50% below it.
+    fires = torch.arange(d_sae) % 2 == 0
+    b_enc = torch.where(fires, 1.5, 0.5) * scaled_threshold / W_dec_norm
+    state_dict_raw = {
+        "encoder.weight": torch.zeros(d_sae, d_in),
+        "encoder.bias": b_enc,
+        "decoder.weight": W_dec.T.contiguous(),
+        "decoder.bias": torch.zeros(d_in),
+    }
+    checkpoint_dir = config_dir / "checkpoints"
+    checkpoint_dir.mkdir()
+    safetensors_path = checkpoint_dir / "final.safetensors"
+    save_file(state_dict_raw, str(safetensors_path))
+
+    def mock_hf_hub_download(*args: Any, **kwargs: Any) -> str:  # noqa: ARG001
+        filename = args[1] if len(args) >= 2 else kwargs.get("filename", "")
+        if "hyperparams.json" in filename:
+            return str(config_dir / "hyperparams.json")
+        return str(safetensors_path)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+    _, state_dict, _ = llama_scope_sae_huggingface_loader(
+        repo_id="fnlp/Llama3_1-8B-Base-LXR-8x",
+        folder_name="Llama3_1-8B-Base-L15R-8x",
+        device="cpu",
+        cfg_overrides={"dtype": "float32"},
+    )
+
+    assert_close(
+        state_dict["threshold"] * W_dec_norm,
+        torch.full((d_sae,), scaled_threshold),
+    )
+
+    sae = JumpReLUSAE(build_jumprelu_sae_cfg(d_in=d_in, d_sae=d_sae))
+    sae.load_state_dict(state_dict)
+    feature_acts = sae.encode(torch.randn(8, d_in))
+    assert torch.equal(feature_acts > 0, fires.expand(8, d_sae))
 
 
 def test_llama_scope_r1_distill_sae_huggingface_loader_with_mocked_download(
