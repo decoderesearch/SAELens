@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## v6.55.1 (2026-11-10)
+
+### Fix
+
+* fix: load sparsify SAEs with the correct W_dec orientation and d_sae (#778) ([`6758b12`](https://github.com/decoderesearch/SAELens/commit/6758b120543cf22fc697196b16bd282d3c766406))
+
+* fix: include decoder norm in Llama Scope JumpReLU threshold (#782) ([`8d0dd11`](https://github.com/decoderesearch/SAELens/commit/8d0dd11b62f468c71994348c4482e43d0ea911bd))
+
+* fix: keep top-k decoding finite for zero-norm decoder rows (#783) ([`1ba1c8b`](https://github.com/decoderesearch/SAELens/commit/1ba1c8bf968a5e12165e9841b14d9d9f43f25b8d))
+
+* fix: average eval metrics in float64 so low-precision runs are not rounded (#781) ([`c660548`](https://github.com/decoderesearch/SAELens/commit/c66054837fb5cfa8c214f0b09f1e23b9c40d5700))
+
+* fix: remove release-level keys nested in a gpt2-small-res_scefr-ajt SAE entry (#780) ([`a7f07a9`](https://github.com/decoderesearch/SAELens/commit/a7f07a96ecd07a38f9d719a6a8650b983954d062))
+
+* fix: omit featurewise density metrics from run_evals unless requested (#779) ([`183d255`](https://github.com/decoderesearch/SAELens/commit/183d255a7ba533b862f5b00052c2da5c3751e764))
+
+* fix: run the evals CLI on transformer-lens 4 (#784) ([`d53c55b`](https://github.com/decoderesearch/SAELens/commit/d53c55bdb2a8bfc5ed58561ff081de5990c57d46))
+
 ## v6.55.0 (2026-11-05)
 
 ### Feature
