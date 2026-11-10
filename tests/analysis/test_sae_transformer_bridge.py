@@ -226,8 +226,10 @@ def test_boot_transformers_applies_hooked_transformer_weight_processing_kwargs(
     assert isinstance(model, SAETransformerBridge)
     _, cache = model.run_with_cache(PROMPT)
     # Centering the weights that write to the residual stream makes each residual
-    # vector have zero mean across d_model
-    resid_means = cache["blocks.1.hook_resid_post"].mean(dim=-1)
+    # vector have zero mean across d_model. SAETransformerBridge caches under the
+    # resolved hook names, so use blocks.1.hook_out rather than the
+    # blocks.1.hook_resid_post alias
+    resid_means = cache["blocks.1.hook_out"].mean(dim=-1)
     if center_writing_weights:
         assert_close(resid_means, torch.zeros_like(resid_means), atol=1e-6)
     else:
