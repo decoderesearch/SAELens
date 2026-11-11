@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.55.3 (2026-11-11)
+
+### Fix
+
+* fix: keep hooks working after an SAE is removed from SAETransformerBridge (#786) ([`03e8b8c`](https://github.com/decoderesearch/SAELens/commit/03e8b8c37ad09fb0becff8b125d35e8cda2e4125))
+
 ## v6.55.2 (2026-11-11)
 
 ### Fix
