@@ -1131,17 +1131,28 @@ def test_reset_sae_preserves_user_disabled_hook_z_reshaping(
     assert sae.hook_z_reshaping_mode is False
 
 
-@pytest.mark.parametrize("removal", ["run_with_saes", "reset_saes", "saes_context"])
+@pytest.mark.parametrize(
+    "removal", ["run_with_saes", "reset_saes", "saes_context", "restore_replaced_sae"]
+)
+@pytest.mark.parametrize("sae_kind", ["sae", "transcoder"])
 @pytest.mark.parametrize("compatibility_mode", [False, True])
 def test_hooks_fire_after_sae_is_removed(
-    compatibility_mode: bool, removal: str
+    compatibility_mode: bool, sae_kind: str, removal: str
 ) -> None:
     model = SAETransformerBridge.boot_transformers(MODEL, device="cpu")
     if compatibility_mode:
         model.enable_compatibility_mode(disable_warnings=True)
-    alias = "blocks.0.hook_mlp_out"
-    # TransformerLens names like blocks.0.hook_mlp_out only work in compatibility mode
-    hook_names = ["blocks.0.mlp.hook_out"] + ([alias] if compatibility_mode else [])
+    # Both replace blocks.0.mlp.hook_out, and the transcoder also hooks
+    # blocks.0.mlp.hook_in. TransformerLens names like blocks.0.hook_mlp_out only
+    # work in compatibility mode
+    hook_names = ["blocks.0.mlp.hook_in", "blocks.0.mlp.hook_out"]
+    if compatibility_mode:
+        hook_names.append("blocks.0.hook_mlp_out")
+
+    def new_sae() -> StandardSAE | Transcoder:
+        if sae_kind == "transcoder":
+            return make_transcoder(model.cfg.d_model)
+        return make_sae(model.cfg.d_model, "blocks.0.hook_mlp_out")
 
     def names_seen_by_hooks() -> dict[str, list[str]]:
         seen: dict[str, list[str]] = {name: [] for name in hook_names}
@@ -1156,15 +1167,20 @@ def test_hooks_fire_after_sae_is_removed(
     logits_before = model(PROMPT)
     assert all(seen_before.values())
 
-    sae = make_sae(model.cfg.d_model, alias)
     if removal == "run_with_saes":
-        model.run_with_saes(PROMPT, saes=[sae])
+        model.run_with_saes(PROMPT, saes=[new_sae()])
     elif removal == "reset_saes":
-        model.add_sae(sae)
+        model.add_sae(new_sae())
         model.reset_saes()
-    else:
-        with model.saes(saes=[sae]):
+    elif removal == "saes_context":
+        with model.saes(saes=[new_sae()]):
             model(PROMPT)
+    else:
+        # Exiting the context puts the first SAE back, then reset_saes removes it
+        model.add_sae(new_sae())
+        with model.saes(saes=[new_sae()]):
+            model(PROMPT)
+        model.reset_saes()
 
     assert names_seen_by_hooks() == seen_before
     assert_close(model(PROMPT), logits_before)
