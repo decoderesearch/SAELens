@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.55.4 (2026-11-11)
+
+### Fix
+
+* fix: return SAETransformerBridge from boot_native and boot_tl_legacy (#787) ([`d3025c5`](https://github.com/decoderesearch/SAELens/commit/d3025c5f0966feafa341421b707273a5dbeb35ad))
+
 ## v6.55.3 (2026-11-11)
 
 ### Fix
