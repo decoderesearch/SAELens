@@ -1129,3 +1129,42 @@ def test_reset_sae_preserves_user_disabled_hook_z_reshaping(
     bridge_model._reset_sae(hook_alias)
 
     assert sae.hook_z_reshaping_mode is False
+
+
+@pytest.mark.parametrize("removal", ["run_with_saes", "reset_saes", "saes_context"])
+@pytest.mark.parametrize("compatibility_mode", [False, True])
+def test_hooks_fire_after_sae_is_removed(
+    compatibility_mode: bool, removal: str
+) -> None:
+    model = SAETransformerBridge.boot_transformers(MODEL, device="cpu")
+    if compatibility_mode:
+        model.enable_compatibility_mode(disable_warnings=True)
+    alias = "blocks.0.hook_mlp_out"
+    # TransformerLens names like blocks.0.hook_mlp_out only work in compatibility mode
+    hook_names = ["blocks.0.mlp.hook_out"] + ([alias] if compatibility_mode else [])
+
+    def names_seen_by_hooks() -> dict[str, list[str]]:
+        seen: dict[str, list[str]] = {name: [] for name in hook_names}
+        for name in hook_names:
+            model.run_with_hooks(
+                PROMPT,
+                fwd_hooks=[(name, lambda _x, hook, n=name: seen[n].append(hook.name))],
+            )
+        return seen
+
+    seen_before = names_seen_by_hooks()
+    logits_before = model(PROMPT)
+    assert all(seen_before.values())
+
+    sae = make_sae(model.cfg.d_model, alias)
+    if removal == "run_with_saes":
+        model.run_with_saes(PROMPT, saes=[sae])
+    elif removal == "reset_saes":
+        model.add_sae(sae)
+        model.reset_saes()
+    else:
+        with model.saes(saes=[sae]):
+            model(PROMPT)
+
+    assert names_seen_by_hooks() == seen_before
+    assert_close(model(PROMPT), logits_before)
