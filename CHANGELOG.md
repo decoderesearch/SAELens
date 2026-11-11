@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.55.2 (2026-11-11)
+
+### Fix
+
+* fix: accept weight processing kwargs in SAETransformerBridge.boot_transformers (#785) ([`361d141`](https://github.com/decoderesearch/SAELens/commit/361d141fdd03fd56b6a1e3e358880e774da70184))
+
 ## v6.55.1 (2026-11-10)
 
 ### Fix
