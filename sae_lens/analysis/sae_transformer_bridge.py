@@ -65,7 +65,23 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         """
         # Boot parent TransformerBridge
         bridge = boot_transformer_bridge(model_name, **kwargs)
-        # Convert to our class
+        return cls._from_bridge(bridge)
+
+    @classmethod
+    def boot_native(cls, *args: Any, **kwargs: Any) -> "SAETransformerBridge":  # type: ignore[override]
+        """Like `TransformerBridge.boot_native` (a randomly initialized model built from a config), but returns an
+        SAETransformerBridge."""
+        return cls._from_bridge(TransformerBridge.boot_native(*args, **kwargs))  # type: ignore[attr-defined]
+
+    @classmethod
+    def boot_tl_legacy(cls, *args: Any, **kwargs: Any) -> "SAETransformerBridge":  # type: ignore[override]
+        """Like `TransformerBridge.boot_tl_legacy` (a model saved in the old HookedTransformer checkpoint format), but
+        returns an SAETransformerBridge."""
+        return cls._from_bridge(TransformerBridge.boot_tl_legacy(*args, **kwargs))  # type: ignore[attr-defined]
+
+    @classmethod
+    def _from_bridge(cls, bridge: TransformerBridge) -> "SAETransformerBridge":
+        """Converts a booted TransformerBridge into an SAETransformerBridge."""
         # NOTE: this is super hacky and scary, but I don't know how else to achieve this given TLens' internal code
         bridge.__class__ = cls
         bridge._acts_to_saes = {}  # type: ignore[attr-defined]

@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 import torch
+from transformer_lens.config import TransformerBridgeConfig
 from transformer_lens.hook_points import HookPoint
+from transformer_lens.model_bridge import TransformerBridge
 
 from sae_lens.analysis.compat import has_hooked_transformer
 
@@ -234,6 +236,52 @@ def test_boot_transformers_applies_hooked_transformer_weight_processing_kwargs(
         assert_close(resid_means, torch.zeros_like(resid_means), atol=1e-6)
     else:
         assert_not_close(resid_means, torch.zeros_like(resid_means), atol=1e-3)
+
+
+@pytest.mark.skipif(
+    not hasattr(TransformerBridge, "boot_native"),
+    reason="TransformerBridge.boot_native requires a newer transformer-lens",
+)
+def test_boot_native_returns_sae_transformer_bridge() -> None:
+    cfg = TransformerBridgeConfig(
+        d_model=16,
+        d_head=4,
+        n_heads=4,
+        d_mlp=32,
+        n_layers=1,
+        n_ctx=8,
+        d_vocab=10,
+        act_fn="relu",
+    )
+    model = SAETransformerBridge.boot_native(cfg, device="cpu")
+    assert isinstance(model, SAETransformerBridge)
+    sae = make_sae(model.cfg.d_model, "blocks.0.hook_resid_pre")
+    _, cache = model.run_with_cache_with_saes(torch.tensor([[1, 2, 3]]), saes=[sae])
+    assert_close(
+        cache[model.get_sae_hook_name(sae)],
+        sae.encode(cache[model.get_sae_hook_name(sae, "hook_sae_input")]),
+    )
+
+
+@pytest.mark.skipif(
+    not hasattr(TransformerBridge, "boot_tl_legacy"),
+    reason="TransformerBridge.boot_tl_legacy requires transformer-lens 4",
+)
+def test_boot_tl_legacy_returns_sae_transformer_bridge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Stand in for the checkpoint download: boot_tl_legacy's own loading isn't under test
+    cfg = TransformerBridgeConfig(
+        d_model=16, d_head=4, n_heads=4, d_mlp=32, n_layers=1, n_ctx=8, d_vocab=10
+    )
+    monkeypatch.setattr(
+        TransformerBridge,
+        "boot_tl_legacy",
+        classmethod(lambda _cls, *_a, **_kw: TransformerBridge.boot_native(cfg)),
+    )
+    model = SAETransformerBridge.boot_tl_legacy("some/legacy-checkpoint")
+    assert isinstance(model, SAETransformerBridge)
+    assert model._acts_to_saes == {}
 
 
 def test_add_sae_changes_output(bridge_model: SAETransformerBridge) -> None:
