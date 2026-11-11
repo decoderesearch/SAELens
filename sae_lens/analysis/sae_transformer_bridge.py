@@ -244,10 +244,27 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         ):
             sae.turn_on_forward_pass_hook_z_reshaping()
 
-        # Reset output hook location
-        new_hook = HookPoint()
-        new_hook.name = output_hook
+        # Reset output hook location. In compatibility mode, the HookPoint the SAE
+        # replaced is still registered under its alias (e.g. blocks.0.hook_mlp_out),
+        # so put that one back: a new HookPoint would leave the alias pointing at a
+        # HookPoint that is no longer in the forward pass.
+        aliases = {**self.hook_aliases, **self._collect_hook_aliases_from_registry()}
+        original_hook = next(
+            (
+                hook
+                for name, hook in self._hook_registry.items()
+                if aliases.get(name) == output_hook and isinstance(hook, HookPoint)
+            ),
+            None,
+        )
+        if original_hook is not None:
+            new_hook, hook_point_name = original_hook, original_hook.name
+        else:
+            new_hook, hook_point_name = HookPoint(), output_hook
+        # Setting the attribute renames the HookPoint to the bare attribute name (e.g.
+        # "hook_out"), and the bridge then fails to find it by its full name.
         set_deep_attr(self, output_hook, new_hook)
+        new_hook.name = hook_point_name
         self._hook_registry[output_hook] = new_hook
 
         del self._acts_to_saes[act_name]
