@@ -51,6 +51,7 @@ from tests.helpers import (
     build_batchtopk_runner_cfg,
     build_runner_cfg,
     build_sae_cfg,
+    build_tiny_model,
     build_topk_runner_cfg,
     load_model_cached,
     random_params,
@@ -58,7 +59,7 @@ from tests.helpers import (
 )
 
 if TYPE_CHECKING or has_hooked_transformer():
-    from transformer_lens import HookedTransformer, HookedTransformerConfig
+    from transformer_lens import HookedTransformer
 
 TRAINER_EVAL_CONFIG = EvalConfig(
     n_eval_reconstruction_batches=10,
@@ -184,19 +185,7 @@ all_featurewise_keys_expected = [
 )
 def feature_density_eval_inputs(request: pytest.FixtureRequest):
     hook_name, reshape_activations = request.param
-    model = HookedTransformer(
-        HookedTransformerConfig(
-            n_layers=1,
-            d_model=8,
-            n_ctx=4,
-            d_head=4,
-            n_heads=2,
-            d_mlp=16,
-            d_vocab=20,
-            act_fn="relu",
-            device="cpu",
-        )
-    )
+    model = build_tiny_model()
     sae = StandardSAE(
         StandardSAEConfig(
             d_in=8,
@@ -224,7 +213,6 @@ def feature_density_eval_inputs(request: pytest.FixtureRequest):
     return model, sae, store
 
 
-@requires_hooked_transformer
 @pytest.mark.parametrize("exclude_special_tokens", [False, [0]])
 def test_run_evals_feature_density_only(
     feature_density_eval_inputs: tuple[
@@ -253,7 +241,6 @@ def test_run_evals_feature_density_only(
     ]
 
 
-@requires_hooked_transformer
 def test_run_evals_omits_feature_density_when_not_requested(
     feature_density_eval_inputs: tuple[
         HookedTransformer, StandardSAE, ActivationsStore
@@ -273,7 +260,6 @@ def test_run_evals_omits_feature_density_when_not_requested(
     assert feature_metrics == {}
 
 
-@requires_hooked_transformer
 @pytest.mark.parametrize("n_batches", [0, -1])
 def test_run_evals_feature_density_requires_positive_batches(
     feature_density_eval_inputs: tuple[
@@ -300,7 +286,6 @@ def test_run_evals_feature_density_requires_positive_batches(
     assert sae.hook_z_reshaping_mode is original_hook_z_reshaping_mode
 
 
-@requires_hooked_transformer
 @pytest.mark.parametrize("use_attention_mask", [False, True])
 def test_run_evals_reconstruction_uses_model_kwargs(
     feature_density_eval_inputs: tuple[
@@ -615,21 +600,8 @@ def test_run_evals_reconstructs_and_scores_only_non_excluded_tokens(
     ] == pytest.approx(expected_ce_loss.item())
 
 
-@requires_hooked_transformer
 def test_identity_reconstruction_preserves_predictions_with_excluded_tokens():
-    model = HookedTransformer(
-        HookedTransformerConfig(
-            n_layers=2,
-            d_model=8,
-            n_ctx=8,
-            d_head=4,
-            n_heads=2,
-            d_mlp=16,
-            d_vocab=20,
-            act_fn="relu",
-            device="cpu",
-        )
-    )
+    model = build_tiny_model(n_layers=2, n_ctx=8)
     sae = MagicMock()
     sae.cfg.metadata.hook_name = "blocks.0.hook_resid_pre"
     sae.cfg.metadata.hook_head_index = None
@@ -1417,27 +1389,13 @@ def test_get_sparsity_and_variance_metrics_mse_is_invariant_to_batch_size(
     )
 
 
-@requires_hooked_transformer
 @pytest.mark.parametrize("dtype", ["float16", "bfloat16"])
 def test_get_sparsity_and_variance_metrics_low_precision_large_norm_activations(
     dtype: str,
 ):
     d_in = 8
     tokens = [[1, 2, 3, 4], [5, 6, 7, 8]]
-    model = HookedTransformer(
-        HookedTransformerConfig(
-            n_layers=1,
-            d_model=d_in,
-            n_ctx=4,
-            d_head=4,
-            n_heads=2,
-            d_mlp=16,
-            d_vocab=20,
-            act_fn="relu",
-            device="cpu",
-            dtype=str_to_dtype(dtype),
-        )
-    )
+    model = build_tiny_model(d_model=d_in, dtype=str_to_dtype(dtype))
     sae = StandardSAE(
         StandardSAEConfig(
             d_in=d_in,
@@ -1501,27 +1459,13 @@ def test_get_sparsity_and_variance_metrics_low_precision_large_norm_activations(
     )
 
 
-@requires_hooked_transformer
 @pytest.mark.parametrize("dtype", ["float16", "bfloat16"])
 def test_get_downstream_reconstruction_metrics_low_precision_matches_float64_mean(
     dtype: str,
 ):
     d_in = 8
     tokens = [[1, 2, 3, 4], [5, 6, 7, 8]]
-    model = HookedTransformer(
-        HookedTransformerConfig(
-            n_layers=1,
-            d_model=d_in,
-            n_ctx=4,
-            d_head=4,
-            n_heads=2,
-            d_mlp=16,
-            d_vocab=20,
-            act_fn="relu",
-            device="cpu",
-            dtype=str_to_dtype(dtype),
-        )
-    )
+    model = build_tiny_model(d_model=d_in, dtype=str_to_dtype(dtype))
     sae = StandardSAE(
         StandardSAEConfig(
             d_in=d_in,
