@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.55.5 (2026-11-13)
+
+### Fix
+
+* fix: load old TransformerLens-format models with TransformerBridge (#789) ([`bc9f655`](https://github.com/decoderesearch/SAELens/commit/bc9f6550bbcf6e892cf5c90f378b0c4961ed7456))
+
 ## v6.55.4 (2026-11-11)
 
 ### Fix
