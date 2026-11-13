@@ -199,6 +199,27 @@ def test_load_model_with_transformer_bridge_centers_writing_weights_when_request
         assert_not_close(resid_means, torch.zeros_like(resid_means), atol=1e-3)
 
 
+@pytest.mark.skipif(
+    not hasattr(TransformerBridge, "boot_tl_legacy"),
+    reason="TransformerBridge.boot_tl_legacy was added in transformer-lens 4.0",
+)
+def test_load_model_with_transformer_bridge_loads_legacy_transformer_lens_checkpoints():
+    # gelu-1l (NeelNanda/GELU_1L512W_C4_Code) is in the old TransformerLens format,
+    # which has no `model_type` in its config.json
+    model = load_model(
+        model_class_name="TransformerBridge",
+        model_name="gelu-1l",
+        device="cpu",
+    )
+    loss = model(
+        "The quick brown fox jumps over the lazy dog. It was a sunny day in the park.",
+        return_type="loss",
+    )
+    # Random weights would give about ln(d_vocab) = ln(48262) = 10.8
+    assert loss.item() < 5.0
+    assert "blocks.0.hook_mlp_out" in model.hook_dict
+
+
 @pytest.mark.parametrize(
     ("model_class_name", "expected_message"),
     [

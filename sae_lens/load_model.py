@@ -18,6 +18,19 @@ try:
 except ImportError:  # removed in transformer-lens 4.0
     HookedTransformer = None
 
+try:
+    from transformer_lens.model_bridge.sources.tl_legacy import (  # type: ignore[import-not-found]
+        TL_LEGACY_PREFIXES,
+    )
+    from transformer_lens.tools.model_registry.registry_io import (
+        resolve_model_alias,  # type: ignore[attr-defined]
+    )
+except ImportError:  # added in transformer-lens 4.0
+    TL_LEGACY_PREFIXES: tuple[str, ...] = ()
+
+    def resolve_model_alias(model_name: str) -> str | None:  # noqa: ARG001
+        return None
+
 
 # HookedTransformer's weight processing options. TransformerBridge.boot_transformers
 # doesn't take them, so boot_transformer_bridge applies them with
@@ -37,10 +50,17 @@ def boot_transformer_bridge(model_name: str, **kwargs: Any) -> TransformerBridge
 
     Like `HookedTransformer.from_pretrained_no_processing`, the weights are only
     processed in the ways requested (e.g. by pretrained SAE metadata). The remaining
-    kwargs are passed to `TransformerBridge.boot_transformers`.
+    kwargs are passed to `TransformerBridge.boot_transformers`, or to
+    `TransformerBridge.boot_tl_legacy` for old TransformerLens-format repos.
     """
     processing = {key: kwargs.pop(key, False) for key in _WEIGHT_PROCESSING_KWARGS}
-    bridge = TransformerBridge.boot_transformers(model_name, **kwargs)
+    # Old TransformerLens-format repos (e.g. gelu-2l, NeelNanda/*) have no
+    # `model_type` in their config.json, so boot_transformers can't load them
+    repo_id = resolve_model_alias(model_name) or model_name
+    if repo_id.startswith(TL_LEGACY_PREFIXES):
+        bridge = TransformerBridge.boot_tl_legacy(repo_id, **kwargs)  # type: ignore[attr-defined]
+    else:
+        bridge = TransformerBridge.boot_transformers(model_name, **kwargs)
     if any(processing.values()):
         bridge.process_weights(**processing)
     return bridge
