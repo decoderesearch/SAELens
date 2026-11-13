@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
 
 import pytest
 import torch
-from transformer_lens.model_bridge import TransformerBridge
 
 from sae_lens.analysis.compat import default_model_class_name, has_hooked_transformer
 from sae_lens.config import LanguageModelSAERunnerConfig, LoggingConfig
@@ -34,7 +33,7 @@ from sae_lens.saes.temporal_sae import TemporalSAEConfig
 from sae_lens.saes.topk_sae import TopKSAEConfig, TopKTrainingSAEConfig
 
 if TYPE_CHECKING or has_hooked_transformer():
-    from transformer_lens import HookedTransformer, HookedTransformerConfig
+    from transformer_lens import HookedTransformer
 
 requires_hooked_transformer = pytest.mark.skipif(
     not has_hooked_transformer(),
@@ -670,57 +669,6 @@ def build_matryoshka_batchtopk_sae_training_cfg(
     **kwargs: Any,
 ) -> MatryoshkaBatchTopKTrainingSAEConfig:
     return build_matryoshka_batchtopk_runner_cfg(**kwargs).sae  # type: ignore
-
-
-def build_tiny_model(
-    n_layers: int = 1,
-    d_model: int = 8,
-    n_ctx: int = 4,
-    dtype: torch.dtype = torch.float32,
-) -> "HookedTransformer":
-    """
-    A randomly initialized model with 2 heads, d_mlp=16 and a vocab of 20 tokens.
-    It's a HookedTransformer when transformer-lens has one, and a GPT-2
-    TransformerBridge otherwise.
-    """
-    if has_hooked_transformer():
-        return HookedTransformer(
-            HookedTransformerConfig(
-                n_layers=n_layers,
-                d_model=d_model,
-                n_ctx=n_ctx,
-                d_head=d_model // 2,
-                n_heads=2,
-                d_mlp=16,
-                d_vocab=20,
-                act_fn="relu",
-                device="cpu",
-                dtype=dtype,
-            )
-        )
-    # boot_transformers ignores dtype when load_weights=False, so cast afterwards
-    bridge = TransformerBridge.boot_transformers(
-        "gpt2",
-        hf_config_overrides={
-            "n_layer": n_layers,
-            "n_embd": d_model,
-            "n_positions": n_ctx,
-            "n_head": 2,
-            "n_inner": 16,
-            "vocab_size": 20,
-            "activation_function": "relu",
-            # a randomly initialized HF model is in train mode, so dropout would
-            # make every forward pass random
-            "attn_pdrop": 0.0,
-            "embd_pdrop": 0.0,
-            "resid_pdrop": 0.0,
-        },
-        load_weights=False,
-        device="cpu",
-    ).to(dtype)
-    # TransformerBridge isn't a HookedTransformer, but has the hooks and weights
-    # (W_E, W_pos, ...) that the tests use
-    return cast("HookedTransformer", bridge)
 
 
 MODEL_CACHE: dict[str, bytes] = {}
