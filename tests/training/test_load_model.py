@@ -220,6 +220,20 @@ def test_load_model_with_transformer_bridge_loads_legacy_transformer_lens_checkp
     assert "blocks.0.hook_mlp_out" in model.hook_dict
 
 
+def test_load_model_with_transformer_bridge_accepts_device_map():
+    model = load_model(
+        model_class_name="TransformerBridge",
+        model_name="tiny-stories-1M",
+        device="cpu",
+        model_from_pretrained_kwargs={"device_map": {"": "cpu"}},
+    )
+    hf_model = AutoModelForCausalLM.from_pretrained("roneneldan/TinyStories-1M")
+    tokenizer = AutoTokenizer.from_pretrained("roneneldan/TinyStories-1M")
+    input_ids = tokenizer.encode("Hello there, how are you?", return_tensors="pt")
+
+    assert_close(model(input_ids), hf_model(input_ids).logits, atol=1e-4)
+
+
 @pytest.mark.parametrize(
     ("model_class_name", "expected_message"),
     [
