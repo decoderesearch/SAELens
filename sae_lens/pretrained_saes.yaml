@@ -29910,6 +29910,8 @@ gemma-scope-2b-pt-res-canonical:
   model: gemma-2-2b
   repo_id: google/gemma-scope-2b-pt-res
   saes:
+  - id: embedding/width_4k/canonical
+    path: embedding/width_4k/average_l0_111
   - id: layer_0/width_16k/canonical
     neuronpedia: gemma-2-2b/0-gemmascope-res-16k
     path: layer_0/width_16k/average_l0_105
@@ -35464,6 +35466,8 @@ gemma-scope-9b-pt-res-canonical:
   model: gemma-2-9b
   repo_id: google/gemma-scope-9b-pt-res
   saes:
+  - id: embedding/width_4k/canonical
+    path: embedding/width_4k/average_l0_80
   - id: layer_0/width_16k/canonical
     neuronpedia: gemma-2-9b/0-gemmascope-res-16k
     path: layer_0/width_16k/average_l0_129
