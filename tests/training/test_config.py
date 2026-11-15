@@ -67,6 +67,23 @@ def test_LanguageModelSAERunnerConfig_default_model_class_depends_on_HookedTrans
     assert cfg.model_from_pretrained_kwargs == expected_kwargs
 
 
+def test_sae_training_runner_config_logs_window_tokens_per_step(
+    caplog: pytest.LogCaptureFixture,
+):
+    # Both windows count training steps, and each step trains on
+    # train_batch_size_tokens tokens, so context_size must not scale them.
+    with caplog.at_level("INFO", logger="sae_lens"):
+        LanguageModelSAERunnerConfig(
+            sae=StandardTrainingSAEConfig(d_in=10, d_sae=10),
+            context_size=128,
+            train_batch_size_tokens=4096,
+            feature_sampling_window=2000,
+            dead_feature_window=1000,
+        )
+    assert "n_tokens_per_feature_sampling_window (millions): 8.192" in caplog.text
+    assert "n_tokens_per_dead_feature_window (millions): 4.096" in caplog.text
+
+
 @pytest.mark.parametrize("seqpos_slice, expected_error", test_cases_for_seqpos)
 def test_cache_activations_runner_config_seqpos(
     seqpos_slice: tuple[int, int],

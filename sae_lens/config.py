@@ -397,10 +397,10 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
                 total_training_steps // self.feature_sampling_window
             )
             logger.info(
-                f"n_tokens_per_feature_sampling_window (millions): {(self.feature_sampling_window * self.context_size * self.train_batch_size_tokens) / 10**6}"
+                f"n_tokens_per_feature_sampling_window (millions): {(self.feature_sampling_window * self.train_batch_size_tokens) / 10**6}"
             )
             logger.info(
-                f"n_tokens_per_dead_feature_window (millions): {(self.dead_feature_window * self.context_size * self.train_batch_size_tokens) / 10**6}"
+                f"n_tokens_per_dead_feature_window (millions): {(self.dead_feature_window * self.train_batch_size_tokens) / 10**6}"
             )
             logger.info(
                 f"We will reset the sparsity calculation {n_feature_window_samples} times."
