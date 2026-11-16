@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 import torch
+from transformer_lens.config import TransformerBridgeConfig
 from transformer_lens.hook_points import HookPoint
+from transformer_lens.model_bridge import TransformerBridge
 
 from sae_lens.analysis.compat import has_hooked_transformer
 
@@ -211,6 +213,75 @@ def test_boot_transformers_loads_model(bridge_model: SAETransformerBridge) -> No
     assert isinstance(bridge_model, SAETransformerBridge)
     assert hasattr(bridge_model, "_acts_to_saes")
     assert len(bridge_model._acts_to_saes) == 0
+
+
+@pytest.mark.parametrize("center_writing_weights", [False, True])
+def test_boot_transformers_applies_hooked_transformer_weight_processing_kwargs(
+    center_writing_weights: bool,
+) -> None:
+    model = SAETransformerBridge.boot_transformers(
+        MODEL,
+        device="cpu",
+        center_writing_weights=center_writing_weights,
+        fold_ln=False,
+    )
+    assert isinstance(model, SAETransformerBridge)
+    _, cache = model.run_with_cache(PROMPT)
+    # Centering the weights that write to the residual stream makes each residual
+    # vector have zero mean across d_model. SAETransformerBridge caches under the
+    # resolved hook names, so use blocks.1.hook_out rather than the
+    # blocks.1.hook_resid_post alias
+    resid_means = cache["blocks.1.hook_out"].mean(dim=-1)
+    if center_writing_weights:
+        assert_close(resid_means, torch.zeros_like(resid_means), atol=1e-6)
+    else:
+        assert_not_close(resid_means, torch.zeros_like(resid_means), atol=1e-3)
+
+
+@pytest.mark.skipif(
+    not hasattr(TransformerBridge, "boot_native"),
+    reason="TransformerBridge.boot_native requires a newer transformer-lens",
+)
+def test_boot_native_returns_sae_transformer_bridge() -> None:
+    cfg = TransformerBridgeConfig(
+        d_model=16,
+        d_head=4,
+        n_heads=4,
+        d_mlp=32,
+        n_layers=1,
+        n_ctx=8,
+        d_vocab=10,
+        act_fn="relu",
+    )
+    model = SAETransformerBridge.boot_native(cfg, device="cpu")
+    assert isinstance(model, SAETransformerBridge)
+    sae = make_sae(model.cfg.d_model, "blocks.0.hook_resid_pre")
+    _, cache = model.run_with_cache_with_saes(torch.tensor([[1, 2, 3]]), saes=[sae])
+    assert_close(
+        cache[model.get_sae_hook_name(sae)],
+        sae.encode(cache[model.get_sae_hook_name(sae, "hook_sae_input")]),
+    )
+
+
+@pytest.mark.skipif(
+    not hasattr(TransformerBridge, "boot_tl_legacy"),
+    reason="TransformerBridge.boot_tl_legacy requires transformer-lens 4",
+)
+def test_boot_tl_legacy_returns_sae_transformer_bridge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Stand in for the checkpoint download: boot_tl_legacy's own loading isn't under test
+    cfg = TransformerBridgeConfig(
+        d_model=16, d_head=4, n_heads=4, d_mlp=32, n_layers=1, n_ctx=8, d_vocab=10
+    )
+    monkeypatch.setattr(
+        TransformerBridge,
+        "boot_tl_legacy",
+        classmethod(lambda _cls, *_a, **_kw: TransformerBridge.boot_native(cfg)),
+    )
+    model = SAETransformerBridge.boot_tl_legacy("some/legacy-checkpoint")
+    assert isinstance(model, SAETransformerBridge)
+    assert model._acts_to_saes == {}
 
 
 def test_add_sae_changes_output(bridge_model: SAETransformerBridge) -> None:
@@ -1129,3 +1200,58 @@ def test_reset_sae_preserves_user_disabled_hook_z_reshaping(
     bridge_model._reset_sae(hook_alias)
 
     assert sae.hook_z_reshaping_mode is False
+
+
+@pytest.mark.parametrize(
+    "removal", ["run_with_saes", "reset_saes", "saes_context", "restore_replaced_sae"]
+)
+@pytest.mark.parametrize("sae_kind", ["sae", "transcoder"])
+@pytest.mark.parametrize("compatibility_mode", [False, True])
+def test_hooks_fire_after_sae_is_removed(
+    compatibility_mode: bool, sae_kind: str, removal: str
+) -> None:
+    model = SAETransformerBridge.boot_transformers(MODEL, device="cpu")
+    if compatibility_mode:
+        model.enable_compatibility_mode(disable_warnings=True)
+    # Both replace blocks.0.mlp.hook_out, and the transcoder also hooks
+    # blocks.0.mlp.hook_in. TransformerLens names like blocks.0.hook_mlp_out only
+    # work in compatibility mode
+    hook_names = ["blocks.0.mlp.hook_in", "blocks.0.mlp.hook_out"]
+    if compatibility_mode:
+        hook_names.append("blocks.0.hook_mlp_out")
+
+    def new_sae() -> StandardSAE | Transcoder:
+        if sae_kind == "transcoder":
+            return make_transcoder(model.cfg.d_model)
+        return make_sae(model.cfg.d_model, "blocks.0.hook_mlp_out")
+
+    def names_seen_by_hooks() -> dict[str, list[str]]:
+        seen: dict[str, list[str]] = {name: [] for name in hook_names}
+        for name in hook_names:
+            model.run_with_hooks(
+                PROMPT,
+                fwd_hooks=[(name, lambda _x, hook, n=name: seen[n].append(hook.name))],
+            )
+        return seen
+
+    seen_before = names_seen_by_hooks()
+    logits_before = model(PROMPT)
+    assert all(seen_before.values())
+
+    if removal == "run_with_saes":
+        model.run_with_saes(PROMPT, saes=[new_sae()])
+    elif removal == "reset_saes":
+        model.add_sae(new_sae())
+        model.reset_saes()
+    elif removal == "saes_context":
+        with model.saes(saes=[new_sae()]):
+            model(PROMPT)
+    else:
+        # Exiting the context puts the first SAE back, then reset_saes removes it
+        model.add_sae(new_sae())
+        with model.saes(saes=[new_sae()]):
+            model(PROMPT)
+        model.reset_saes()
+
+    assert names_seen_by_hooks() == seen_before
+    assert_close(model(PROMPT), logits_before)

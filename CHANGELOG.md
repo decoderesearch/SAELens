@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## v6.55.5 (2026-11-13)
+
+### Fix
+
+* fix: load old TransformerLens-format models with TransformerBridge (#789) ([`bc9f655`](https://github.com/decoderesearch/SAELens/commit/bc9f6550bbcf6e892cf5c90f378b0c4961ed7456))
+
+## v6.55.4 (2026-11-11)
+
+### Fix
+
+* fix: return SAETransformerBridge from boot_native and boot_tl_legacy (#787) ([`d3025c5`](https://github.com/decoderesearch/SAELens/commit/d3025c5f0966feafa341421b707273a5dbeb35ad))
+
+## v6.55.3 (2026-11-11)
+
+### Fix
+
+* fix: keep hooks working after an SAE is removed from SAETransformerBridge (#786) ([`03e8b8c`](https://github.com/decoderesearch/SAELens/commit/03e8b8c37ad09fb0becff8b125d35e8cda2e4125))
+
+## v6.55.2 (2026-11-11)
+
+### Fix
+
+* fix: accept weight processing kwargs in SAETransformerBridge.boot_transformers (#785) ([`361d141`](https://github.com/decoderesearch/SAELens/commit/361d141fdd03fd56b6a1e3e358880e774da70184))
+
 ## v6.55.1 (2026-11-10)
 
 ### Fix

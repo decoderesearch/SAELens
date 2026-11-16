@@ -11,6 +11,7 @@ from transformer_lens.model_bridge import (  # type: ignore[import-not-found]
 
 from sae_lens import logger
 from sae_lens.analysis.sae_wrapper import _SAEWrapper, get_deep_attr, set_deep_attr
+from sae_lens.load_model import boot_transformer_bridge
 from sae_lens.saes.sae import SAE
 
 SingleLoss = torch.Tensor  # Type alias for a single element tensor
@@ -53,14 +54,34 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
 
         Args:
             model_name: The name of the model to load (e.g., "gpt2", "gemma-2-2b")
-            **kwargs: Additional arguments passed to TransformerBridge.boot_transformers
+            **kwargs: Additional arguments passed to TransformerBridge.boot_transformers.
+                HookedTransformer's weight processing kwargs (e.g. `fold_ln` and
+                `center_writing_weights`, as in an SAE's
+                `cfg.metadata.model_from_pretrained_kwargs`) are applied with
+                TransformerBridge.process_weights instead.
 
         Returns:
             SAETransformerBridge instance with the loaded model
         """
         # Boot parent TransformerBridge
-        bridge = TransformerBridge.boot_transformers(model_name, **kwargs)
-        # Convert to our class
+        bridge = boot_transformer_bridge(model_name, **kwargs)
+        return cls._from_bridge(bridge)
+
+    @classmethod
+    def boot_native(cls, *args: Any, **kwargs: Any) -> "SAETransformerBridge":  # type: ignore[override]
+        """Like `TransformerBridge.boot_native` (a randomly initialized model built from a config), but returns an
+        SAETransformerBridge."""
+        return cls._from_bridge(TransformerBridge.boot_native(*args, **kwargs))  # type: ignore[attr-defined]
+
+    @classmethod
+    def boot_tl_legacy(cls, *args: Any, **kwargs: Any) -> "SAETransformerBridge":  # type: ignore[override]
+        """Like `TransformerBridge.boot_tl_legacy` (a model saved in the old HookedTransformer checkpoint format), but
+        returns an SAETransformerBridge."""
+        return cls._from_bridge(TransformerBridge.boot_tl_legacy(*args, **kwargs))  # type: ignore[attr-defined]
+
+    @classmethod
+    def _from_bridge(cls, bridge: TransformerBridge) -> "SAETransformerBridge":
+        """Converts a booted TransformerBridge into an SAETransformerBridge."""
         # NOTE: this is super hacky and scary, but I don't know how else to achieve this given TLens' internal code
         bridge.__class__ = cls
         bridge._acts_to_saes = {}  # type: ignore[attr-defined]
@@ -239,10 +260,27 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         ):
             sae.turn_on_forward_pass_hook_z_reshaping()
 
-        # Reset output hook location
-        new_hook = HookPoint()
-        new_hook.name = output_hook
+        # Reset output hook location. In compatibility mode, the HookPoint the SAE
+        # replaced is still registered under its alias (e.g. blocks.0.hook_mlp_out),
+        # so put that one back: a new HookPoint would leave the alias pointing at a
+        # HookPoint that is no longer in the forward pass.
+        aliases = {**self.hook_aliases, **self._collect_hook_aliases_from_registry()}
+        original_hook = next(
+            (
+                hook
+                for name, hook in self._hook_registry.items()
+                if aliases.get(name) == output_hook and isinstance(hook, HookPoint)
+            ),
+            None,
+        )
+        if original_hook is not None:
+            new_hook, hook_point_name = original_hook, original_hook.name
+        else:
+            new_hook, hook_point_name = HookPoint(), output_hook
+        # Setting the attribute renames the HookPoint to the bare attribute name (e.g.
+        # "hook_out"), and the bridge then fails to find it by its full name.
         set_deep_attr(self, output_hook, new_hook)
+        new_hook.name = hook_point_name
         self._hook_registry[output_hook] = new_hook
 
         del self._acts_to_saes[act_name]

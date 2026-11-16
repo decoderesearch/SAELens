@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
 import pytest
 import torch
 
-from sae_lens.analysis.compat import has_hooked_transformer
+from sae_lens.analysis.compat import default_model_class_name, has_hooked_transformer
 from sae_lens.config import LanguageModelSAERunnerConfig, LoggingConfig
 from sae_lens.registry import SAE_TRAINING_CLASS_REGISTRY
 from sae_lens.saes.abstopk_sae import (
@@ -183,7 +183,7 @@ def _get_default_runner_config() -> LanguageModelSAERunnerConfigDict:
     # Ensure logger is always present in the default dict
     return {
         "model_name": TINYSTORIES_MODEL,
-        "model_class_name": "HookedTransformer",
+        "model_class_name": default_model_class_name(),
         "hook_name": "blocks.0.hook_mlp_out",
         "hook_head_index": None,
         "dataset_path": NEEL_NANDA_C4_10K_DATASET,

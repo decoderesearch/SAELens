@@ -37,7 +37,6 @@ from tests.helpers import (
     TINYSTORIES_MODEL,
     assert_close,
     build_runner_cfg_for_arch,
-    requires_hooked_transformer,
 )
 
 if TYPE_CHECKING or has_hooked_transformer():
@@ -866,7 +865,6 @@ def test_LanguageModelSAETrainingRunner_skips_save_final_sae_when_output_path_no
     assert not Path("output").exists()
 
 
-@requires_hooked_transformer
 class TestResumeFromCheckpoint:
     """Tests for the resume_from_checkpoint functionality."""
 

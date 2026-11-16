@@ -256,7 +256,9 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
             warnings.warn(
                 "\nThis SAE has non-empty model_from_pretrained_kwargs. "
                 "\nFor optimal performance, load the model like so:\n"
-                "model = HookedSAETransformer.from_pretrained_no_processing(..., **cfg.model_from_pretrained_kwargs)",
+                "model = SAETransformerBridge.boot_transformers(..., **cfg.metadata.model_from_pretrained_kwargs)"
+                "\nor, with transformer-lens<4.0:\n"
+                "model = HookedSAETransformer.from_pretrained_no_processing(..., **cfg.metadata.model_from_pretrained_kwargs)",
                 category=UserWarning,
                 stacklevel=1,
             )
