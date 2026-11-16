@@ -4,7 +4,7 @@ import dataclasses
 import math
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import datasets
 import numpy as np
@@ -13,7 +13,7 @@ import torch
 from datasets import Dataset, load_dataset
 from tqdm import trange
 
-from sae_lens.analysis.compat import has_hooked_transformer
+from sae_lens.analysis.compat import default_model_class_name
 from sae_lens.cache_activations_runner import CacheActivationsRunner
 from sae_lens.config import (
     CacheActivationsRunnerConfig,
@@ -23,14 +23,19 @@ from sae_lens.constants import DTYPE_MAP
 from sae_lens.load_model import load_model
 from sae_lens.saes.standard_sae import StandardTrainingSAEConfig
 from sae_lens.training.activations_store import ActivationsStore
-from tests.helpers import assert_close, requires_hooked_transformer
+from sae_lens.transformer_lens_compat import HookedRootModule
+from tests.helpers import assert_close
 
-if TYPE_CHECKING or has_hooked_transformer():
-    from transformer_lens import HookedTransformer
 
-# CacheActivationsRunner loads the model when it's created, and these tests use the
-# default HookedTransformer model class
-pytestmark = requires_hooked_transformer
+def _load_model(cfg: CacheActivationsRunnerConfig) -> HookedRootModule:
+    # Load the model the same way CacheActivationsRunner does, so the tests run
+    # on HookedTransformer (TL 3) or TransformerBridge (TL 4).
+    return load_model(
+        cfg.model_class_name,
+        cfg.model_name,
+        device=cfg.device,
+        model_from_pretrained_kwargs=cfg.model_from_pretrained_kwargs,
+    )
 
 
 def _default_cfg(
@@ -115,7 +120,7 @@ def test_load_cached_activations(tmp_path: Path):
     runner = CacheActivationsRunner(cfg)
     runner.run()
 
-    model = HookedTransformer.from_pretrained(cfg.model_name)
+    model = _load_model(cfg)
 
     activations_store = ActivationsStore.from_config(model, cfg)
 
@@ -140,7 +145,7 @@ def test_load_cached_activations_does_not_load_the_dataset(
     runner = CacheActivationsRunner(cfg)
     runner.run()
 
-    model = HookedTransformer.from_pretrained(cfg.model_name)
+    model = _load_model(cfg)
 
     def fail_if_called(*_a: Any, **_k: Any) -> Any:
         raise AssertionError(
@@ -166,7 +171,7 @@ def test_activations_store_requires_dataset_or_cache_path():
         ValueError, match="Either dataset or cached_activations_path must be provided"
     ):
         ActivationsStore(
-            model=HookedTransformer.from_pretrained("gelu-1l"),
+            model=load_model(default_model_class_name(), "gelu-1l", device="cpu"),
             dataset=None,
             cached_activations_path=None,
             streaming=False,
@@ -288,7 +293,7 @@ def test_compare_cached_activations_end_to_end_with_ground_truth(tmp_path: Path)
     activation_dataset.set_format("torch")
     dataset_acts: torch.Tensor = activation_dataset[cfg.hook_name]  # type: ignore
 
-    model = HookedTransformer.from_pretrained(cfg.model_name, device=cfg.device)
+    model = _load_model(cfg)
     token_dataset: Dataset = load_dataset(
         cfg.dataset_path, split=f"train[:{cfg.n_seq_in_dataset}]"
     )  # type: ignore
@@ -449,7 +454,9 @@ def test_cache_activations_runner_stores_token_ids(tmp_path: Path):
 def test_cache_activations_runner_shuffling(tmp_path: Path):
     """Test that when shuffle=True, activations and token IDs remain aligned after shuffling."""
     # Create test dataset with arbitrary unique tokens
-    tokenizer = HookedTransformer.from_pretrained("gelu-1l").tokenizer
+    tokenizer = load_model(
+        default_model_class_name(), "gelu-1l", device="cpu"
+    ).tokenizer
     text = "".join(
         [
             " " + word[1:]
