@@ -333,3 +333,22 @@ def test_LanguageModelSAERunnerConfig_allows_chat_formatting_with_exclude_specia
     )
     assert cfg.use_chat_formatting is True
     assert cfg.exclude_special_tokens is True
+
+
+def test_LanguageModelSAERunnerConfig_logs_window_token_counts_without_context_size(
+    caplog: pytest.LogCaptureFixture,
+):
+    # windows are in steps and train_batch_size_tokens is already tokens per step,
+    # so context_size must not appear in these counts
+    with caplog.at_level("INFO", logger="sae_lens"):
+        LanguageModelSAERunnerConfig(
+            sae=StandardTrainingSAEConfig(d_in=10, d_sae=10),
+            context_size=128,
+            train_batch_size_tokens=4000,
+            feature_sampling_window=500,
+            dead_feature_window=250,
+            verbose=True,
+        )
+
+    assert "n_tokens_per_feature_sampling_window (millions): 2.0" in caplog.text
+    assert "n_tokens_per_dead_feature_window (millions): 1.0" in caplog.text
