@@ -92,7 +92,9 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         """Resolve alias to actual hook name.
 
         TransformerBridge supports hook aliases like 'blocks.0.hook_mlp_out'
-        that map to actual paths like 'blocks.0.mlp.hook_out'.
+        that map to actual paths like 'blocks.0.mlp.hook_out', as well as
+        priority-ordered fallback lists like ``hook_embed ->
+        ['embed_ln.hook_out', 'embed.hook_out']``.
         """
         # Combine static and dynamic aliases
         aliases: dict[str, Any] = {
@@ -100,8 +102,20 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
             **self._collect_hook_aliases_from_registry(),
         }
         resolved = aliases.get(hook_name, hook_name)
-        # aliases values are always strings, but type checker doesn't know this
-        return resolved if isinstance(resolved, str) else hook_name
+        if isinstance(resolved, str):
+            return resolved
+        if isinstance(resolved, list):
+            for candidate in resolved:
+                if isinstance(candidate, str) and candidate in self._hook_registry:
+                    return candidate
+            for candidate in resolved:
+                if isinstance(candidate, str):
+                    try:
+                        get_deep_attr(self, candidate)
+                        return candidate
+                    except AttributeError:
+                        continue
+        return hook_name
 
     def get_sae_hook_name(
         self, sae: SAE[Any], internal: str = "hook_sae_acts_post"
@@ -260,18 +274,24 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         ):
             sae.turn_on_forward_pass_hook_z_reshaping()
 
-        # Reset output hook location. In compatibility mode, the HookPoint the SAE
-        # replaced is still registered under its alias (e.g. blocks.0.hook_mlp_out),
-        # so put that one back: a new HookPoint would leave the alias pointing at a
-        # HookPoint that is no longer in the forward pass.
-        aliases = {**self.hook_aliases, **self._collect_hook_aliases_from_registry()}
-        original_hook = next(
-            (
-                hook
-                for name, hook in self._hook_registry.items()
-                if aliases.get(name) == output_hook and isinstance(hook, HookPoint)
-            ),
-            None,
+        # Reset output hook location. The HookPoint the SAE replaced stays in
+        # _hook_registry under output_hook (and under any alias such as hook_embed or,
+        # in compatibility mode, blocks.0.hook_mlp_out), so put that one back: a new
+        # HookPoint would leave aliases pointing at a HookPoint that is no longer in
+        # the forward pass.
+        registry_hook = self._hook_registry.get(output_hook)
+        original_hook = (
+            registry_hook
+            if isinstance(registry_hook, HookPoint)
+            else next(
+                (
+                    hook
+                    for name, hook in self._hook_registry.items()
+                    if self._resolve_hook_name(name) == output_hook
+                    and isinstance(hook, HookPoint)
+                ),
+                None,
+            )
         )
         if original_hook is not None:
             new_hook, hook_point_name = original_hook, original_hook.name

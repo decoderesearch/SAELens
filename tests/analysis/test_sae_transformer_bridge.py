@@ -1255,3 +1255,97 @@ def test_hooks_fire_after_sae_is_removed(
 
     assert names_seen_by_hooks() == seen_before
     assert_close(model(PROMPT), logits_before)
+
+
+def _make_native_bridge(compatibility_mode: bool = False) -> SAETransformerBridge:
+    cfg = TransformerBridgeConfig(
+        n_layers=2,
+        d_model=16,
+        n_ctx=8,
+        d_head=4,
+        n_heads=4,
+        d_mlp=32,
+        d_vocab=32,
+        act_fn="gelu",
+        normalization_type="LN",
+    )
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(0)
+        model = SAETransformerBridge.boot_native(cfg, device="cpu")
+    if compatibility_mode:
+        model.enable_compatibility_mode(disable_warnings=True)
+    return model
+
+
+@pytest.mark.parametrize("compatibility_mode", [False, True])
+@pytest.mark.parametrize(
+    "removal", ["run_with_saes", "reset_saes", "saes_context", "restore_replaced_sae"]
+)
+def test_list_valued_alias_hook_embed_executes_and_restores_hooks(
+    compatibility_mode: bool, removal: str
+) -> None:
+    """List-valued fallback aliases like ``hook_embed -> ['embed_ln.hook_out', 'embed.hook_out']``
+    must resolve to the active HookPoint, execute in forward passes, and keep both canonical
+    and alias hooks firing after SAE removal.
+    """
+    model = _make_native_bridge(compatibility_mode=compatibility_mode)
+    tokens = torch.tensor([[1, 2, 3, 4]])
+    sae = make_sae(model.cfg.d_model, "hook_embed")
+    random_params(sae)
+
+    assert model._resolve_hook_name("hook_embed") == "embed.hook_out"
+    assert model.get_sae_hook_name(sae) == "embed.hook_out.hook_sae_acts_post"
+
+    hook_names = ["embed.hook_out", "hook_embed"]
+
+    def names_seen_by_hooks() -> dict[str, list[str]]:
+        seen: dict[str, list[str]] = {name: [] for name in hook_names}
+        for name in hook_names:
+            model.run_with_hooks(
+                tokens,
+                fwd_hooks=[(name, lambda _x, hook, n=name: seen[n].append(hook.name))],
+            )
+        return seen
+
+    seen_before = names_seen_by_hooks()
+    logits_before = model(tokens)
+    assert all(seen_before.values())
+
+    sae_logits, cache = model.run_with_cache_with_saes(tokens, saes=[sae])
+    assert isinstance(sae_logits, torch.Tensor)
+    assert_not_close(sae_logits, logits_before)
+    assert model.get_sae_hook_name(sae) in cache
+    assert "hook_embed" not in model._modules
+
+    if removal == "run_with_saes":
+        out = model.run_with_saes(tokens, saes=[sae])
+        assert isinstance(out, torch.Tensor)
+        assert_close(out, sae_logits)
+    elif removal == "reset_saes":
+        model.add_sae(sae)
+        assert_close(model(tokens), sae_logits)
+        model.reset_saes()
+    elif removal == "saes_context":
+        with model.saes(saes=[sae]):
+            assert_close(model(tokens), sae_logits)
+    else:
+        other_sae = make_sae(model.cfg.d_model, "hook_embed")
+        random_params(other_sae)
+        model.add_sae(sae)
+        with model.saes(saes=[other_sae]):
+            model(tokens)
+        assert_close(model(tokens), sae_logits)
+        model.reset_saes()
+
+    assert names_seen_by_hooks() == seen_before
+    assert_close(model(tokens), logits_before)
+
+
+def test_resolve_hook_name_respects_priority_order_for_list_aliases() -> None:
+    """When an earlier candidate in a fallback list exists in ``_hook_registry``, it wins."""
+    model = _make_native_bridge()
+    embed_ln_hook = HookPoint()
+    embed_ln_hook.name = "embed_ln.hook_out"
+    model._hook_registry["embed_ln.hook_out"] = embed_ln_hook
+
+    assert model._resolve_hook_name("hook_embed") == "embed_ln.hook_out"
