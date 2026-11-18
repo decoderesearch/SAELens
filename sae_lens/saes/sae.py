@@ -349,9 +349,12 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         # Compute in at least the precision of the whitening statistics, so bf16
         # weights are folded in float32 and float64 weights stay float64.
         dtype = torch.promote_types(self.W_enc.dtype, whitening_matrix.dtype)
-        mean = mean.to(self.device, dtype)
-        whitening_matrix = whitening_matrix.to(self.device, dtype)
-        unwhitening_matrix = unwhitening_matrix.to(self.device, dtype)
+        if self.device.type == "mps":
+            # MPS has no float64
+            dtype = torch.promote_types(self.W_enc.dtype, torch.float32)
+        mean = mean.to(dtype=dtype).to(self.device)
+        whitening_matrix = whitening_matrix.to(dtype=dtype).to(self.device)
+        unwhitening_matrix = unwhitening_matrix.to(dtype=dtype).to(self.device)
         self.W_enc.data.copy_(whitening_matrix @ self.W_enc.data.to(dtype))
         if (
             not self.cfg.apply_b_dec_to_input

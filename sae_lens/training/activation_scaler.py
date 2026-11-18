@@ -24,10 +24,17 @@ class ActivationWhitening:
     def to(self, device: torch.device) -> "ActivationWhitening":
         if self.matrix.device == device:
             return self
+
+        def move(t: torch.Tensor) -> torch.Tensor:
+            # MPS has no float64, so cast on the source device before moving
+            if device.type == "mps" and t.dtype == torch.float64:
+                t = t.to(torch.float32)
+            return t.to(device)
+
         return ActivationWhitening(
-            mean=self.mean.to(device),
-            matrix=self.matrix.to(device),
-            inverse_matrix=self.inverse_matrix.to(device),
+            mean=move(self.mean),
+            matrix=move(self.matrix),
+            inverse_matrix=move(self.inverse_matrix),
         )
 
 
@@ -122,7 +129,11 @@ class ActivationScaler:
             desc="Estimating whitening",
             leave=False,
         ):
-            acts = next(data_provider).to(torch.float64).reshape(-1, d_in)
+            acts = next(data_provider)
+            # MPS has no float64, so accumulate those statistics on CPU
+            if acts.device.type == "mps":
+                acts = acts.to("cpu")
+            acts = acts.to(torch.float64).reshape(-1, d_in)
             sum_x, sum_outer = sum_x.to(acts.device), sum_outer.to(acts.device)
             count += acts.shape[0]
             sum_x += acts.sum(dim=0)

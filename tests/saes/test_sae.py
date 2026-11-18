@@ -451,6 +451,28 @@ def test_TrainingSAE_fold_activation_norm_scaling_factor_then_save_inference_mod
     assert torch.equal(folded.encode(inputs) != 0, scaled_features != 0)
 
 
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="Needs MPS")
+def test_TrainingSAE_fold_activation_whitening_on_mps_matches_cpu_unfolded():
+    cfg = build_sae_training_cfg(normalize_activations="covariance_whitening")
+    sae = StandardTrainingSAE(cfg)
+    random_params(sae)
+    # float64 whitening statistics on CPU, as estimate_whitening leaves them
+    scaler, inputs = _estimate_whitening_scaler(cfg.d_in)
+    whitened_outputs = scaler.unscale(sae(scaler.scale(inputs)))
+
+    sae.to("mps")
+    _fold_scaler_whitening(sae, scaler)
+
+    assert sae.W_enc.dtype == torch.float32
+    output_scale = whitened_outputs.abs().max().item()
+    assert_close(
+        sae(inputs.to("mps")).cpu(),
+        whitened_outputs,
+        atol=1e-5 * output_scale,
+        rtol=1e-5,
+    )
+
+
 def test_TrainingSAE_fold_activation_whitening_float32_matches_within_1e_5():
     cfg = build_sae_training_cfg(normalize_activations="covariance_whitening")
     sae = StandardTrainingSAE(cfg)
