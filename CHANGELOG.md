@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## v6.55.6 (2026-11-19)
+
+### Fix
+
+* fix: accept cache name filters when stopping proxy forwards (#798) ([`13995f2`](https://github.com/decoderesearch/SAELens/commit/13995f29cdf3a6f2852f37573d127caad411ece9))
+
+* fix: keep Matryoshka decoding finite for zero-norm decoder rows (#795) ([`d587d20`](https://github.com/decoderesearch/SAELens/commit/d587d2087b7689798a99f15bc5c7c8a1a0a61fda))
+
+* fix: add embedding SAEs to the canonical Gemma Scope res releases (#794) ([`bdb1b3a`](https://github.com/decoderesearch/SAELens/commit/bdb1b3a4250289545396aa8215e910894576aee8))
+
+* fix: drop context_size from feature window token counts in verbose log (#792) ([`5d1bcc6`](https://github.com/decoderesearch/SAELens/commit/5d1bcc6300f2653f4a075207f1133cd4216fe3b3))
+
+* fix: load TransformerBridge models with a device_map (#790) ([`b3bd135`](https://github.com/decoderesearch/SAELens/commit/b3bd13582d6d3c518ece5a2574f0382a55c2ffe5))
+
+### Test
+
+* test: run cache activations runner tests on TransformerBridge (#791) ([`f82b5a2`](https://github.com/decoderesearch/SAELens/commit/f82b5a2c23f03e10eb1b705f2b778d635bc3d832))
+
+* test: use the default model class in test runner configs (#788) ([`a4eb502`](https://github.com/decoderesearch/SAELens/commit/a4eb502fc6a5baf4145e272902e3192f0afb6f82))
+
 ## v6.55.5 (2026-11-13)
 
 ### Fix
