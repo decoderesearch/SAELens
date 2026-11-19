@@ -45,19 +45,26 @@ from sae_lens.util import (
 
 F = TypeVar("F", bound=Callable[..., Any])
 
+_N_BATCHES_IN_BUFFER_DEPRECATION = (
+    "'n_batches_in_buffer' is deprecated and will be removed in v7.0.0. Use "
+    "'n_sequences_in_buffer' instead: it has always set the number of sequences "
+    "in the activation buffer, not the number of batches."
+)
+
 
 def _accept_deprecated_n_batches_in_buffer(func: F) -> F:
-    """Accept the deprecated `n_batches_in_buffer` keyword as `n_sequences_in_buffer`."""
+    """
+    Accept the deprecated `n_batches_in_buffer` keyword as `n_sequences_in_buffer`.
+
+    Only for `__init__`, where `n_sequences_in_buffer` is a required positional
+    parameter. The other constructors declare the deprecated keyword explicitly.
+    """
 
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         if "n_batches_in_buffer" in kwargs:
             warnings.warn(
-                "'n_batches_in_buffer' is deprecated and will be removed in v7.0.0. Use "
-                "'n_sequences_in_buffer' instead: it has always set the number of sequences "
-                "in the activation buffer, not the number of batches.",
-                DeprecationWarning,
-                stacklevel=2,
+                _N_BATCHES_IN_BUFFER_DEPRECATION, DeprecationWarning, stacklevel=2
             )
             kwargs["n_sequences_in_buffer"] = kwargs.pop("n_batches_in_buffer")
         return func(*args, **kwargs)
@@ -200,7 +207,6 @@ class ActivationsStore:
         )
 
     @classmethod
-    @_accept_deprecated_n_batches_in_buffer
     def from_sae(
         cls,
         model: HookedRootModule,
@@ -217,7 +223,14 @@ class ActivationsStore:
         device: str = "cpu",
         disable_concat_sequences: bool = False,
         sequence_separator_token: int | Literal["bos", "eos", "sep"] | None = "bos",
+        n_batches_in_buffer: int
+        | None = None,  # deprecated alias for n_sequences_in_buffer
     ) -> ActivationsStore:
+        if n_batches_in_buffer is not None:
+            warnings.warn(
+                _N_BATCHES_IN_BUFFER_DEPRECATION, DeprecationWarning, stacklevel=2
+            )
+            n_sequences_in_buffer = n_batches_in_buffer
         if context_size is None:
             context_size = sae.cfg.metadata.context_size
         if sae.cfg.metadata.hook_name is None:
@@ -249,7 +262,6 @@ class ActivationsStore:
         )
 
     @classmethod
-    @_accept_deprecated_n_batches_in_buffer
     def from_config_multi_hook(
         cls,
         model: HookedRootModule,
@@ -278,6 +290,8 @@ class ActivationsStore:
         sequence_separator_token: int | Literal["bos", "eos", "sep"] | None = "bos",
         activations_mixing_fraction: float = 0.5,
         use_chat_formatting: bool = False,
+        n_batches_in_buffer: int
+        | None = None,  # deprecated alias for n_sequences_in_buffer
     ) -> ActivationsStore:
         """
         Construct a multi-hook ActivationsStore that captures activations at
@@ -289,6 +303,11 @@ class ActivationsStore:
 
         Cached activations are not supported in multi-hook mode in V1.
         """
+        if n_batches_in_buffer is not None:
+            warnings.warn(
+                _N_BATCHES_IN_BUFFER_DEPRECATION, DeprecationWarning, stacklevel=2
+            )
+            n_sequences_in_buffer = n_batches_in_buffer
         if not hook_names:
             raise ValueError("hook_names must be non-empty")
 

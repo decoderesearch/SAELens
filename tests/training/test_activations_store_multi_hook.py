@@ -198,3 +198,24 @@ def test_get_multi_hook_data_loader_errors_on_single_hook_store(
         store.get_multi_hook_data_loader()
     with pytest.raises(RuntimeError, match="from_config_multi_hook"):
         store.get_multi_hook_activations(torch.zeros((2, 8), dtype=torch.long))
+
+
+def test_from_config_multi_hook_accepts_deprecated_n_batches_in_buffer(
+    ts_model: HookedTransformer,
+    dataset: Dataset,
+):
+    hook = "blocks.0.hook_resid_pre"
+    common = _common_kwargs(dataset)
+    del common["n_sequences_in_buffer"]
+    with pytest.warns(
+        DeprecationWarning, match="Use 'n_sequences_in_buffer' instead"
+    ) as record:
+        store = ActivationsStore.from_config_multi_hook(
+            model=ts_model,
+            hook_names=[hook],
+            hook_d_ins={hook: ts_model.cfg.d_model},
+            n_batches_in_buffer=3,
+            **common,
+        )
+    assert store.n_sequences_in_buffer == 3
+    assert record[0].filename == __file__

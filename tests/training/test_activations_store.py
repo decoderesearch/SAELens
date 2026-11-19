@@ -1053,7 +1053,7 @@ def test_activations_store_from_sae_n_batches_in_buffer_deprecated_usage(
             model=ts_model,
             sae=gpt2_res_jb_l4_sae,
             dataset=dataset,
-            n_batches_in_buffer=6,  # type: ignore[call-arg]
+            n_batches_in_buffer=6,
         )
     assert record[0].filename == __file__
     assert store.n_sequences_in_buffer == 6
