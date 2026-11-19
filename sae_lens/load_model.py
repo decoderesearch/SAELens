@@ -115,6 +115,10 @@ def load_model(
             model_name=model_name, device=device, **model_from_pretrained_kwargs
         )
     if model_class_name == "TransformerBridge":
+        # TransformerBridge rejects `device` together with `device_map`, since
+        # `device_map` already says where the weights go
+        if model_from_pretrained_kwargs.get("device_map") is not None:
+            device = None
         bridge = boot_transformer_bridge(
             model_name, device=device, **model_from_pretrained_kwargs
         )
