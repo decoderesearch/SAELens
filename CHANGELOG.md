@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.55.7 (2026-11-19)
+
+### Fix
+
+* fix: resolve list-valued hook aliases in SAETransformerBridge (#796) ([`b3d62c1`](https://github.com/decoderesearch/SAELens/commit/b3d62c12878f68b3c8e09b5929dac6f60fe77c92))
+
 ## v6.55.6 (2026-11-19)
 
 ### Fix
