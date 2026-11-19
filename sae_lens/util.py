@@ -1,3 +1,4 @@
+import functools
 import re
 import tempfile
 from contextlib import contextmanager
@@ -134,6 +135,37 @@ def dtype_to_str(dtype: torch.dtype) -> str:
             f"Invalid dtype: {dtype}. Must be one of {list(DTYPE_TO_STR.keys())}"
         )
     return DTYPE_TO_STR[dtype]
+
+
+@functools.cache
+def device_supports_float64(device_type: str) -> bool:
+    """Whether tensors on this device type (e.g. "cpu", "cuda", "mps") can be float64."""
+    try:
+        torch.zeros(1, dtype=torch.float64, device=device_type)
+    except (TypeError, RuntimeError):
+        return False
+    return True
+
+
+def safe_to(
+    tensor: torch.Tensor,
+    device: torch.device | str | None = None,
+    dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """
+    Like `tensor.to(device, dtype)`, but works with devices that have no float64 (e.g. MPS).
+
+    float64 becomes float32 on a device without float64. The cast happens on whichever
+    device supports the dtype: moving from MPS to CPU float64 in a single `.to()` call
+    raises or silently returns zeros, depending on the PyTorch version.
+    """
+    device = tensor.device if device is None else torch.device(device)
+    dtype = tensor.dtype if dtype is None else dtype
+    if dtype == torch.float64 and not device_supports_float64(device.type):
+        dtype = torch.float32
+    if dtype == torch.float64 and not device_supports_float64(tensor.device.type):
+        return tensor.to(device).to(dtype)
+    return tensor.to(dtype).to(device)
 
 
 def cosine_similarities(

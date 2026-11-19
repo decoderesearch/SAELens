@@ -10,11 +10,13 @@ import torch
 from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.util import (
     cosine_similarities,
+    device_supports_float64,
     dtype_to_str,
     extract_stop_at_layer_from_tlens_hook_name,
     filter_valid_dataclass_fields,
     get_special_token_ids,
     path_or_tmp_dir,
+    safe_to,
     str_to_dtype,
     temporary_seed,
 )
@@ -368,3 +370,38 @@ def test_temporary_seed_none_is_noop():
     assert not torch.equal(before, after)
     # And we should still get a valid tensor
     assert sample.shape == (1,)
+
+
+def test_safe_to_uses_float32_instead_of_float64_on_devices_without_float64(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    x = torch.randn(4, 3)
+    out = safe_to(x, "cpu", torch.float64)
+    assert out.dtype == torch.float64
+    assert torch.equal(out, x.double())
+
+    monkeypatch.setattr(
+        "sae_lens.util.device_supports_float64",
+        lambda device_type: False,  # noqa: ARG005
+    )
+    out = safe_to(x.double(), "cpu", torch.float64)
+    assert out.dtype == torch.float32
+    assert torch.equal(out, x)
+    assert safe_to(x, dtype=torch.bfloat16).dtype == torch.bfloat16
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="Needs MPS")
+def test_safe_to_moves_between_mps_and_float64_without_corrupting_values():
+    assert not device_supports_float64("mps")
+    x = torch.randn(4, 3, dtype=torch.float64) + 3
+
+    to_mps = safe_to(x, "mps")
+    assert to_mps.device.type == "mps"
+    assert to_mps.dtype == torch.float32
+    assert torch.equal(to_mps.cpu(), x.float())
+
+    # A single .to("cpu", torch.float64) from MPS raises or returns zeros
+    to_cpu = safe_to(to_mps, "cpu", torch.float64)
+    assert to_cpu.device.type == "cpu"
+    assert to_cpu.dtype == torch.float64
+    assert torch.equal(to_cpu, x.float().double())

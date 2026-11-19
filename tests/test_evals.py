@@ -1194,6 +1194,59 @@ def test_run_evals_with_transformer_bridge_scores_identity_and_zero_saes(
     assert behavior["kl_div_score"] == pytest.approx(expected_score, abs=1e-5)
 
 
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="Needs MPS")
+def test_run_evals_on_mps_with_identity_sae(example_dataset: Dataset):
+    # MPS has no float64, so the CPU float64 averaging must move to CPU before casting
+    d_in = 64
+    model = load_model("TransformerBridge", TINYSTORIES_MODEL, device="mps")
+    sae = StandardSAE(
+        build_sae_cfg(
+            d_in=d_in,
+            d_sae=2 * d_in,
+            device="mps",
+            metadata=SAEMetadata(
+                model_name=TINYSTORIES_MODEL,
+                hook_name="blocks.1.hook_resid_pre",
+                prepend_bos=True,
+            ),
+        )
+    )
+    with torch.no_grad():
+        sae.W_dec.data = torch.cat([torch.eye(d_in), -1 * torch.eye(d_in)]).to("mps")
+        sae.W_enc.data = sae.W_dec.T.clone()
+        sae.b_enc.data = torch.zeros_like(sae.b_enc)
+        sae.b_dec.data = torch.zeros_like(sae.b_dec)
+    activation_store = ActivationsStore.from_sae(
+        model,
+        sae,
+        dataset=example_dataset,
+        context_size=8,
+        store_batch_size_prompts=4,
+        device="mps",
+    )
+
+    metrics, _ = run_evals(
+        sae=sae,
+        activation_store=activation_store,
+        model=model,
+        activation_scaler=ActivationScaler(),
+        eval_config=EvalConfig(
+            n_eval_reconstruction_batches=2,
+            n_eval_sparsity_variance_batches=2,
+            compute_kl=True,
+            compute_ce_loss=True,
+            compute_variance_metrics=True,
+            batch_size_prompts=4,
+        ),
+        exclude_special_tokens=False,
+    )
+
+    performance = metrics["model_performance_preservation"]
+    reconstruction = metrics["reconstruction_quality"]
+    assert performance["ce_loss_score"] == pytest.approx(1.0, abs=1e-4)
+    assert reconstruction["explained_variance"] == pytest.approx(1.0, abs=1e-4)
+
+
 @pytest.mark.parametrize("compute_density", [False, True])
 def test_density_mask_is_only_allocated_when_requested(compute_density: bool):
     hook_name = "blocks.0.hook_resid_pre"

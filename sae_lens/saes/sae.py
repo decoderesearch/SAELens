@@ -31,7 +31,12 @@ from sae_lens.constants import (
     SAE_WEIGHTS_FILENAME,
 )
 from sae_lens.transformer_lens_compat import HookedRootModule
-from sae_lens.util import dtype_to_str, filter_valid_dataclass_fields, str_to_dtype
+from sae_lens.util import (
+    dtype_to_str,
+    filter_valid_dataclass_fields,
+    safe_to,
+    str_to_dtype,
+)
 
 if TYPE_CHECKING:
     from sae_lens.config import LanguageModelSAERunnerConfig
@@ -349,9 +354,11 @@ class SAE(HookedRootModule, Generic[T_SAE_CONFIG], ABC):
         # Compute in at least the precision of the whitening statistics, so bf16
         # weights are folded in float32 and float64 weights stay float64.
         dtype = torch.promote_types(self.W_enc.dtype, whitening_matrix.dtype)
-        mean = mean.to(self.device, dtype)
-        whitening_matrix = whitening_matrix.to(self.device, dtype)
-        unwhitening_matrix = unwhitening_matrix.to(self.device, dtype)
+        mean = safe_to(mean, self.device, dtype)
+        whitening_matrix = safe_to(whitening_matrix, self.device, dtype)
+        unwhitening_matrix = safe_to(unwhitening_matrix, self.device, dtype)
+        # float32 rather than float64 if the SAE's device has no float64 (e.g. MPS)
+        dtype = whitening_matrix.dtype
         self.W_enc.data.copy_(whitening_matrix @ self.W_enc.data.to(dtype))
         if (
             not self.cfg.apply_b_dec_to_input

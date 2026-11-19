@@ -8,6 +8,7 @@ from tqdm.auto import tqdm
 
 from sae_lens.constants import ACTIVATION_WHITENING_FILENAME
 from sae_lens.training.types import DataProvider
+from sae_lens.util import device_supports_float64, safe_to
 
 
 @dataclass
@@ -25,9 +26,9 @@ class ActivationWhitening:
         if self.matrix.device == device:
             return self
         return ActivationWhitening(
-            mean=self.mean.to(device),
-            matrix=self.matrix.to(device),
-            inverse_matrix=self.inverse_matrix.to(device),
+            mean=safe_to(self.mean, device),
+            matrix=safe_to(self.matrix, device),
+            inverse_matrix=safe_to(self.inverse_matrix, device),
         )
 
 
@@ -122,7 +123,11 @@ class ActivationScaler:
             desc="Estimating whitening",
             leave=False,
         ):
-            acts = next(data_provider).to(torch.float64).reshape(-1, d_in)
+            acts = next(data_provider)
+            # Accumulate in float64, on CPU if the activations' device has none (e.g. MPS)
+            if not device_supports_float64(acts.device.type):
+                acts = acts.to("cpu")
+            acts = acts.to(torch.float64).reshape(-1, d_in)
             sum_x, sum_outer = sum_x.to(acts.device), sum_outer.to(acts.device)
             count += acts.shape[0]
             sum_x += acts.sum(dim=0)

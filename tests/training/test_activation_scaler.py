@@ -255,6 +255,26 @@ def test_ActivationScaler_estimate_whitening_gives_zero_mean_and_identity_covari
     )
 
 
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="Needs MPS")
+def test_ActivationScaler_whitening_works_with_mps_activations():
+    d_in = 16
+    acts = next(correlated_activations(d_in, batch_size=1536)).to("mps")
+
+    scaler = ActivationScaler()
+    scaler.estimate_whitening(
+        d_in=d_in,
+        data_provider=iter(acts.split(512)),
+        n_batches_for_norm_estimate=3,
+        eps=0.0,
+    )
+    whitened = scaler.scale(acts)
+
+    assert whitened.device.type == "mps"
+    assert_close(whitened.mean(dim=0).cpu(), torch.zeros(d_in), atol=1e-4, rtol=0)
+    assert_close(torch.cov(whitened.cpu().T), torch.eye(d_in), atol=1e-4, rtol=0)
+    assert_close(scaler.unscale(whitened).cpu(), acts.cpu(), atol=1e-4, rtol=1e-5)
+
+
 def test_ActivationScaler_scale_unscale_roundtrip_with_whitening():
     d_in = 16
     provider = correlated_activations(d_in, batch_size=256)
