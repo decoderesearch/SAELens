@@ -102,20 +102,12 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
             **self._collect_hook_aliases_from_registry(),
         }
         resolved = aliases.get(hook_name, hook_name)
-        if isinstance(resolved, str):
-            return resolved
         if isinstance(resolved, list):
-            for candidate in resolved:
-                if isinstance(candidate, str) and candidate in self._hook_registry:
-                    return candidate
-            for candidate in resolved:
-                if isinstance(candidate, str):
-                    try:
-                        get_deep_attr(self, candidate)
-                        return candidate
-                    except AttributeError:
-                        continue
-        return hook_name
+            # Like TransformerBridge, use the first hook in the list the model has
+            return next(
+                (name for name in resolved if name in self._hook_registry), hook_name
+            )
+        return resolved if isinstance(resolved, str) else hook_name
 
     def get_sae_hook_name(
         self, sae: SAE[Any], internal: str = "hook_sae_acts_post"
@@ -274,34 +266,18 @@ class SAETransformerBridge(TransformerBridge):  # type: ignore[misc,no-untyped-c
         ):
             sae.turn_on_forward_pass_hook_z_reshaping()
 
-        # Reset output hook location. The HookPoint the SAE replaced stays in
-        # _hook_registry under output_hook (and under any alias such as hook_embed or,
-        # in compatibility mode, blocks.0.hook_mlp_out), so put that one back: a new
-        # HookPoint would leave aliases pointing at a HookPoint that is no longer in
-        # the forward pass.
-        registry_hook = self._hook_registry.get(output_hook)
-        original_hook = (
-            registry_hook
-            if isinstance(registry_hook, HookPoint)
-            else next(
-                (
-                    hook
-                    for name, hook in self._hook_registry.items()
-                    if self._resolve_hook_name(name) == output_hook
-                    and isinstance(hook, HookPoint)
-                ),
-                None,
-            )
-        )
-        if original_hook is not None:
-            new_hook, hook_point_name = original_hook, original_hook.name
-        else:
-            new_hook, hook_point_name = HookPoint(), output_hook
+        # Put back the HookPoint the SAE replaced. add_sae leaves it in _hook_registry,
+        # and aliases (e.g. hook_embed, or blocks.0.hook_mlp_out in compatibility mode)
+        # still point at it, so a new HookPoint would leave them out of the forward pass.
+        hook_point = self._hook_registry.get(output_hook)
+        if not isinstance(hook_point, HookPoint):
+            hook_point = HookPoint()
+        hook_point_name = hook_point.name or output_hook
         # Setting the attribute renames the HookPoint to the bare attribute name (e.g.
         # "hook_out"), and the bridge then fails to find it by its full name.
-        set_deep_attr(self, output_hook, new_hook)
-        new_hook.name = hook_point_name
-        self._hook_registry[output_hook] = new_hook
+        set_deep_attr(self, output_hook, hook_point)
+        hook_point.name = hook_point_name
+        self._hook_registry[output_hook] = hook_point
 
         del self._acts_to_saes[act_name]
 
