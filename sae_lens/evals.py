@@ -28,6 +28,7 @@ from sae_lens.transformer_lens_compat import HookedRootModule
 from sae_lens.util import (
     extract_stop_at_layer_from_tlens_hook_name,
     get_special_token_ids,
+    safe_to,
 )
 
 
@@ -381,7 +382,7 @@ def get_downstream_reconstruction_metrics(
     for metric_name, metric_values in metrics_dict.items():
         # Average in float64 on CPU (MPS has no float64): a bfloat16 or float16
         # mean is rounded to that dtype (about 3 significant digits for bfloat16).
-        metric_values_64 = torch.cat(metric_values).to("cpu").to(torch.float64)
+        metric_values_64 = safe_to(torch.cat(metric_values), "cpu", torch.float64)
         metrics[f"{metric_name}"] = metric_values_64.mean().item()
 
     if compute_kl:
@@ -422,7 +423,7 @@ class ExplainedVarianceCalculator:
         hidden_acts = hidden_acts.to(
             torch.promote_types(hidden_acts.dtype, torch.float32)
         )
-        batch_sum = hidden_acts.sum(dim=0).to("cpu").to(torch.float64)
+        batch_sum = safe_to(hidden_acts.sum(dim=0), "cpu", torch.float64)
         self.sum_x = batch_sum if self.sum_x is None else self.sum_x + batch_sum
         self.sum_squared_norm += hidden_acts.pow(2).sum().item()
         self.sum_squared_residual += (hidden_acts - sae_output).pow(2).sum().item()
@@ -658,7 +659,7 @@ def get_sparsity_and_variance_metrics(
     for metric_name, metric_values in metric_dict.items():
         # Average in float64 on CPU (MPS has no float64): a bfloat16 or float16
         # mean is rounded to that dtype (about 3 significant digits for bfloat16).
-        metric_values_64 = torch.cat(metric_values).to("cpu").to(torch.float64)
+        metric_values_64 = safe_to(torch.cat(metric_values), "cpu", torch.float64)
         metrics[f"{metric_name}"] = metric_values_64.mean().item()
 
     # calculate explained variance
