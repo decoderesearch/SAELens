@@ -1255,3 +1255,63 @@ def test_hooks_fire_after_sae_is_removed(
 
     assert names_seen_by_hooks() == seen_before
     assert_close(model(PROMPT), logits_before)
+
+
+@pytest.mark.parametrize(
+    "removal", ["run_with_saes", "reset_saes", "saes_context", "restore_replaced_sae"]
+)
+@pytest.mark.parametrize("compatibility_mode", [False, True])
+def test_sae_on_list_valued_alias_changes_output_and_hooks_fire_after_removal(
+    compatibility_mode: bool, removal: str
+) -> None:
+    model = SAETransformerBridge.boot_transformers(MODEL, device="cpu")
+    if compatibility_mode:
+        model.enable_compatibility_mode(disable_warnings=True)
+    # TransformerBridge aliases hook_embed to the first of
+    # ["embed_ln.hook_out", "embed.hook_out"] that the model has
+    sae = make_sae(model.cfg.d_model, "hook_embed")
+    assert model.get_sae_hook_name(sae) == "embed.hook_out.hook_sae_acts_post"
+    # On transformer-lens 3, aliases like hook_embed only work in compatibility mode
+    hook_names = ["embed.hook_out"] + (["hook_embed"] if compatibility_mode else [])
+
+    def names_seen_by_hooks() -> dict[str, list[str]]:
+        seen: dict[str, list[str]] = {name: [] for name in hook_names}
+        for name in hook_names:
+            model.run_with_hooks(
+                PROMPT,
+                fwd_hooks=[(name, lambda _x, hook, n=name: seen[n].append(hook.name))],
+            )
+        return seen
+
+    seen_before = names_seen_by_hooks()
+    logits_before = model(PROMPT)
+    assert all(seen_before.values())
+
+    sae_logits = model.run_with_saes(PROMPT, saes=[sae])
+    assert isinstance(sae_logits, torch.Tensor)
+    assert_not_close(sae_logits, logits_before)
+
+    if removal == "reset_saes":
+        model.add_sae(sae)
+        assert_close(model(PROMPT), sae_logits)
+        model.reset_saes()
+    elif removal == "saes_context":
+        with model.saes(saes=[sae]):
+            assert_close(model(PROMPT), sae_logits)
+    elif removal == "restore_replaced_sae":
+        # Exiting the context puts the first SAE back, then reset_saes removes it
+        model.add_sae(sae)
+        with model.saes(saes=[make_sae(model.cfg.d_model, "hook_embed")]):
+            model(PROMPT)
+        assert_close(model(PROMPT), sae_logits)
+        model.reset_saes()
+
+    assert names_seen_by_hooks() == seen_before
+    assert_close(model(PROMPT), logits_before)
+
+
+def test_resolve_hook_name_uses_first_existing_hook_in_list_valued_alias() -> None:
+    model = SAETransformerBridge.boot_transformers(MODEL, device="cpu")
+    assert model._resolve_hook_name("hook_embed") == "embed.hook_out"
+    model._hook_registry["embed_ln.hook_out"] = HookPoint()
+    assert model._resolve_hook_name("hook_embed") == "embed_ln.hook_out"
