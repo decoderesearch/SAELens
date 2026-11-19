@@ -256,6 +256,54 @@ def test_MatryoshkaBatchTopKTrainingSAE_decode_matryoshka_level_matches_standard
     assert output_mat.shape == (10, 8)
 
 
+def test_MatryoshkaBatchTopKTrainingSAE_decode_stays_finite_with_zero_norm_decoder_row():
+    cfg = build_matryoshka_batchtopk_sae_training_cfg(
+        d_in=8,
+        d_sae=16,
+        k=4,
+        matryoshka_widths=[4, 16],
+        rescale_acts_by_decoder_norm=True,
+        device="cpu",
+    )
+    sae = MatryoshkaBatchTopKTrainingSAE(cfg)
+    random_params(sae)
+    with torch.no_grad():
+        sae.W_dec[0] = 0.0
+
+    feature_acts = torch.randn(10, 16).relu()
+    levels = list(sae._iterable_decode(feature_acts, True))
+    assert all(torch.isfinite(out).all() for _, out in levels)
+    assert_close(levels[-1][1], sae.decode(feature_acts))
+
+
+def test_matryoshka_aux_loss_stays_finite_with_zero_norm_decoder_row():
+    cfg = build_matryoshka_batchtopk_sae_training_cfg(
+        d_in=4,
+        d_sae=6,
+        k=2,
+        matryoshka_widths=[3, 6],
+        use_matryoshka_aux_loss=True,
+        rescale_acts_by_decoder_norm=True,
+        device="cpu",
+    )
+    sae = MatryoshkaBatchTopKTrainingSAE(cfg)
+    random_params(sae)
+    with torch.no_grad():
+        sae.W_dec[4] = 0.0
+
+    sae_in = torch.randn(4, 4)
+    hidden_pre = sae_in @ sae.W_enc + sae.b_enc
+    acts = sae.activation_fn(hidden_pre)
+    sae_out = sae.decode(acts)
+    dead_neuron_mask = torch.zeros(6, dtype=torch.bool)
+    dead_neuron_mask[3:6] = True
+
+    loss = sae.calculate_matryoshka_aux_loss(
+        sae_in, sae_out, acts, hidden_pre, dead_neuron_mask
+    )
+    assert torch.isfinite(loss)
+
+
 @pytest.mark.parametrize("rescale_acts_by_decoder_norm", [True, False])
 def test_MatryoshkaBatchTopKTrainingSAE_save_and_load_inference_sae(
     tmp_path: Path,

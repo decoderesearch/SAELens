@@ -84,7 +84,9 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
     ) -> Generator[tuple[int, torch.Tensor], None, None]:
         if self.cfg.rescale_acts_by_decoder_norm:
             # need to multiply by the inverse of the norm because division is illegal with sparse tensors
-            inv_W_dec_norm = 1 / self.W_dec.norm(dim=-1)
+            # a zero-norm row would give 0 * inf = NaN, so treat its norm as 1 (as act_times_W_dec does)
+            norms = self.W_dec.norm(dim=-1)
+            inv_W_dec_norm = 1 / torch.where(norms == 0, torch.ones_like(norms), norms)
             feature_acts = feature_acts * inv_W_dec_norm
         widths = self.cfg.matryoshka_widths
         prev_width = 0
@@ -159,9 +161,11 @@ class MatryoshkaBatchTopKTrainingSAE(BatchTopKTrainingSAE):
             prev_width = 0
             aux_losses = []
 
-            # Normalize decoder weights once to avoid repeated computation across levels
+            # Normalize decoder weights once to avoid repeated computation across levels,
+            # leaving zero-norm rows as they are rather than dividing 0 by 0
+            norms = self.W_dec.norm(dim=-1, keepdim=True)
             scaled_W_dec = (
-                self.W_dec / self.W_dec.norm(dim=-1, keepdim=True)
+                self.W_dec / torch.where(norms == 0, torch.ones_like(norms), norms)
                 if self.cfg.rescale_acts_by_decoder_norm
                 else self.W_dec
             )
