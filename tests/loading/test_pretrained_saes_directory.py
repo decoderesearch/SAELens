@@ -137,6 +137,24 @@ def test_get_repo_id_and_folder_name_release_found():
     assert folder_name == "blocks.0.hook_resid_pre"
 
 
+@pytest.mark.parametrize(
+    "release, expected_folder",
+    [
+        ("gemma-scope-2b-pt-res", "embedding/width_4k/average_l0_111"),
+        ("gemma-scope-9b-pt-res", "embedding/width_4k/average_l0_80"),
+    ],
+)
+def test_gemma_scope_canonical_releases_include_embedding_sae(
+    release: str, expected_folder: str
+):
+    repo_id, folder_name = get_repo_id_and_folder_name(
+        f"{release}-canonical", sae_id="embedding/width_4k/canonical"
+    )
+    assert repo_id == f"google/{release}"
+    assert folder_name == expected_folder
+    assert expected_folder in get_pretrained_saes_directory()[release].saes_map.values()
+
+
 def test_get_pretrained_saes_directory_saes_map_paths_are_all_str():
     non_str_paths = [
         (release, sae_id, path)
