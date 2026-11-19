@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.55.8 (2026-11-19)
+
+### Fix
+
+* fix: run_evals and covariance_whitening crash on MPS (no float64) (#797) ([`3860f42`](https://github.com/decoderesearch/SAELens/commit/3860f4218965694355a8014e1f47fd48f3bc3844))
+
 ## v6.55.7 (2026-11-19)
 
 ### Fix
