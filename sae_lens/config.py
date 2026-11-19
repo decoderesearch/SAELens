@@ -220,8 +220,8 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     from_pretrained_path: str | None = None
 
     # Activation Store Parameters
-    # 32 * 128 tokens = 4096 tokens, the minimum to hold one training batch
-    n_sequences_in_buffer: int = 32
+    # As in the docs examples: 64 * 128 = 8192 tokens, two default training batches
+    n_sequences_in_buffer: int = 64
     n_batches_in_buffer: int | None = None  # deprecated alias for n_sequences_in_buffer
     training_tokens: int = 2_000_000
     store_batch_size_prompts: int = 32

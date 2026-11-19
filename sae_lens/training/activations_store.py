@@ -216,8 +216,8 @@ class ActivationsStore:
         context_size: int | None = None,
         streaming: bool = True,
         store_batch_size_prompts: int = 8,
-        # at context_size 128: 32 * 128 = 4096 tokens, the minimum to hold one training batch
-        n_sequences_in_buffer: int = 32,
+        # Same default as LanguageModelSAERunnerConfig
+        n_sequences_in_buffer: int = 64,
         train_batch_size_tokens: int = 4096,
         total_tokens: int = 10**9,
         device: str = "cpu",
@@ -272,8 +272,8 @@ class ActivationsStore:
         hook_head_indices: dict[str, int | None] | None = None,
         streaming: bool = True,
         context_size: int = 128,
-        # 32 * 128 tokens = 4096 tokens, the minimum to hold one training batch
-        n_sequences_in_buffer: int = 32,
+        # Same default as LanguageModelSAERunnerConfig
+        n_sequences_in_buffer: int = 64,
         total_training_tokens: int = 2_000_000,
         store_batch_size_prompts: int = 32,
         train_batch_size_tokens: int = 4096,
