@@ -57,7 +57,7 @@ runner_cfg = LanguageModelSAERunnerConfig(
     seqpos_slice=(5, -5),
     #
     # Activations store
-    n_batches_in_buffer=32,
+    n_sequences_in_buffer=32,
     store_batch_size_prompts=16,
     training_tokens=training_tokens,
     #

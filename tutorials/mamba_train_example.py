@@ -33,7 +33,7 @@ cfg = LanguageModelSAERunnerConfig(
     context_size=128,
     lr_warm_up_steps=5000,
     # Activation Store Parameters
-    n_batches_in_buffer=128,
+    n_sequences_in_buffer=128,
     training_tokens=1_000_000 * 300,
     store_batch_size_prompts=32,
     # Dead Neurons and Sparsity

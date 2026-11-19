@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import functools
 import json
 import os
 import warnings
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, TypeVar, cast
 
 import datasets
 import torch
@@ -16,6 +17,7 @@ from requests import HTTPError
 from safetensors.torch import load_file, save_file
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
+from typing_extensions import deprecated
 
 from sae_lens import logger
 from sae_lens.config import (
@@ -40,6 +42,34 @@ from sae_lens.util import (
     get_special_token_ids,
     str_to_dtype,
 )
+
+F = TypeVar("F", bound=Callable[..., Any])
+
+_N_BATCHES_IN_BUFFER_DEPRECATION = (
+    "'n_batches_in_buffer' is deprecated and will be removed in v7.0.0. Use "
+    "'n_sequences_in_buffer' instead: it has always set the number of sequences "
+    "in the activation buffer, not the number of batches."
+)
+
+
+def _accept_deprecated_n_batches_in_buffer(func: F) -> F:
+    """
+    Accept the deprecated `n_batches_in_buffer` keyword as `n_sequences_in_buffer`.
+
+    Only for `__init__`, where `n_sequences_in_buffer` is a required positional
+    parameter. The other constructors declare the deprecated keyword explicitly.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        if "n_batches_in_buffer" in kwargs:
+            warnings.warn(
+                _N_BATCHES_IN_BUFFER_DEPRECATION, DeprecationWarning, stacklevel=2
+            )
+            kwargs["n_sequences_in_buffer"] = kwargs.pop("n_batches_in_buffer")
+        return func(*args, **kwargs)
+
+    return cast(F, wrapper)
 
 
 # TODO: Make an activation store config class to be consistent with the rest of the code.
@@ -92,7 +122,7 @@ class ActivationsStore:
             hook_name=cfg.hook_name,
             context_size=cfg.context_size,
             d_in=cfg.d_in,
-            n_batches_in_buffer=cfg.n_batches_in_buffer,
+            n_sequences_in_buffer=cfg.n_seq_in_buffer,
             total_training_tokens=cfg.training_tokens,
             store_batch_size_prompts=cfg.model_batch_size,  # get_buffer
             train_batch_size_tokens=cfg.model_batch_size,  # dataloader
@@ -156,7 +186,7 @@ class ActivationsStore:
             d_in=cfg.d_in
             if isinstance(cfg, CacheActivationsRunnerConfig)
             else cfg.sae.d_in,
-            n_batches_in_buffer=cfg.n_batches_in_buffer,
+            n_sequences_in_buffer=cfg.n_sequences_in_buffer,
             total_training_tokens=cfg.training_tokens,
             store_batch_size_prompts=cfg.store_batch_size_prompts,
             train_batch_size_tokens=cfg.train_batch_size_tokens,
@@ -186,13 +216,21 @@ class ActivationsStore:
         context_size: int | None = None,
         streaming: bool = True,
         store_batch_size_prompts: int = 8,
-        n_batches_in_buffer: int = 8,
+        # Same default as LanguageModelSAERunnerConfig
+        n_sequences_in_buffer: int = 64,
         train_batch_size_tokens: int = 4096,
         total_tokens: int = 10**9,
         device: str = "cpu",
         disable_concat_sequences: bool = False,
         sequence_separator_token: int | Literal["bos", "eos", "sep"] | None = "bos",
+        n_batches_in_buffer: int
+        | None = None,  # deprecated alias for n_sequences_in_buffer
     ) -> ActivationsStore:
+        if n_batches_in_buffer is not None:
+            warnings.warn(
+                _N_BATCHES_IN_BUFFER_DEPRECATION, DeprecationWarning, stacklevel=2
+            )
+            n_sequences_in_buffer = n_batches_in_buffer
         if context_size is None:
             context_size = sae.cfg.metadata.context_size
         if sae.cfg.metadata.hook_name is None:
@@ -212,7 +250,7 @@ class ActivationsStore:
             streaming=streaming,
             store_batch_size_prompts=store_batch_size_prompts,
             train_batch_size_tokens=train_batch_size_tokens,
-            n_batches_in_buffer=n_batches_in_buffer,
+            n_sequences_in_buffer=n_sequences_in_buffer,
             total_training_tokens=total_tokens,
             normalize_activations=sae.cfg.normalize_activations,
             dataset_trust_remote_code=dataset_trust_remote_code,
@@ -234,7 +272,8 @@ class ActivationsStore:
         hook_head_indices: dict[str, int | None] | None = None,
         streaming: bool = True,
         context_size: int = 128,
-        n_batches_in_buffer: int = 20,
+        # Same default as LanguageModelSAERunnerConfig
+        n_sequences_in_buffer: int = 64,
         total_training_tokens: int = 2_000_000,
         store_batch_size_prompts: int = 32,
         train_batch_size_tokens: int = 4096,
@@ -251,6 +290,8 @@ class ActivationsStore:
         sequence_separator_token: int | Literal["bos", "eos", "sep"] | None = "bos",
         activations_mixing_fraction: float = 0.5,
         use_chat_formatting: bool = False,
+        n_batches_in_buffer: int
+        | None = None,  # deprecated alias for n_sequences_in_buffer
     ) -> ActivationsStore:
         """
         Construct a multi-hook ActivationsStore that captures activations at
@@ -262,6 +303,11 @@ class ActivationsStore:
 
         Cached activations are not supported in multi-hook mode in V1.
         """
+        if n_batches_in_buffer is not None:
+            warnings.warn(
+                _N_BATCHES_IN_BUFFER_DEPRECATION, DeprecationWarning, stacklevel=2
+            )
+            n_sequences_in_buffer = n_batches_in_buffer
         if not hook_names:
             raise ValueError("hook_names must be non-empty")
 
@@ -283,7 +329,7 @@ class ActivationsStore:
             hook_head_index=head_indices.get(canonical),
             context_size=context_size,
             d_in=hook_d_ins[canonical],
-            n_batches_in_buffer=n_batches_in_buffer,
+            n_sequences_in_buffer=n_sequences_in_buffer,
             total_training_tokens=total_training_tokens,
             store_batch_size_prompts=store_batch_size_prompts,
             train_batch_size_tokens=train_batch_size_tokens,
@@ -307,6 +353,7 @@ class ActivationsStore:
         store._hook_head_indices = dict(head_indices)
         return store
 
+    @_accept_deprecated_n_batches_in_buffer
     def __init__(
         self,
         model: HookedRootModule,
@@ -316,7 +363,7 @@ class ActivationsStore:
         hook_head_index: int | None,
         context_size: int,
         d_in: int,
-        n_batches_in_buffer: int,
+        n_sequences_in_buffer: int,
         total_training_tokens: int,
         store_batch_size_prompts: int,
         train_batch_size_tokens: int,
@@ -363,7 +410,7 @@ class ActivationsStore:
         self.hook_head_index = hook_head_index
         self.context_size = context_size
         self.d_in = d_in
-        self.n_batches_in_buffer = n_batches_in_buffer
+        self.n_sequences_in_buffer = n_sequences_in_buffer
         self.total_training_tokens = total_training_tokens
         self.store_batch_size_prompts = store_batch_size_prompts
         self.train_batch_size_tokens = train_batch_size_tokens
@@ -471,6 +518,15 @@ class ActivationsStore:
         self.cached_activation_dataset = self.load_cached_activation_dataset()
 
         # TODO add support for "mixed loading" (ie use cache until you run out, then switch over to streaming from HF)
+
+    @property
+    @deprecated(
+        "'n_batches_in_buffer' is deprecated and will be removed in v7.0.0. Use "
+        "'n_sequences_in_buffer' instead: it has always been the number of sequences in "
+        "the activation buffer, not the number of batches."
+    )
+    def n_batches_in_buffer(self) -> int:
+        return self.n_sequences_in_buffer
 
     def _iterate_raw_dataset(
         self,
@@ -842,7 +898,7 @@ class ActivationsStore:
         Return an auto-refilling stream of filtered and mixed activations.
         """
         return mixing_buffer(
-            buffer_size=self.n_batches_in_buffer * self.training_context_size,
+            buffer_size=self.n_sequences_in_buffer * self.training_context_size,
             batch_size=self.train_batch_size_tokens,
             activations_loader=self._iterate_filtered_activations(),
             mix_fraction=self.activations_mixing_fraction,
@@ -964,7 +1020,7 @@ class ActivationsStore:
                 "via from_config_multi_hook"
             )
         return multi_hook_concat_split_iter(
-            buffer_size=self.n_batches_in_buffer * self.training_context_size,
+            buffer_size=self.n_sequences_in_buffer * self.training_context_size,
             batch_size=self.train_batch_size_tokens,
             activations_loader=self._iterate_filtered_multi_hook_activations(),
             hook_names=list(self._hook_names),

@@ -69,7 +69,7 @@ for block in [11, 0]:
             adam_beta1=0.9,
             adam_beta2=0.999,
             # Unsure if this is enough
-            n_batches_in_buffer=64,
+            n_sequences_in_buffer=64,
             store_batch_size_prompts=16,
             # Feature Store
             feature_sampling_window=1000,

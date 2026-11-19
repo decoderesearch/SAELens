@@ -158,7 +158,7 @@ def test_eval_all_loadable_saes(
         # models without running out of memory.
         store_batch_size_prompts=8,
         train_batch_size_tokens=4096,
-        n_batches_in_buffer=4,
+        n_sequences_in_buffer=4,
         device=device,
     )
 
