@@ -1,5 +1,6 @@
 import sys
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 import torch
@@ -607,3 +608,32 @@ def test_load_model_passes_hook_names_to_HookedProxyLM():
     )
     assert isinstance(model, HookedProxyLM)
     assert set(model.hook_dict) == set(requested)
+
+
+@pytest.mark.parametrize("filter_kind", ["list", "string", "callable"])
+def test_proxy_early_stop_accepts_cache_name_filters(filter_kind: str) -> None:
+    model = torch.nn.Sequential()
+    model.add_module("hidden", torch.nn.Identity())
+    model.add_module("output", torch.nn.Identity())
+    proxy = HookedProxyLM(model, tokenizer=MagicMock())
+    tokens = torch.tensor([[1.0, 2.0]])
+    visited = []
+    model[1].register_forward_hook(lambda *_: visited.append(True))
+    names_filter = {
+        "list": ["hidden"],
+        "string": "hidden",
+        "callable": lambda name: name == "hidden",
+    }[filter_kind]
+
+    result, cache = proxy.run_with_cache(
+        tokens, names_filter=names_filter, stop_at_layer=1
+    )
+    assert result is None
+    assert set(cache) == {"hidden"}
+    torch.testing.assert_close(cache["hidden"], tokens)
+    assert not visited
+
+    result, cache = proxy.run_with_cache(tokens, names_filter=names_filter)
+    torch.testing.assert_close(result, tokens)
+    torch.testing.assert_close(cache["hidden"], tokens)
+    assert visited == [True]

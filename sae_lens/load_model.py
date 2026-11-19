@@ -218,7 +218,12 @@ class HookedProxyLM(HookedRootModule):
     def run_with_cache(self, *args: Any, **kwargs: Any):  # type: ignore
         if "names_filter" in kwargs:
             # hacky way to make sure that the names_filter is passed to our forward method
-            kwargs["_names_filter"] = kwargs["names_filter"]
+            names_filter = kwargs["names_filter"]
+            if isinstance(names_filter, str):
+                names_filter = [names_filter]
+            elif callable(names_filter):
+                names_filter = [name for name in self.hook_dict if names_filter(name)]
+            kwargs["_names_filter"] = names_filter
         return super().run_with_cache(*args, **kwargs)
 
     def forward(
