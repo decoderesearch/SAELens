@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.56.0 (2026-11-19)
+
+### Feature
+
+* feat: rename n_batches_in_buffer to n_sequences_in_buffer (#756) ([`e456823`](https://github.com/decoderesearch/SAELens/commit/e45682358c3de8816cb718646364a08a8b40aacb))
+
 ## v6.55.8 (2026-11-19)
 
 ### Fix
