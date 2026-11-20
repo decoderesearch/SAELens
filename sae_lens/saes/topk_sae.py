@@ -218,9 +218,11 @@ def act_times_W_dec(
     Handles both dense and sparse tensors. Does NOT add b_dec — callers add it if needed.
     """
     if rescale_acts_by_decoder_norm:
-        norms = W_dec.norm(dim=-1)
+        norms = W_dec.norm(dim=-1, keepdim=True)
         norms = torch.where(norms == 0, torch.ones_like(norms), norms)
-        feature_acts = feature_acts * (1 / norms)
+        # Scale the decoder rows rather than the activations: this is equivalent,
+        # and backpropagating through a sparse * dense product is not supported.
+        W_dec = W_dec / norms
     if feature_acts.is_sparse:
         return _sparse_matmul_nd(feature_acts, W_dec)
     return feature_acts @ W_dec
