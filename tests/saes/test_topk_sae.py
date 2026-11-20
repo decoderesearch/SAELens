@@ -563,3 +563,56 @@ def test_decode_with_zero_norm_decoder_row(sparse: bool):
         activations = activations.to_sparse()
     result = act_times_W_dec(activations, weights, True)
     torch.testing.assert_close(result, torch.tensor([[1.2, 1.6], [0.0, 0.0]]))
+
+
+def test_TopKTrainingSAE_sparse_activations_match_dense_gradients_with_rescale_acts_by_decoder_norm():
+    d_in = 16
+    d_sae = 64
+    dense_sae = TopKTrainingSAE(
+        build_topk_sae_training_cfg(
+            d_in=d_in,
+            d_sae=d_sae,
+            k=8,
+            dtype="float64",
+            rescale_acts_by_decoder_norm=True,
+            use_sparse_activations=False,
+        )
+    )
+    random_params(dense_sae)
+    sparse_sae = TopKTrainingSAE(
+        build_topk_sae_training_cfg(
+            d_in=d_in,
+            d_sae=d_sae,
+            k=8,
+            dtype="float64",
+            rescale_acts_by_decoder_norm=True,
+            use_sparse_activations=True,
+        )
+    )
+    sparse_sae.load_state_dict(dense_sae.state_dict())
+    dead_neuron_mask = torch.arange(d_sae) % 2 == 0
+    sae_in = torch.randn(32, d_in, dtype=torch.float64)
+
+    outputs = []
+    for sae in (dense_sae, sparse_sae):
+        output = sae.training_forward_pass(
+            TrainStepInput(
+                sae_in=sae_in,
+                coefficients={},
+                dead_neuron_mask=dead_neuron_mask,
+                n_training_steps=0,
+                is_logging_step=False,
+            )
+        )
+        output.loss.backward()
+        outputs.append(output)
+
+    assert outputs[1].feature_acts.is_sparse
+    assert outputs[1].loss.item() == pytest.approx(outputs[0].loss.item())
+    for name in ("W_enc", "b_enc", "W_dec", "b_dec"):
+        dense_grad = getattr(dense_sae, name).grad
+        sparse_grad = getattr(sparse_sae, name).grad
+        assert dense_grad is not None
+        assert sparse_grad is not None
+        assert dense_grad.abs().sum() > 0
+        assert_close(sparse_grad, dense_grad)
