@@ -1182,3 +1182,42 @@ class TestResumeFromCheckpoint:
 
         # Verify it ran the full training
         assert training_state["n_training_samples"] >= 128
+
+
+def _train_with_seed(tmp_path: Path, seed: int) -> TrainingSAE[Any]:
+    cfg = build_runner_cfg_for_arch(
+        d_in=64,
+        d_sae=128,
+        architecture="standard",
+        checkpoint_path=str(tmp_path),
+        training_tokens=64,
+        store_batch_size_prompts=2,
+        train_batch_size_tokens=4,
+        context_size=10,
+        n_sequences_in_buffer=4,
+        dataset_path=NEEL_NANDA_C4_10K_DATASET,
+        hook_name="blocks.0.hook_resid_post",
+        model_name=TINYSTORIES_MODEL,
+        model_class_name="TransformerBridge",
+        n_checkpoints=0,
+        save_final_checkpoint=False,
+        n_batches_for_norm_estimate=10,
+        seed=seed,
+    )
+    return LanguageModelSAETrainingRunner(cfg).run()
+
+
+def test_LanguageModelSAETrainingRunner_same_seed_gives_identical_saes(tmp_path: Path):
+    first = _train_with_seed(tmp_path / "a", seed=7)
+    torch.manual_seed(1234)  # the runner must not depend on the RNG state it's handed
+    second = _train_with_seed(tmp_path / "b", seed=7)
+    for name, param in first.state_dict().items():
+        assert torch.equal(param, second.state_dict()[name]), name
+
+
+def test_LanguageModelSAETrainingRunner_different_seeds_give_different_saes(
+    tmp_path: Path,
+):
+    first = _train_with_seed(tmp_path / "a", seed=7)
+    second = _train_with_seed(tmp_path / "b", seed=8)
+    assert not torch.equal(first.W_enc, second.W_enc)

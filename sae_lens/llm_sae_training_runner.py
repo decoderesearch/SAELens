@@ -130,6 +130,8 @@ class LanguageModelSAETrainingRunner:
             )
 
         self.cfg = cfg
+        # SAE init and the activation shuffles draw from torch's global RNG
+        torch.manual_seed(self.cfg.seed)
         # set in cfg.__post_init__; locally bound so type checkers see a str
         llm_device = self.cfg.llm_device
         assert llm_device is not None
