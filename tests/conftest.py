@@ -22,6 +22,11 @@ torch.set_grad_enabled(True)
 # sparsify's triton implementation breaks in CI, so just disable it
 os.environ["SPARSIFY_DISABLE_TRITON"] = "1"
 
+# Stop transformers from looking for a safetensors conversion PR every time it loads a
+# model without safetensors weights (e.g. tiny-stories-1M). That takes several HF API
+# requests per load, and CI hits HF's rate limit.
+os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
+
 
 @pytest.fixture(autouse=True, scope="session")
 def memoize_hf_list_repo_files() -> Iterator[None]:

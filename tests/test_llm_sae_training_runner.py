@@ -31,12 +31,14 @@ from sae_lens.saes.topk_sae import TopKTrainingSAEConfig
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.prefetch import PrefetchingIterator
+from sae_lens.transformer_lens_compat import HookedRootModule
 from tests.helpers import (
     ALL_TRAINING_ARCHITECTURES,
     NEEL_NANDA_C4_10K_DATASET,
     TINYSTORIES_MODEL,
     assert_close,
     build_runner_cfg_for_arch,
+    load_model_copy,
 )
 
 if TYPE_CHECKING or has_hooked_transformer():
@@ -888,13 +890,27 @@ class TestResumeFromCheckpoint:
             lr=0.001,
         )
 
+    @pytest.fixture
+    def model(
+        self,
+        small_training_cfg: LanguageModelSAERunnerConfig[StandardTrainingSAEConfig],
+    ) -> HookedRootModule:
+        return load_model_copy(
+            small_training_cfg.model_class_name,
+            small_training_cfg.model_name,
+            small_training_cfg.model_from_pretrained_kwargs,
+        )
+
     def test_save_checkpoint_includes_training_state(
         self,
         small_training_cfg: LanguageModelSAERunnerConfig[StandardTrainingSAEConfig],
+        model: HookedRootModule,
     ):
         """Test that save_checkpoint saves training state."""
         # Run a small training session
-        runner = LanguageModelSAETrainingRunner(small_training_cfg)
+        runner = LanguageModelSAETrainingRunner(
+            small_training_cfg, override_model=model
+        )
         runner.run()
 
         # Verify training state was saved
@@ -948,6 +964,7 @@ class TestResumeFromCheckpoint:
     def test_resume_from_checkpoint(
         self,
         small_training_cfg: LanguageModelSAERunnerConfig[StandardTrainingSAEConfig],
+        model: HookedRootModule,
     ):
         # First part: train to completion and save a final checkpoint
         first_cfg = small_training_cfg
@@ -955,7 +972,7 @@ class TestResumeFromCheckpoint:
         first_cfg.n_checkpoints = 0
         first_cfg.save_final_checkpoint = True
 
-        runner1 = LanguageModelSAETrainingRunner(first_cfg)
+        runner1 = LanguageModelSAETrainingRunner(first_cfg, override_model=model)
         runner1.run()
 
         assert first_cfg.checkpoint_path is not None
@@ -972,7 +989,7 @@ class TestResumeFromCheckpoint:
         second_cfg.save_final_checkpoint = False
         second_cfg.resume_from_checkpoint = str(checkpoint_path)
 
-        runner2 = LanguageModelSAETrainingRunner(second_cfg)
+        runner2 = LanguageModelSAETrainingRunner(second_cfg, override_model=model)
         resumed_sae = runner2.run()
 
         checkpoint_weights = load_file(str(checkpoint_path / SAE_WEIGHTS_FILENAME))
@@ -988,10 +1005,13 @@ class TestResumeFromCheckpoint:
         self,
         tmp_path: Path,
         small_training_cfg: LanguageModelSAERunnerConfig[StandardTrainingSAEConfig],
+        model: HookedRootModule,
     ):
         """Test that activations store state is preserved exactly when saving and loading."""
         # Create a runner and get some activations
-        runner = LanguageModelSAETrainingRunner(small_training_cfg)
+        runner = LanguageModelSAETrainingRunner(
+            small_training_cfg, override_model=model
+        )
 
         # Get a few batches to ensure the store has some state
         for _ in range(300):
@@ -1026,10 +1046,13 @@ class TestResumeFromCheckpoint:
     def test_activations_store_load_method(
         self,
         small_training_cfg: LanguageModelSAERunnerConfig[StandardTrainingSAEConfig],
+        model: HookedRootModule,
     ):
         """Test that the ActivationsStore load method works correctly."""
         # Run a small training session
-        runner = LanguageModelSAETrainingRunner(small_training_cfg)
+        runner = LanguageModelSAETrainingRunner(
+            small_training_cfg, override_model=model
+        )
         runner.run()
 
         # Get the checkpoint directory
@@ -1042,7 +1065,9 @@ class TestResumeFromCheckpoint:
         assert activations_store_path.exists()
 
         # Create a new runner
-        new_runner = LanguageModelSAETrainingRunner(small_training_cfg)
+        new_runner = LanguageModelSAETrainingRunner(
+            small_training_cfg, override_model=model
+        )
 
         # Test that we can load the activations store state
         new_runner.activations_store.load_from_checkpoint(checkpoint_dirs[0])

@@ -32,6 +32,7 @@ from tests.helpers import (
     TINYSTORIES_MODEL,
     assert_close,
     assert_not_close,
+    boot_bridge_copy,
     random_params,
 )
 
@@ -69,7 +70,7 @@ def hooked_model():
 
 @pytest.fixture(scope="module")
 def bridge_model():
-    model = SAETransformerBridge.boot_transformers(MODEL, device="cpu")
+    model = boot_bridge_copy(MODEL)
     yield model
     model.reset_saes()
 
@@ -594,8 +595,8 @@ def test_run_with_cache_with_saes(bridge_model: SAETransformerBridge) -> None:
 
 
 def test_run_with_hooks_with_saes() -> None:
-    # Use a fresh model to avoid state issues from module-scoped fixtures
-    model = SAETransformerBridge.boot_transformers(MODEL, device="cpu")
+    # Use a fresh copy to avoid state issues from module-scoped fixtures
+    model = boot_bridge_copy(MODEL)
     sae = make_sae(model.cfg.d_model, "blocks.0.hook_mlp_out")
     hook_called: list[str] = []
 
@@ -1210,7 +1211,7 @@ def test_reset_sae_preserves_user_disabled_hook_z_reshaping(
 def test_hooks_fire_after_sae_is_removed(
     compatibility_mode: bool, sae_kind: str, removal: str
 ) -> None:
-    model = SAETransformerBridge.boot_transformers(MODEL, device="cpu")
+    model = boot_bridge_copy(MODEL)
     if compatibility_mode:
         model.enable_compatibility_mode(disable_warnings=True)
     # Both replace blocks.0.mlp.hook_out, and the transcoder also hooks
@@ -1264,7 +1265,7 @@ def test_hooks_fire_after_sae_is_removed(
 def test_sae_on_list_valued_alias_changes_output_and_hooks_fire_after_removal(
     compatibility_mode: bool, removal: str
 ) -> None:
-    model = SAETransformerBridge.boot_transformers(MODEL, device="cpu")
+    model = boot_bridge_copy(MODEL)
     if compatibility_mode:
         model.enable_compatibility_mode(disable_warnings=True)
     # TransformerBridge aliases hook_embed to the first of
@@ -1311,7 +1312,7 @@ def test_sae_on_list_valued_alias_changes_output_and_hooks_fire_after_removal(
 
 
 def test_resolve_hook_name_uses_first_existing_hook_in_list_valued_alias() -> None:
-    model = SAETransformerBridge.boot_transformers(MODEL, device="cpu")
+    model = boot_bridge_copy(MODEL)
     assert model._resolve_hook_name("hook_embed") == "embed.hook_out"
     model._hook_registry["embed_ln.hook_out"] = HookPoint()
     assert model._resolve_hook_name("hook_embed") == "embed_ln.hook_out"
