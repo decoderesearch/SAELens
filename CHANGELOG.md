@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v6.56.1 (2026-11-20)
+
+### Fix
+
+* fix: _validate_seqpos rejecting valid step_size of 1 (#681) ([`d7ec154`](https://github.com/decoderesearch/SAELens/commit/d7ec154c42f4a34f94446ce95ad91f23e7dbc304))
+
+### Test
+
+* test: make fewer Hugging Face requests so CI stays under the rate limit (#799) ([`3235edf`](https://github.com/decoderesearch/SAELens/commit/3235edfd69aa42913b9db47c3735fdd96715a0ee))
+
 ## v6.56.0 (2026-11-19)
 
 ### Feature
