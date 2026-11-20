@@ -1,9 +1,11 @@
 from pathlib import Path
 from textwrap import dedent
+from unittest.mock import MagicMock
 
 import pytest
-from huggingface_hub import HfApi
+from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError
 
+import sae_lens.training.upload_saes_to_huggingface as upload_module
 from sae_lens.saes.sae import SAE
 from sae_lens.training.upload_saes_to_huggingface import (
     _build_sae_path,
@@ -55,18 +57,33 @@ def test_build_sae_path_directly_passes_through_existing_dirs(tmp_path: Path):
 
 
 def test_repo_exists():
-    api = HfApi()
+    api = MagicMock()
+    assert _repo_exists(api, "user/repo")
+    api.repo_info.assert_called_once_with("user/repo")
+
+    response = MagicMock()
+    response.status_code = 404
+    api.repo_info.side_effect = RepositoryNotFoundError("Not found", response=response)
     assert not _repo_exists(api, "fake/repo")
-    assert _repo_exists(api, "jbloom/Gemma-2b-Residual-Stream-SAEs")
 
 
-def test_repo_file_exists():
-    assert _repo_file_exists(
-        "jbloom/Gemma-2b-Residual-Stream-SAEs", "README.md", "main"
-    )
-    assert not _repo_file_exists(
-        "jbloom/Gemma-2b-Residual-Stream-SAEs", "fake_file.md", "main"
-    )
+def test_repo_file_exists(monkeypatch: pytest.MonkeyPatch):
+    checked_urls: list[str] = []
+
+    def get_hf_file_metadata(url: str) -> MagicMock:
+        checked_urls.append(url)
+        if "fake_file.md" in url:
+            raise EntryNotFoundError(f"File not found: {url}")
+        return MagicMock()
+
+    monkeypatch.setattr(upload_module, "get_hf_file_metadata", get_hf_file_metadata)
+
+    assert _repo_file_exists("user/repo", "README.md", "main")
+    assert not _repo_file_exists("user/repo", "fake_file.md", "dev")
+    assert checked_urls == [
+        "https://huggingface.co/user/repo/resolve/main/README.md",
+        "https://huggingface.co/user/repo/resolve/dev/fake_file.md",
+    ]
 
 
 def test_validate_sae_path_errors_if_files_are_missing(tmp_path: Path):

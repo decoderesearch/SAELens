@@ -31,6 +31,7 @@ from tests.helpers import (
     assert_not_close,
     build_runner_cfg,
     load_model_cached,
+    load_model_copy,
     requires_hooked_transformer,
 )
 
@@ -286,7 +287,7 @@ def test_activations_store__get_activations__gives_same_results_with_hf_model_an
         model_name="gpt2",
         device="cpu",
     )
-    tlens_model = HookedTransformer.from_pretrained_no_processing("gpt2", device="cpu")
+    tlens_model = load_model_copy("HookedTransformer", "gpt2")
     dataset = Dataset.from_list(
         [
             {"text": "hello world"},
@@ -311,8 +312,8 @@ def test_activations_store__get_activations__gives_same_results_with_hf_model_an
 
 @requires_hooked_transformer
 def test_activations_store__get_activations__gives_same_results_with_transformer_bridge_and_hooked_transformer():
-    hooked_model = load_model("HookedTransformer", "tiny-stories-1M", device="cpu")
-    bridge_model = load_model("TransformerBridge", "tiny-stories-1M", device="cpu")
+    hooked_model = load_model_copy("HookedTransformer", "tiny-stories-1M")
+    bridge_model = load_model_copy("TransformerBridge", "tiny-stories-1M")
     dataset = Dataset.from_list(
         [
             {"text": "Once upon a time there was a little dog named Max."},

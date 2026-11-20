@@ -53,6 +53,7 @@ from tests.helpers import (
     build_sae_cfg,
     build_topk_runner_cfg,
     load_model_cached,
+    load_model_copy,
     random_params,
     requires_hooked_transformer,
 )
@@ -936,7 +937,7 @@ def test_run_evals_gives_same_results_with_transformer_bridge_and_hooked_transfo
 
     all_metrics = []
     for model_class_name in ["HookedTransformer", "TransformerBridge"]:
-        model = load_model(model_class_name, TINYSTORIES_MODEL, device="cpu")
+        model = load_model_copy(model_class_name, TINYSTORIES_MODEL)
         store = ActivationsStore.from_sae(
             model, sae, dataset=dataset, context_size=16, store_batch_size_prompts=4
         )
@@ -966,7 +967,7 @@ def test_get_downstream_reconstruction_metrics_with_hf_model_gives_same_results_
         model_name="gpt2",
         device="cpu",
     )
-    tlens_model = HookedTransformer.from_pretrained_no_processing("gpt2", device="cpu")
+    tlens_model = load_model_copy("HookedTransformer", "gpt2")
 
     cfg = build_runner_cfg(hook_name="transformer.h.3")
     gpt2_res_jb_l4_sae.cfg.metadata.hook_name = "transformer.h.3"
@@ -1014,7 +1015,7 @@ def test_get_sparsity_and_variance_metrics_with_hf_model_gives_same_results_as_t
         model_name="gpt2",
         device="cpu",
     )
-    tlens_model = HookedTransformer.from_pretrained_no_processing("gpt2", device="cpu")
+    tlens_model = load_model_copy("HookedTransformer", "gpt2")
 
     cfg = build_runner_cfg(hook_name="transformer.h.3")
     gpt2_res_jb_l4_sae.cfg.metadata.hook_name = "transformer.h.3"
@@ -1147,7 +1148,7 @@ def test_run_evals_with_transformer_bridge_scores_identity_and_zero_saes(
     example_dataset: Dataset, identity: bool, expected_score: float
 ):
     d_in = 64
-    model = load_model("TransformerBridge", TINYSTORIES_MODEL, device="cpu")
+    model = load_model_copy("TransformerBridge", TINYSTORIES_MODEL)
     sae = StandardSAE(
         build_sae_cfg(
             d_in=d_in,

@@ -1,3 +1,5 @@
+import copy
+import json
 import pickle
 from collections.abc import Iterator, Sequence
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
@@ -6,7 +8,9 @@ import pytest
 import torch
 
 from sae_lens.analysis.compat import default_model_class_name, has_hooked_transformer
+from sae_lens.analysis.sae_transformer_bridge import SAETransformerBridge
 from sae_lens.config import LanguageModelSAERunnerConfig, LoggingConfig
+from sae_lens.load_model import load_model
 from sae_lens.registry import SAE_TRAINING_CLASS_REGISTRY
 from sae_lens.saes.abstopk_sae import (
     AbsTopKSAEConfig,
@@ -31,6 +35,7 @@ from sae_lens.saes.sae import (
 from sae_lens.saes.standard_sae import StandardSAEConfig, StandardTrainingSAEConfig
 from sae_lens.saes.temporal_sae import TemporalSAEConfig
 from sae_lens.saes.topk_sae import TopKSAEConfig, TopKTrainingSAEConfig
+from sae_lens.transformer_lens_compat import HookedRootModule
 
 if TYPE_CHECKING or has_hooked_transformer():
     from transformer_lens import HookedTransformer
@@ -673,6 +678,49 @@ def build_matryoshka_batchtopk_sae_training_cfg(
 
 
 MODEL_CACHE: dict[str, bytes] = {}
+LOADED_MODELS: dict[str, HookedRootModule] = {}
+BOOTED_BRIDGES: dict[str, SAETransformerBridge] = {}
+
+
+def load_model_copy(
+    model_class_name: str,
+    model_name: str,
+    model_from_pretrained_kwargs: dict[str, Any] | None = None,
+) -> HookedRootModule:
+    """
+    Like `load_model(model_class_name, model_name, device="cpu", ...)`, but each model is
+    only loaded once per test process.
+
+    Loading a model makes ~10 Hugging Face API requests even when its files are cached,
+    and CI otherwise hits the Hub's rate limit. Each call returns a deep copy, so tests
+    can't share state.
+    """
+    if model_class_name == "AutoModelForCausalLM":
+        # HookedProxyLM's forward hooks are closures over its own HookPoints, so a copy's
+        # hooks would still feed the original's HookPoints
+        raise ValueError("HookedProxyLM can't be deep-copied. Use load_model instead.")
+    key = f"{model_class_name}:{model_name}:{json.dumps(model_from_pretrained_kwargs or {}, sort_keys=True)}"
+    if key not in LOADED_MODELS:
+        LOADED_MODELS[key] = load_model(
+            model_class_name,
+            model_name,
+            device="cpu",
+            model_from_pretrained_kwargs=model_from_pretrained_kwargs,
+        )
+    return copy.deepcopy(LOADED_MODELS[key])
+
+
+def boot_bridge_copy(model_name: str) -> SAETransformerBridge:
+    """
+    Like `SAETransformerBridge.boot_transformers(model_name, device="cpu")`, but each model
+    is only booted once per test process. Each call returns a deep copy, since a bridge
+    can't be pickled.
+    """
+    if model_name not in BOOTED_BRIDGES:
+        BOOTED_BRIDGES[model_name] = SAETransformerBridge.boot_transformers(
+            model_name, device="cpu"
+        )
+    return copy.deepcopy(BOOTED_BRIDGES[model_name])
 
 
 def load_model_cached(model_name: str) -> "HookedTransformer":
