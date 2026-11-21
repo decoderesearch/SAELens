@@ -93,10 +93,14 @@ class BatchTopKTrainingSAE(TopKTrainingSAE):
     def __init__(self, cfg: BatchTopKTrainingSAEConfig, use_error_term: bool = False):
         super().__init__(cfg, use_error_term)
 
+        # use double precision as otherwise we can run into numerical issues,
+        # except on MPS, which has no float64
+        threshold_dtype = (
+            torch.float32 if self.W_dec.device.type == "mps" else torch.double
+        )
         self.register_buffer(
             "topk_threshold",
-            # use double precision as otherwise we can run into numerical issues
-            torch.tensor(0.0, dtype=torch.double, device=self.W_dec.device),
+            torch.tensor(0.0, dtype=threshold_dtype, device=self.W_dec.device),
         )
 
     @override
