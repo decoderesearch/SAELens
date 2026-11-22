@@ -275,6 +275,29 @@ def test_ActivationScaler_whitening_works_with_mps_activations():
     assert_close(scaler.unscale(whitened).cpu(), acts.cpu(), atol=1e-4, rtol=1e-5)
 
 
+def test_ActivationScaler_estimate_whitening_with_large_eps_only_partly_whitens():
+    d_in = 16
+    eps = 0.5
+    acts = next(correlated_activations(d_in, batch_size=4096))
+    scaler = ActivationScaler()
+    scaler.estimate_whitening(
+        d_in=d_in,
+        data_provider=iter([acts]),
+        n_batches_for_norm_estimate=1,
+        eps=eps,
+    )
+
+    # each eigendirection of the covariance keeps a variance of lambda / (lambda + eps)
+    eigenvalues = torch.linalg.eigvalsh(torch.cov(acts.double().T))
+    whitened = scaler.scale(acts.double())
+    assert_close(
+        torch.linalg.eigvalsh(torch.cov(whitened.T)),
+        eigenvalues / (eigenvalues + eps),
+        atol=1e-8,
+        rtol=1e-6,
+    )
+
+
 def test_ActivationScaler_scale_unscale_roundtrip_with_whitening():
     d_in = 16
     provider = correlated_activations(d_in, batch_size=256)

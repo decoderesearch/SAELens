@@ -137,6 +137,7 @@ class LanguageModelSAERunnerConfigDict(TypedDict, total=False):
     sae_lens_version: str
     sae_lens_training_version: str
     exclude_special_tokens: bool | list[int]
+    whitening_eps: float
 
 
 # Base TrainingSAEConfig fields + all architecture specific fields

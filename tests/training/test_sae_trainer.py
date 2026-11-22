@@ -24,6 +24,7 @@ from sae_lens.llm_sae_training_runner import (
 )
 from sae_lens.saes.sae import TrainingSAE
 from sae_lens.saes.standard_sae import StandardTrainingSAE, StandardTrainingSAEConfig
+from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.sae_trainer import (
     SAETrainer,
@@ -554,6 +555,33 @@ def test_SAETrainer_fit_with_covariance_whitening_folds_whitening_into_the_sae(
     assert sae.cfg.normalize_activations == "none"
     with open(next(checkpoint_dir.glob("final_*/cfg.json"))) as f:
         assert json.load(f)["normalize_activations"] == "none"
+
+
+def test_SAETrainer_fit_passes_whitening_eps_from_the_runner_config():
+    cfg = build_runner_cfg(
+        normalize_activations="covariance_whitening",
+        whitening_eps=0.5,
+        training_tokens=32,
+        train_batch_size_tokens=16,
+    )
+    trainer_cfg = cfg.to_sae_trainer_config()
+    trainer_cfg.n_batches_for_norm_estimate = 2
+    trainer = SAETrainer(
+        sae=StandardTrainingSAE(cfg.sae),
+        data_provider=correlated_activations(cfg.sae.d_in, batch_size=16),
+        cfg=trainer_cfg,
+    )
+
+    with patch.object(
+        ActivationScaler,
+        "estimate_whitening",
+        autospec=True,
+        side_effect=ActivationScaler.estimate_whitening,
+    ) as estimate_whitening:
+        trainer.fit()
+
+    estimate_whitening.assert_called_once()
+    assert estimate_whitening.call_args.kwargs["eps"] == 0.5
 
 
 @pytest.mark.parametrize(

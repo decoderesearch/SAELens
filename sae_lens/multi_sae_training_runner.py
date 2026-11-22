@@ -157,6 +157,7 @@ class MultiSAETrainingRunnerConfig:
     # Norm estimation caches this many multi-hook batches in memory at once;
     # peak memory scales with n_hooks * d_in, not just d_in as in single-SAE.
     n_batches_for_norm_estimate: int = 1000
+    whitening_eps: float = 1e-3
 
     # Internal: populated by __post_init__
     _hook_names_per_sae: dict[str, str] = field(default_factory=dict)
@@ -298,6 +299,7 @@ class MultiSAETrainingRunnerConfig:
             feature_sampling_window=self.feature_sampling_window,
             logger=self.logger,
             n_batches_for_norm_estimate=self.n_batches_for_norm_estimate,
+            whitening_eps=self.whitening_eps,
         )
 
     def to_dict(self) -> dict[str, Any]:

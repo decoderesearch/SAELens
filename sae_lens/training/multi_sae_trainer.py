@@ -204,6 +204,7 @@ class MultiSAETrainer:
                     d_in=self.saes[name].cfg.d_in,
                     data_provider=data_provider,
                     n_batches_for_norm_estimate=n,
+                    eps=self.cfg.whitening_eps,
                 )
 
     def _is_logging_step(self) -> bool:

@@ -103,6 +103,7 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     dead_feature_window: int = 1000
     feature_sampling_window: int = 2000
     n_batches_for_norm_estimate: int = 1000
+    whitening_eps: float = 1e-3
     sae_lens_version: str = field(default_factory=lambda: __version__)
 
     logger: LoggingConfig = field(default_factory=LoggingConfig)
@@ -197,6 +198,7 @@ class SyntheticSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
             feature_sampling_window=self.feature_sampling_window,
             logger=self.logger,
             n_batches_for_norm_estimate=self.n_batches_for_norm_estimate,
+            whitening_eps=self.whitening_eps,
         )
 
 

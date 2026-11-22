@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -12,6 +13,7 @@ from tqdm.auto import tqdm
 from sae_lens.analysis.compat import has_hooked_transformer
 from sae_lens.config import LoggingConfig, SAETrainerConfig
 from sae_lens.saes.standard_sae import StandardTrainingSAE, StandardTrainingSAEConfig
+from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.multi_sae_trainer import MultiSAETrainer
 from sae_lens.training.sae_trainer import SAETrainer
@@ -258,6 +260,48 @@ def test_multi_sae_trainer_folds_covariance_whitening_into_the_sae(
 
     assert multi_trainer.trainers["a"].activation_scaler.whitening is None
     assert sae.cfg.normalize_activations == "none"
+
+
+def test_multi_sae_trainer_passes_whitening_eps_to_the_estimate(
+    ts_model: HookedTransformer, dataset: Dataset
+):
+    hook = "blocks.0.hook_mlp_out"
+    d_in = ts_model.cfg.d_model
+    sae = StandardTrainingSAE(
+        StandardTrainingSAEConfig(
+            d_in=d_in,
+            d_sae=32,
+            l1_coefficient=1e-3,
+            decoder_init_norm=0.1,
+            normalize_activations="covariance_whitening",
+            device="cpu",
+        )
+    )
+    multi_store = ActivationsStore.from_config_multi_hook(
+        model=ts_model,
+        hook_names=[hook],
+        hook_d_ins={hook: d_in},
+        **_common_store_kwargs(dataset),
+    )
+    cfg = _trainer_cfg(total_samples=4 * 4)
+    cfg.whitening_eps = 0.5
+    multi_trainer = MultiSAETrainer(
+        cfg=cfg,
+        saes={"a": sae},
+        hook_names={"a": hook},
+        data_provider=multi_store.get_multi_hook_data_loader(),
+    )
+
+    with patch.object(
+        ActivationScaler,
+        "estimate_whitening",
+        autospec=True,
+        side_effect=ActivationScaler.estimate_whitening,
+    ) as estimate_whitening:
+        multi_trainer.fit()
+
+    estimate_whitening.assert_called_once()
+    assert estimate_whitening.call_args.kwargs["eps"] == 0.5
 
 
 def test_multi_sae_trainer_fit_keeps_whitening_loaded_from_checkpoint(

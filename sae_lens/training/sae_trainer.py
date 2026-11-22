@@ -183,6 +183,7 @@ class SAETrainer(Generic[T_TRAINING_SAE, T_TRAINING_SAE_CONFIG]):
                 d_in=self.sae.cfg.d_in,
                 data_provider=self.data_provider,
                 n_batches_for_norm_estimate=self.cfg.n_batches_for_norm_estimate,
+                eps=self.cfg.whitening_eps,
             )
 
         # Train loop

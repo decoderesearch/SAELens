@@ -195,6 +195,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
         sae_lens_training_version (str): The version of the sae_lens training library.
         exclude_special_tokens (bool | list[int]): Whether to exclude special tokens from the activations. If True, excludes all special tokens. If a list of ints, excludes those token IDs.
         n_batches_for_norm_estimate (int): How many batches to use to estimate the norm. Default value is 1000, though it may be helpful to lower this if you use a larger batch size to reduce loading time.
+        whitening_eps (float): Added to the covariance eigenvalues when `normalize_activations="covariance_whitening"`. Directions with variance well below this are only partly whitened, so larger values interpolate towards no whitening. (default is 1e-3)
     """
 
     sae: T_TRAINING_SAE_CONFIG
@@ -300,6 +301,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
     sae_lens_training_version: str = field(default_factory=lambda: __version__)
     exclude_special_tokens: bool | list[int] = False
     n_batches_for_norm_estimate: int = 1000  # Default value is 1k, helpful to decrease this if you use a larger batch size
+    whitening_eps: float = 1e-3
 
     def __post_init__(self):
         if self.hook_eval != "NOT_IN_USE":
@@ -502,6 +504,7 @@ class LanguageModelSAERunnerConfig(Generic[T_TRAINING_SAE_CONFIG]):
             feature_sampling_window=self.feature_sampling_window,
             logger=self.logger,
             n_batches_for_norm_estimate=self.n_batches_for_norm_estimate,
+            whitening_eps=self.whitening_eps,
         )
 
 
@@ -764,6 +767,7 @@ class SAETrainerConfig:
         default_factory=lambda: LoggingConfig(log_to_wandb=False)
     )
     n_batches_for_norm_estimate: int = 1000
+    whitening_eps: float = 1e-3
 
     @property
     def total_training_steps(self) -> int:
