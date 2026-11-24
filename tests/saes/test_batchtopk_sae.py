@@ -245,7 +245,7 @@ def test_BatchTopKTrainingSAE_initialization():
 
 def test_BatchTopKTrainingSAE_keeps_a_float64_threshold_on_cpu():
     cfg = build_batchtopk_sae_training_cfg(device="cpu")
-    sae = BatchTopKTrainingSAE.from_dict(cfg.to_dict())
+    sae = BatchTopKTrainingSAE(cfg)
     assert sae.topk_threshold.dtype == torch.float64
 
 
@@ -253,7 +253,7 @@ def test_BatchTopKTrainingSAE_keeps_a_float64_threshold_on_cpu():
 def test_BatchTopKTrainingSAE_trains_on_mps():
     # MPS has no float64, so the threshold falls back to float32 there
     cfg = build_batchtopk_sae_training_cfg(device="mps")
-    sae = BatchTopKTrainingSAE.from_dict(cfg.to_dict())
+    sae = BatchTopKTrainingSAE(cfg)
     random_params(sae)
     train_step_input = TrainStepInput(
         sae_in=torch.randn(32, cfg.d_in, device="mps"),
@@ -267,6 +267,19 @@ def test_BatchTopKTrainingSAE_trains_on_mps():
 
     assert sae.topk_threshold.dtype == torch.float32
     assert sae.topk_threshold.item() > 0
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="Needs MPS")
+def test_BatchTopKTrainingSAE_moved_from_cpu_to_mps_keeps_its_threshold():
+    cfg = build_batchtopk_sae_training_cfg(device="cpu")
+    sae = BatchTopKTrainingSAE(cfg)
+    sae.topk_threshold = torch.tensor(0.123456789, dtype=torch.float64)
+
+    sae.to("mps")
+
+    assert sae.topk_threshold.device.type == "mps"
+    assert sae.topk_threshold.dtype == torch.float32
+    assert sae.topk_threshold.item() == pytest.approx(0.123456789)
 
 
 @pytest.mark.parametrize("rescale_acts_by_decoder_norm", [True, False])
