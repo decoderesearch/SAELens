@@ -148,8 +148,9 @@ def make_neuronpedia_list_with_features(
     response = requests.post(url, json=body, headers={"x-api-key": api_key})
     result = response.json()
 
-    if "url" in result and open_browser:
-        webbrowser.open(result["url"])
+    if "url" in result:
+        if open_browser:
+            webbrowser.open(result["url"])
         return result["url"]
     raise Exception("Error in creating list: " + result["message"])
 
