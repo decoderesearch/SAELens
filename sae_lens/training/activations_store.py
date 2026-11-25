@@ -1123,7 +1123,8 @@ def _get_input_token_device(model: HookedRootModule) -> torch.device:
         if embed is not None and hasattr(embed, "weight"):
             return embed.weight.device  # type: ignore
     if hasattr(model, "cfg") and hasattr(model.cfg, "device"):
-        return model.cfg.device  # type: ignore
+        # cfg.device can be a string (e.g. HookedMamba), so normalize it
+        return torch.device(model.cfg.device)  # type: ignore
     return next(model.parameters()).device  # type: ignore
 
 
