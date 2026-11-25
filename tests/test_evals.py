@@ -20,6 +20,7 @@ from sae_lens.evals import (
     all_loadable_saes,
     get_downstream_reconstruction_metrics,
     get_eval_everything_config,
+    get_featurewise_weight_based_metrics,
     get_recons_loss,
     get_saes_from_regex,
     get_sparsity_and_variance_metrics,
@@ -1311,6 +1312,58 @@ def test_density_mask_is_only_allocated_when_requested(compute_density: bool):
             and event.cpu_memory_usage > 0
             for event in profile.key_averages(group_by_input_shape=True)
         )
+
+
+def test_get_sparsity_and_variance_metrics_cossim_is_zero_when_sae_output_is_zero(
+    example_dataset: Dataset,
+):
+    model = load_model_copy("TransformerBridge", TINYSTORIES_MODEL)
+    sae = StandardSAE(
+        build_sae_cfg(
+            d_in=64,
+            d_sae=8,
+            metadata=SAEMetadata(
+                model_name=TINYSTORIES_MODEL,
+                hook_name="blocks.1.hook_resid_pre",
+                prepend_bos=True,
+            ),
+        )
+    )
+    with torch.no_grad():
+        for param in sae.parameters():
+            param.zero_()
+    activation_store = ActivationsStore.from_sae(
+        model, sae, dataset=example_dataset, context_size=8, store_batch_size_prompts=4
+    )
+
+    metrics, _ = get_sparsity_and_variance_metrics(
+        sae=sae,
+        model=model,
+        activation_store=activation_store,
+        activation_scaler=ActivationScaler(),
+        n_batches=1,
+        compute_l2_norms=False,
+        compute_sparsity_metrics=False,
+        compute_variance_metrics=True,
+        compute_featurewise_density_statistics=False,
+        eval_batch_size_prompts=4,
+        model_kwargs={},
+    )
+
+    assert metrics["cossim"] == pytest.approx(0.0)
+
+
+def test_get_featurewise_weight_based_metrics_zero_norm_decoder_row_gives_zero_cosine_sim():
+    sae = StandardSAE(build_sae_cfg(d_in=4, d_sae=3))
+    with torch.no_grad():
+        sae.W_enc.copy_(torch.tensor([[1.0, 0.0, 1.0]] * 2 + [[0.0, 1.0, 1.0]] * 2))
+        sae.W_dec.copy_(torch.tensor([[1.0] * 4, [0.0] * 4, [1.0, 1.0, 1.0, -1.0]]))
+
+    cosine_sims = get_featurewise_weight_based_metrics(sae)[
+        "encoder_decoder_cosine_sim"
+    ]
+
+    assert cosine_sims == pytest.approx([2**-0.5, 0.0, 0.5])
 
 
 @pytest.mark.parametrize("scaling_factor", [None, 3.0])

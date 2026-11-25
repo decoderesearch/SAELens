@@ -302,17 +302,9 @@ def run_evals(
 
 
 def get_featurewise_weight_based_metrics(sae: SAE[Any]) -> dict[str, Any]:
-    unit_norm_encoders = (sae.W_enc / sae.W_enc.norm(dim=0, keepdim=True)).cpu()
-    unit_norm_decoder = (sae.W_dec.T / sae.W_dec.T.norm(dim=0, keepdim=True)).cpu()
-
     encoder_norms = sae.W_enc.norm(dim=-2).cpu().tolist()
     encoder_decoder_cosine_sim = (
-        torch.nn.functional.cosine_similarity(
-            unit_norm_decoder.T,
-            unit_norm_encoders.T,
-        )
-        .cpu()
-        .tolist()
+        torch.nn.functional.cosine_similarity(sae.W_dec, sae.W_enc.T).cpu().tolist()
     )
 
     metrics = {
@@ -624,13 +616,10 @@ def get_sparsity_and_variance_metrics(
                 sae_output=flattened_sae_out, hidden_acts=flattened_sae_input
             )
 
-            x_normed = flattened_sae_input / torch.norm(
-                flattened_sae_input, dim=-1, keepdim=True
+            # F.cosine_similarity returns 0 (not NaN) when either vector has zero norm
+            cossim = torch.nn.functional.cosine_similarity(
+                flattened_sae_input, flattened_sae_out, dim=-1
             )
-            x_hat_normed = flattened_sae_out / torch.norm(
-                flattened_sae_out, dim=-1, keepdim=True
-            )
-            cossim = (x_normed * x_hat_normed).sum(dim=-1)
 
             # Per-token squared reconstruction error ||x - x_hat||^2, averaged
             # over all tokens after the eval loop. Matches the training MSE
