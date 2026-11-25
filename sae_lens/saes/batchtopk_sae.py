@@ -3,11 +3,12 @@ from typing import Any, Callable
 
 import torch
 import torch.nn as nn
-from typing_extensions import override
+from typing_extensions import Self, override
 
 from sae_lens.saes.jumprelu_sae import JumpReLUSAEConfig
 from sae_lens.saes.sae import SAEConfig, TrainStepInput, TrainStepOutput
 from sae_lens.saes.topk_sae import TopKTrainingSAE, TopKTrainingSAEConfig
+from sae_lens.util import device_supports_float64
 
 
 class BatchTopK(nn.Module):
@@ -93,11 +94,26 @@ class BatchTopKTrainingSAE(TopKTrainingSAE):
     def __init__(self, cfg: BatchTopKTrainingSAEConfig, use_error_term: bool = False):
         super().__init__(cfg, use_error_term)
 
+        # use double precision as otherwise we can run into numerical issues,
+        # unless the device has no float64 (e.g. MPS)
+        threshold_dtype = (
+            torch.double
+            if device_supports_float64(self.W_dec.device.type)
+            else torch.float32
+        )
         self.register_buffer(
             "topk_threshold",
-            # use double precision as otherwise we can run into numerical issues
-            torch.tensor(0.0, dtype=torch.double, device=self.W_dec.device),
+            torch.tensor(0.0, dtype=threshold_dtype, device=self.W_dec.device),
         )
+
+    @override
+    def to(self, *args: Any, **kwargs: Any) -> Self:
+        # a float64 threshold can't be moved to a device with no float64 (e.g. MPS).
+        # _parse_to is what nn.Module.to uses to read its arguments.
+        device = torch._C._nn._parse_to(*args, **kwargs)[0]  # type: ignore
+        if device is not None and not device_supports_float64(device.type):
+            self.topk_threshold = self.topk_threshold.float()
+        return super().to(*args, **kwargs)
 
     @override
     def get_activation_fn(self) -> Callable[[torch.Tensor], torch.Tensor]:
