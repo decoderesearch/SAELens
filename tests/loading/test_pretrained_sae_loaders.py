@@ -2280,6 +2280,64 @@ def test_gemma_2_sae_huggingface_loader_with_mocked_download(
     assert state_dict["W_dec"].shape == (d_sae, d_in)
 
 
+def test_gemma_2_sae_huggingface_loader_embedding_sae_matches_original_on_scaled_embeddings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # d_in = 64 makes the rescale factor sqrt(64) = 8, a power of two, so scaling
+    # the weights and inputs is exact in float32 and the comparisons can be tight.
+    d_in = 64
+    d_sae = 32
+    W_enc = torch.randn(d_in, d_sae)
+    W_dec = torch.randn(d_sae, d_in)
+    b_enc = torch.randn(d_sae)
+    b_dec = torch.randn(d_in)
+    threshold = torch.rand(d_sae)
+
+    npz_file_path = tmp_path / "params.npz"
+    np.savez(
+        npz_file_path,
+        W_enc=W_enc.numpy(),
+        W_dec=W_dec.numpy(),
+        b_enc=b_enc.numpy(),
+        b_dec=b_dec.numpy(),
+        threshold=threshold.numpy(),
+    )
+
+    def mock_hf_hub_download(*args: Any, **kwargs: Any) -> str:  # noqa: ARG001
+        return str(npz_file_path)
+
+    monkeypatch.setattr(
+        "sae_lens.loading.pretrained_sae_loaders.hf_hub_download", mock_hf_hub_download
+    )
+
+    cfg_dict, state_dict, _ = gemma_2_sae_huggingface_loader(
+        repo_id="google/gemma-scope-2b-pt-res",
+        folder_name="embedding/width_4k/average_l0_6",
+        device="cpu",
+        cfg_overrides={"d_in": d_in, "d_sae": d_sae},
+    )
+    assert cfg_dict["hook_name"] == "hook_embed"
+    assert cfg_dict["apply_b_dec_to_input"] is False
+    sae = SAE.from_dict(handle_pre_6_0_config(cfg_dict))
+    sae.load_state_dict(state_dict)
+
+    # Gemma Scope embedding SAEs were trained on the raw token embeddings, while
+    # hook_embed holds the embeddings multiplied by sqrt(d_model).
+    raw_embeddings = torch.randn(100, d_in)
+    hidden_pre = raw_embeddings @ W_enc + b_enc
+    feature_acts = hidden_pre.relu() * (hidden_pre > threshold)
+    original_recons = feature_acts @ W_dec + b_dec
+
+    scale = 8.0
+    with torch.no_grad():
+        sae_feature_acts = sae.encode(raw_embeddings * scale)
+        recons = sae(raw_embeddings * scale)
+
+    assert (feature_acts > 0).any()
+    assert_close(sae_feature_acts, feature_acts)
+    assert_close(recons, original_recons * scale)
+
+
 def test_llama_scope_sae_huggingface_loader_with_mocked_download(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
