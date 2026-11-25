@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v6.56.2 (2026-11-25)
+
+### Fix
+
+* fix: let BatchTopKTrainingSAE run on MPS (#802) ([`f9706dd`](https://github.com/decoderesearch/SAELens/commit/f9706dd3810b42ecf6b4a5313c7b6d206de65949))
+
 ## v6.56.1 (2026-11-20)
 
 ### Fix
