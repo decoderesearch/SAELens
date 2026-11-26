@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v6.56.3 (2026-11-26)
+
+### Fix
+
+* fix: apply cfg.seed in the SAE training runners (#800) ([`26b751b`](https://github.com/decoderesearch/SAELens/commit/26b751b686fed08cd67f7ec81926ab3f9e70ac71))
+
+* fix: return the list URL from make_neuronpedia_list_with_features when open_browser=False (#806) ([`47f560a`](https://github.com/decoderesearch/SAELens/commit/47f560ac33f18b52baec818f247a9dca59f60d36))
+
+* fix: eval cosine similarities are NaN for zero-norm vectors (#805) ([`3585afb`](https://github.com/decoderesearch/SAELens/commit/3585afb88af424a4bb21be5a5d21a42e4b2af6e0))
+
+* fix: return a torch.device for HookedMamba&#39;s input token device (#804) ([`d95c9ed`](https://github.com/decoderesearch/SAELens/commit/d95c9edd17a1c3625626aafe6d8f2d178cfe35d5))
+
 ## v6.56.2 (2026-11-25)
 
 ### Fix
