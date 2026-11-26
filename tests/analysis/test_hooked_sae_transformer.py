@@ -532,6 +532,39 @@ def test_run_with_hooks_with_saes(
     model.remove_all_hook_fns(including_permanent=True)
 
 
+def test_steering_sae_latents_with_error_term_matches_adding_decoder_directions(
+    model: HookedSAETransformer,
+    original_logits: torch.Tensor,
+):
+    sae = get_hooked_sae(model, "blocks.0.hook_resid_pre")
+    random_params(sae)
+    hook_name = sae.cfg.metadata.hook_name
+    features = torch.tensor([1, 5, 7])
+    strengths = torch.tensor([2.0, -1.0, 0.5])
+
+    steering_vector = strengths @ sae.W_dec[features]
+
+    def add_steering_vector(acts: torch.Tensor, hook: HookPoint) -> torch.Tensor:  # noqa: ARG001
+        return acts + steering_vector
+
+    def steer_latents(sae_acts: torch.Tensor, hook: HookPoint) -> torch.Tensor:  # noqa: ARG001
+        sae_acts[:, :, features] += strengths
+        return sae_acts
+
+    logits_from_vector = model.run_with_hooks(
+        prompt, fwd_hooks=[(hook_name, add_steering_vector)]
+    )
+
+    with model.saes(saes=[sae], use_error_term=True):
+        logits_from_latents = model.run_with_hooks(
+            prompt,
+            fwd_hooks=[(f"{hook_name}.hook_sae_acts_post", steer_latents)],
+        )
+
+    assert_not_close(logits_from_vector, original_logits)
+    assert_close(logits_from_latents, logits_from_vector, atol=1e-4)
+
+
 def test_model_with_use_error_term_saes_matches_original_model(
     model: HookedTransformer,
     hooked_sae: SAE,
