@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v6.56.4 (2026-11-26)
+
+### Documentation
+
+* docs: fix dead TransformerLens Main Demo links (#809) ([`e3a8a21`](https://github.com/decoderesearch/SAELens/commit/e3a8a21be0d723d8a092b1ca3caf52db93dd16fe))
+
+### Fix
+
+* fix: train TopK SAEs with sparse activations when rescaling by decoder norm (#801) ([`22f7d1e`](https://github.com/decoderesearch/SAELens/commit/22f7d1efffb12e6ed5601de290ca189af80e4a55))
+
 ## v6.56.3 (2026-11-26)
 
 ### Fix
