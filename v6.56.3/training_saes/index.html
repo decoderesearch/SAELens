@@ -1214,7 +1214,7 @@
 <p>Some of the core config options available in <code>LanguageModelSAERunnerConfig</code> are:</p>
 <ul>
 <li><code>model_name</code>: The base model name to train a SAE on (e.g., <code>"gpt2-small"</code>, <code>"tiny-stories-1L-21M"</code>). This must correspond to a <a href="https://neelnanda-io.github.io/TransformerLens/generated/model_properties_table.html">model from TransformerLens</a> or a Hugging Face <code>AutoModelForCausalLM</code> if <code>model_class_name</code> is set accordingly.</li>
-<li><code>hook_name</code>: This is a TransformerLens hook in the model where our SAE will be trained from (e.g., <code>"blocks.0.hook_mlp_out"</code>). More info on hooks can be found <a href="https://neelnanda-io.github.io/TransformerLens/generated/demos/Main_Demo.html#Hook-Points">here</a>.</li>
+<li><code>hook_name</code>: This is a TransformerLens hook in the model where our SAE will be trained from (e.g., <code>"blocks.0.hook_mlp_out"</code>). More info on hooks can be found <a href="https://transformerlensorg.github.io/TransformerLens/generated/demos/Main_Demo.html#Hook-Points">here</a>.</li>
 <li><code>dataset_path</code>: The path to a dataset on Huggingface for training (e.g., <code>"apollo-research/roneneldan-TinyStories-tokenizer-gpt2"</code>).</li>
 <li><code>training_tokens</code>: The total number of tokens from the dataset to use for training the SAE.</li>
 <li><code>train_batch_size_tokens</code>: The batch size used for training the SAE, measured in tokens. Adjust this to keep the GPU saturated.</li>
