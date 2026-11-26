@@ -5,6 +5,7 @@ import tempfile
 from collections.abc import Iterable
 from math import ceil
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -481,6 +482,43 @@ def test_get_input_token_device_returns_input_embedding_device_when_sharded():
     assert _get_input_token_device(proxy) == torch.device("meta")  # type: ignore[arg-type]
     # Sanity: the first parameter is on cpu, so a naive impl would disagree.
     assert next(proxy.parameters()).device == torch.device("cpu")
+
+
+def test_get_input_token_device_returns_torch_device_when_cfg_device_is_a_string():
+    # HookedMamba has no W_E or get_input_embeddings, and stores cfg.device as a str
+    class FakeModelWithStrCfgDevice(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.cfg = SimpleNamespace(device="meta")
+            self.linear = torch.nn.Linear(4, 4)
+
+    device = _get_input_token_device(FakeModelWithStrCfgDevice())  # type: ignore[arg-type]
+    assert device == torch.device("meta")
+
+
+@requires_hooked_transformer
+def test_activations_store_get_activations_works_with_hooked_mamba():
+    model = load_model(
+        model_class_name="HookedMamba",
+        model_name="state-spaces/mamba-130m",
+        device="cpu",
+    )
+    hook_name = "blocks.1.hook_ssm_input"
+    cfg = build_runner_cfg(
+        model_class_name="HookedMamba",
+        hook_name=hook_name,
+        d_in=1536,
+        context_size=8,
+        store_batch_size_prompts=2,
+    )
+    dataset = Dataset.from_list([{"text": "hello world, this is a test"}] * 10)
+    store = ActivationsStore.from_config(model, cfg, override_dataset=dataset)
+    batch = store.get_batch_tokens()
+
+    activations = store.get_activations(batch)
+
+    _, cache = model.run_with_cache(batch, names_filter=[hook_name])
+    assert_close(activations, cache[hook_name], atol=1e-5)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No GPU to test on.")
