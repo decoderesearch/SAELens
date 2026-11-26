@@ -437,6 +437,8 @@ class MultiSAETrainingRunner:
         override_saes: dict[str, TrainingSAE[Any]] | None = None,
     ) -> None:
         self.cfg = cfg
+        # SAE init and the activation shuffles draw from torch's global RNG
+        torch.manual_seed(self.cfg.seed)
 
         if override_dataset is not None:
             logger.warning(

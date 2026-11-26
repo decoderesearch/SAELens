@@ -647,3 +647,31 @@ def test_multi_sae_runner_no_compile_when_compile_llm_false(
     assert runner.model is ts_model
     assert runner.activations_store.model is ts_model
     assert runner.evaluator.model is ts_model
+
+
+def _train_multi_with_seed(dataset: Dataset, seed: int) -> dict[str, TrainingSAE[Any]]:
+    cfg = _build_cfg(
+        saes={
+            "sae": StandardTrainingSAEConfig(
+                d_in=64,
+                d_sae=32,
+                l1_coefficient=1e-3,
+                decoder_init_norm=0.1,
+                normalize_activations="none",
+                dtype="float32",
+                device="cpu",
+            ),
+        },
+        hook_names="blocks.0.hook_mlp_out",
+        training_tokens=32,
+    )
+    cfg.seed = seed
+    return MultiSAETrainingRunner(cfg, override_dataset=dataset).run()
+
+
+def test_multi_sae_runner_same_seed_gives_identical_saes(dataset: Dataset):
+    first = _train_multi_with_seed(dataset, seed=7)["sae"]
+    torch.manual_seed(1234)  # the runner must not depend on the RNG state it's handed
+    second = _train_multi_with_seed(dataset, seed=7)["sae"]
+    for name, param in first.state_dict().items():
+        assert torch.equal(param, second.state_dict()[name]), name
