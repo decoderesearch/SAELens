@@ -287,7 +287,7 @@ def test_language_model_sae_runner_othellogpt():
         ),
         # Data Generating Function (Model + Training Distibuion)
         model_name="othello-gpt",  # othello-gpt model
-        hook_name="blocks.6.hook_resid_pre",  # A valid hook point (see more details here: https://neelnanda-io.github.io/TransformerLens/generated/demos/Main_Demo.html#Hook-Points)
+        hook_name="blocks.6.hook_resid_pre",  # A valid hook point (see more details here: https://transformerlensorg.github.io/TransformerLens/generated/demos/Main_Demo.html#Hook-Points)
         dataset_path="taufeeque/othellogpt",  # this is a tokenized language dataset on Huggingface for OthelloGPT games.
         is_dataset_tokenized=True,
         streaming=True,  # we could pre-download the token dataset if it was small.
