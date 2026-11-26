@@ -337,10 +337,9 @@ class LanguageModelSAETrainingRunner:
         except (KeyboardInterrupt, InterruptedException):
             if self.cfg.checkpoint_path is not None:
                 logger.warning("interrupted, saving progress")
-                checkpoint_path = Path(self.cfg.checkpoint_path) / str(
-                    trainer.n_training_samples
-                )
-                self.save_checkpoint(checkpoint_path)
+                # the trainer saves the SAE weights and trainer state, then calls
+                # self.save_checkpoint for the runner-level files
+                trainer.save_checkpoint(checkpoint_name=str(trainer.n_training_samples))
                 logger.info("done saving")
             raise
 
