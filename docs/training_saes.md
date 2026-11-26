@@ -416,7 +416,8 @@ training SAE. The path should point to a directory that can be loaded by
 disk, then creates a fresh activation store, optimizer, scheduler, and trainer
 state from the current `LanguageModelSAERunnerConfig`. The nested `sae` field is
 still required when you build `LanguageModelSAERunnerConfig`, so keep it
-consistent with the saved SAE.
+consistent with the saved SAE. Training hyperparameters such as `l1_coefficient`
+also come from the saved config, not from the nested `sae` field.
 
 ```python
 import torch
@@ -457,6 +458,61 @@ fine_tuned_sae.save_inference_model("path/to/fine_tuned_sae")
 Note that `from_pretrained_path` starts a brand new training run from the saved
 weights. To continue an existing run exactly where it left off, use
 `resume_from_checkpoint` instead — see [Checkpoints](#checkpoints).
+
+### Fine-tuning a pretrained SAE from Hugging Face
+
+To fine-tune an SAE from the [pretrained SAEs](pretrained_saes/index.md) list, or
+from any Hugging Face repo that `SAE.from_pretrained` can load, load it with
+`TrainingSAE.from_pretrained` and pass it to the runner as `override_sae`. Use the
+loaded SAE's config as the runner's `sae` config, so the two always agree.
+
+Released SAEs usually don't store their training hyperparameters, so the loaded
+config has the default sparsity coefficient (`l1_coefficient`, or `l0_coefficient`
+for JumpReLU SAEs). Set it yourself before training. Match the hook, context size and
+`prepend_bos` that the SAE was trained with, which are stored in its metadata.
+
+```python
+import torch
+
+from sae_lens import (
+    LanguageModelSAERunnerConfig,
+    LanguageModelSAETrainingRunner,
+    LoggingConfig,
+    TrainingSAE,
+)
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+sae = TrainingSAE.from_pretrained(
+    release="pythia-70m-deduped-res-sm",
+    sae_id="blocks.2.hook_resid_post",
+    device=device,
+)
+sae.cfg.l1_coefficient = 1.0  # choose the sparsity penalty for fine-tuning
+
+cfg = LanguageModelSAERunnerConfig(
+    model_name="EleutherAI/pythia-70m-deduped",
+    hook_name=sae.cfg.metadata.hook_name,
+    context_size=sae.cfg.metadata.context_size,
+    prepend_bos=sae.cfg.metadata.prepend_bos,
+    dataset_path="NeelNanda/pile-10k",  # the data to fine-tune on
+    is_dataset_tokenized=False,
+    streaming=True,
+    sae=sae.cfg,
+    training_tokens=1_000_000,
+    train_batch_size_tokens=4096,
+    lr=5e-5,
+    logger=LoggingConfig(log_to_wandb=False),
+    device=device,
+)
+
+fine_tuned_sae = LanguageModelSAETrainingRunner(cfg, override_sae=sae).run()
+fine_tuned_sae.save_inference_model("path/to/fine_tuned_sae")
+```
+
+If the SAE's metadata has `model_from_pretrained_kwargs`, pass them to the runner as
+`model_from_pretrained_kwargs` too, so the model produces the same activations the
+SAE was trained on.
 
 ## Training multiple SAEs in parallel (experimental)
 
