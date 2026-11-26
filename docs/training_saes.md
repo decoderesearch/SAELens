@@ -16,7 +16,7 @@ When using the command-line interface (CLI), you typically specify an `--archite
 Some of the core config options available in `LanguageModelSAERunnerConfig` are:
 
 - `model_name`: The base model name to train a SAE on (e.g., `"gpt2-small"`, `"tiny-stories-1L-21M"`). This must correspond to a [model from TransformerLens](https://neelnanda-io.github.io/TransformerLens/generated/model_properties_table.html) or a Hugging Face `AutoModelForCausalLM` if `model_class_name` is set accordingly.
-- `hook_name`: This is a TransformerLens hook in the model where our SAE will be trained from (e.g., `"blocks.0.hook_mlp_out"`). More info on hooks can be found [here](https://neelnanda-io.github.io/TransformerLens/generated/demos/Main_Demo.html#Hook-Points).
+- `hook_name`: This is a TransformerLens hook in the model where our SAE will be trained from (e.g., `"blocks.0.hook_mlp_out"`). More info on hooks can be found [here](https://transformerlensorg.github.io/TransformerLens/generated/demos/Main_Demo.html#Hook-Points).
 - `dataset_path`: The path to a dataset on Huggingface for training (e.g., `"apollo-research/roneneldan-TinyStories-tokenizer-gpt2"`).
 - `training_tokens`: The total number of tokens from the dataset to use for training the SAE.
 - `train_batch_size_tokens`: The batch size used for training the SAE, measured in tokens. Adjust this to keep the GPU saturated.
