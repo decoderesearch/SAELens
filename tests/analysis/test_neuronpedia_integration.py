@@ -188,7 +188,6 @@ def test_make_neuronpedia_list_with_features_without_browser(
     mock_response = MagicMock()
     mock_response.json.return_value = {
         "url": "https://neuronpedia.org/list/test-list-id",
-        "message": "Success but browser not opened",
     }
     mock_requests_post.return_value = mock_response
 
@@ -201,25 +200,17 @@ def test_make_neuronpedia_list_with_features_without_browser(
         )
     ]
 
-    # Call the function with open_browser=False
-    # Based on the function logic, this will raise an exception because
-    # the condition is "url" in result AND open_browser, so when open_browser=False
-    # it will always raise an exception
-    with pytest.raises(Exception) as exc_info:
-        make_neuronpedia_list_with_features(
-            api_key="test_api_key",
-            list_name="Test List",
-            features=features,
-            open_browser=False,
-        )
-
-    # Verify webbrowser.open was not called
-    mock_webbrowser_open.assert_not_called()
-
-    # Verify the function raised the expected exception
-    assert "Error in creating list: Success but browser not opened" in str(
-        exc_info.value
+    # open_browser=False only skips opening the page; the list was still created
+    # successfully, so its URL must be returned rather than raised as an error.
+    result_url = make_neuronpedia_list_with_features(
+        api_key="test_api_key",
+        list_name="Test List",
+        features=features,
+        open_browser=False,
     )
+
+    mock_webbrowser_open.assert_not_called()
+    assert result_url == "https://neuronpedia.org/list/test-list-id"
 
 
 @patch("sae_lens.analysis.neuronpedia_integration.requests.post")
