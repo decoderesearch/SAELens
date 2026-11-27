@@ -535,6 +535,8 @@ def gemma_2_sae_huggingface_loader(
         logger.debug("Adjusting for d_model in embedding SAE")
         state_dict["W_enc"].data = state_dict["W_enc"].data / np.sqrt(cfg_dict["d_in"])
         state_dict["W_dec"].data = state_dict["W_dec"].data * np.sqrt(cfg_dict["d_in"])
+        # b_dec is part of the reconstruction, so it gets the same scale as W_dec
+        state_dict["b_dec"].data = state_dict["b_dec"].data * np.sqrt(cfg_dict["d_in"])
 
     return cfg_dict, state_dict, log_sparsity
 
