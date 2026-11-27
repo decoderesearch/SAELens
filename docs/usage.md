@@ -202,6 +202,62 @@ logits = model.run_with_hooks_with_saes(
 )
 ```
 
+### Steering with Multiple SAE Features
+
+To steer with a feature, add its decoder direction (a row of `sae.W_dec`) to the
+model's activations at the SAE's hook point. To steer with several features at once,
+add a weighted sum of their decoder directions. Each feature gets its own strength,
+and a negative strength steers away from a feature.
+
+```python
+import torch
+from functools import partial
+
+features = torch.tensor([1000, 2000, 3000])
+strengths = torch.tensor([20.0, 10.0, -5.0])
+
+# (n_features,) @ (n_features, d_in) -> (d_in,)
+steering_vector = strengths.to(sae.W_dec) @ sae.W_dec[features]
+
+def steering_hook(activations, hook, steering_vector):
+    return activations + steering_vector
+
+with model.hooks(
+    fwd_hooks=[
+        (sae.cfg.metadata.hook_name,
+         partial(steering_hook, steering_vector=steering_vector))
+    ]
+):
+    output = model.generate("I think that", max_new_tokens=20)
+```
+
+You don't need to attach the SAE for this, because only its decoder directions are
+used. Decoder rows of many SAEs are not unit-norm, so the same strength can push
+different features by different amounts. Loading with `fold_W_dec_norm=True` (see
+[Folding Decoder Norms](#folding-decoder-norms)) puts every direction on the same scale.
+Strengths are usually tuned per feature, for example as a multiple of the feature's
+typical activation.
+
+You can also steer in the SAE's latent space: attach the SAE with
+`use_error_term=True` and add to the feature activations. The error term keeps
+everything the SAE doesn't change, so for a standard SAE this adds
+`strength * W_dec[feature]` to the activations, the same as the steering vector above.
+
+```python
+def steer_features(sae_acts, hook, features, strengths):
+    sae_acts[:, :, features] += strengths.to(sae_acts)
+    return sae_acts
+
+with model.saes(saes=[sae], use_error_term=True):
+    logits = model.run_with_hooks(
+        tokens,
+        fwd_hooks=[
+            (f"{sae.cfg.metadata.hook_name}.hook_sae_acts_post",
+             partial(steer_features, features=features, strengths=strengths))
+        ],
+    )
+```
+
 ### Add SAEs (Persistent)
 
 Permanently attach SAEs to the model until explicitly removed.
