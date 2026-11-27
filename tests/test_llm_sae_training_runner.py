@@ -28,9 +28,11 @@ from sae_lens.saes.jumprelu_sae import JumpReLUTrainingSAEConfig
 from sae_lens.saes.sae import SAE, TrainingSAE
 from sae_lens.saes.standard_sae import StandardTrainingSAEConfig
 from sae_lens.saes.topk_sae import TopKTrainingSAEConfig
+from sae_lens.training._interruption import InterruptedException
 from sae_lens.training.activation_scaler import ActivationScaler
 from sae_lens.training.activations_store import ActivationsStore
 from sae_lens.training.prefetch import PrefetchingIterator
+from sae_lens.training.sae_trainer import SAETrainer
 from sae_lens.transformer_lens_compat import HookedRootModule
 from tests.helpers import (
     ALL_TRAINING_ARCHITECTURES,
@@ -1221,3 +1223,43 @@ def test_LanguageModelSAETrainingRunner_different_seeds_give_different_saes(
     first = _train_with_seed(tmp_path / "a", seed=7)
     second = _train_with_seed(tmp_path / "b", seed=8)
     assert not torch.equal(first.W_enc, second.W_enc)
+
+
+def test_LanguageModelSAETrainingRunner_saves_sae_checkpoint_on_interruption(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    def _interrupt(_self: SAETrainer[Any, Any]) -> Any:
+        raise InterruptedException()
+
+    monkeypatch.setattr(SAETrainer, "fit", _interrupt)
+
+    cfg = build_runner_cfg_for_arch(
+        d_in=64,
+        d_sae=128,
+        architecture="standard",
+        training_tokens=100,
+        store_batch_size_prompts=2,
+        train_batch_size_tokens=4,
+        context_size=10,
+        n_sequences_in_buffer=2,
+        dataset_path=NEEL_NANDA_C4_10K_DATASET,
+        hook_name="blocks.0.hook_resid_post",
+        model_name=TINYSTORIES_MODEL,
+        model_class_name="TransformerBridge",
+        n_checkpoints=0,
+        checkpoint_path=str(tmp_path / "checkpoints"),
+        output_path=None,
+    )
+    runner = LanguageModelSAETrainingRunner(cfg)
+    with pytest.raises(InterruptedException):
+        runner.run()
+
+    assert cfg.checkpoint_path is not None
+    checkpoints = [p for p in Path(cfg.checkpoint_path).iterdir() if p.is_dir()]
+    assert len(checkpoints) == 1
+    checkpoint = checkpoints[0]
+    # the interrupted run must be resumable: SAE weights and trainer state, not
+    # just the activations store state
+    assert (checkpoint / SAE_WEIGHTS_FILENAME).exists()
+    assert (checkpoint / TRAINER_STATE_FILENAME).exists()
+    assert (checkpoint / ACTIVATIONS_STORE_STATE_FILENAME).exists()
