@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## v6.56.5 (2026-11-27)
+
+### Documentation
+
+* docs: show how to fine-tune a pretrained SAE from Hugging Face (#808) ([`c06ff2f`](https://github.com/decoderesearch/SAELens/commit/c06ff2fe567e4d002936c1ae74a23ad267e00c28))
+
+* docs: show how to steer with multiple SAE features (#807) ([`4fe97de`](https://github.com/decoderesearch/SAELens/commit/4fe97defaa6b8c6e880caeba42369dccade523cb))
+
+### Fix
+
+* fix: save the SAE and trainer state when LanguageModelSAETrainingRunner is interrupted (#811) ([`c46c3e5`](https://github.com/decoderesearch/SAELens/commit/c46c3e52bf566c40ee297de0b8aaa0d192e31fbc))
+
+* fix: scale b_dec for Gemma Scope embedding SAEs (#810) ([`aea1d42`](https://github.com/decoderesearch/SAELens/commit/aea1d427a2c4a9c8c38c1e2aee50b33517349374))
+
 ## v6.56.4 (2026-11-26)
 
 ### Documentation

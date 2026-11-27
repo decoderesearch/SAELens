@@ -1,5 +1,5 @@
 # ruff: noqa: E402
-__version__ = "6.56.4"
+__version__ = "6.56.5"
 
 import logging
 from typing import TYPE_CHECKING
